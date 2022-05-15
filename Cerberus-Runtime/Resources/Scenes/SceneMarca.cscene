@@ -1,0 +1,80 @@
+Scene: Main Scene
+Entities:
+  - Entity: 5395862972060175656
+    TagComponent:
+      Tag: Sky Light
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    SkyLightComponent:
+      AssetHandle: 12120527172450138203
+      Intensity: 1
+      SampleLOD: 1
+  - Entity: 11326622436817303110
+    TagComponent:
+      Tag: Directional Light
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [141.479996, -12.6899996, 149.529999]
+      Scale: [1, 1, 1]
+    DirectionalLightComponent:
+      Radiance: [1, 1, 1]
+      Intensity: 1
+  - Entity: 18003051463971007737
+    TagComponent:
+      Tag: Sponza
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [9, 9, 9]
+    MeshComponent:
+      AssetHandle: 1883853971118702195
+      MaterialTable:
+        0: 143816124693229628
+        1: 13911666821683352692
+        2: 9778710795501810573
+        3: 4868539316681171531
+        4: 2113106998358558245
+        5: 13961784392485736266
+        6: 1054953002496912709
+        7: 12911451789408332098
+        8: 9323940620174853172
+        9: 549116017977259889
+        10: 16794969822055500100
+        11: 4508125439715924410
+        12: 9471461081925630254
+        13: 585455659513194040
+        14: 5251829823553464429
+        15: 4901723728549779254
+        16: 12852332826721841962
+        17: 11673924109621321377
+        18: 12479165839099680501
+        19: 624494486461864232
+        20: 8016661850085447379
+        21: 2946087259490184239
+        22: 3300666414885992116
+        23: 5388152520102643491
+        24: 16162982243639053922
+  - Entity: 8995971421188659067
+    TagComponent:
+      Tag: Damaged Helmet
+    TransformComponent:
+      Translation: [10, 5, -5]
+      Rotation: [0, 0, 0]
+      Scale: [3, 3, 3]
+    MeshComponent:
+      AssetHandle: 14901800992554441365
+      MaterialTable:
+        0: 1225604024128046404
+  - Entity: 15673376632848411126
+    TagComponent:
+      Tag: Empty Entity
+    TransformComponent:
+      Translation: [0, 7.14654922, 0]
+      Rotation: [0, 0, 0]
+      Scale: [5.25999975, 5.25999975, 5.25999975]
+    MeshComponent:
+      AssetHandle: 14901800992554441365
+      MaterialTable:
+        0: 10016311578918116111

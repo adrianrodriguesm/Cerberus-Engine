@@ -1,0 +1,9 @@
+Material:
+  AlbedoColor: [1, 1, 1]
+  UseNormalMap: true
+  Metalness: 0
+  Roughness: 1
+  AlbedoMapHandle: 3467592273557969583
+  NormalMapHandle: 14927532889072442788
+  MetalnessMapHandle: 0
+  RoughnessMapHandle: 0

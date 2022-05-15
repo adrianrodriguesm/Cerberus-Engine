@@ -1,0 +1,24 @@
+Scene: TestSerialization
+Entities:
+  - Entity: 16347032053199609189
+    TagComponent:
+      Tag: Cube
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 17586404704621071284
+    TagComponent:
+      Tag: Sky Light
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    SkyLightComponent:
+      AssetHandle: 12120527172450138203
+      Intensity: 1
+      SampleLOD: 1
