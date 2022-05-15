@@ -1,0 +1,126 @@
+#include "pch.h"
+#include "Utils/FileSystem.h"
+#include "shellapi.h"
+
+namespace cerberus
+{
+	std::filesystem::path FileSystem::GetRelativePathFromAbsolute(const std::filesystem::path absolutePath)
+	{
+		std::filesystem::path currentPath = std::filesystem::current_path();
+		return std::filesystem::relative(absolutePath, currentPath);
+	}
+	std::string FileSystem::GetProjectPath()
+	{
+		return std::filesystem::current_path().string();
+	}
+	bool FileSystem::Exists(const std::filesystem::path& filepath)
+	{
+		return std::filesystem::exists(filepath);
+	}
+	bool FileSystem::Exists(const std::string& filepath)
+	{
+		return std::filesystem::exists(std::filesystem::path(filepath));
+	}
+
+	bool FileSystem::CreateDirectory(const std::filesystem::path& directory)
+	{
+		return std::filesystem::create_directories(directory);
+	}
+
+	bool FileSystem::CreateDirectory(const std::string& directory)
+	{
+		return CreateDirectory(std::filesystem::path(directory));
+	}
+
+	ProjectConfig& FileSystem::GetProjectConfig()
+	{
+		static ProjectConfig config;
+		return config;
+
+	}
+
+	bool FileSystem::Move(const std::filesystem::path& oldFilepath, const std::filesystem::path& newFilepath)
+	{
+		if (FileSystem::Exists(newFilepath) || oldFilepath == newFilepath)
+			return false;
+
+		std::filesystem::rename(oldFilepath, newFilepath);
+		return true;
+	}
+
+	bool FileSystem::Copy(const std::filesystem::path& oldFilepath, const std::filesystem::path& newFilepath)
+	{
+		if (FileSystem::Exists(newFilepath) || oldFilepath == newFilepath)
+			return false;
+
+		std::filesystem::copy(oldFilepath, newFilepath);
+		return true;
+	}
+
+	bool FileSystem::MoveFile(const std::filesystem::path& filepath, const std::filesystem::path& dest)
+	{
+		return Move(filepath, dest / filepath.filename());
+	}
+
+	bool FileSystem::CopyFile(const std::filesystem::path& filepath, const std::filesystem::path& dest)
+	{
+		return Copy(filepath, dest / filepath.filename());;
+	}
+
+	bool FileSystem::Rename(const std::filesystem::path& oldFilepath, const std::filesystem::path& newFilepath)
+	{
+		return Move(oldFilepath, newFilepath);
+	}
+
+	bool FileSystem::RenameFilename(const std::filesystem::path& oldFilepath, const std::string& newName)
+	{
+		std::filesystem::path newPath = fmt::format("{0}\\{1}{2}", oldFilepath.parent_path().string(), newName, oldFilepath.extension());
+		return Rename(oldFilepath, newPath);
+	}
+
+	bool FileSystem::DeleteFile(const std::filesystem::path& filepath)
+	{
+		if (!FileSystem::Exists(filepath))
+			return false;
+
+		if (std::filesystem::is_directory(filepath))
+			return std::filesystem::remove_all(filepath) > 0;
+		return std::filesystem::remove(filepath);
+	}
+
+	bool FileSystem::IsDirectory(const std::filesystem::path& filepath)
+	{
+		return std::filesystem::is_directory(filepath);
+	}
+
+	bool FileSystem::ShowFileInExplorer(const std::filesystem::path& path)
+	{
+		auto absolutePath = std::filesystem::canonical(path);
+		if (!Exists(absolutePath))
+			return false;
+
+		std::string cmd = fmt::format("explorer.exe /select,\"{0}\"", absolutePath.string());
+		system(cmd.c_str());
+		return true;
+	}
+
+	bool FileSystem::OpenDirectoryInExplorer(const std::filesystem::path& path)
+	{
+		auto absolutePath = std::filesystem::canonical(path);
+		if (!Exists(absolutePath))
+			return false;
+
+		ShellExecute(NULL, L"explore", absolutePath.c_str(), NULL, NULL, SW_SHOWNORMAL);
+		return true;
+	}
+
+	bool FileSystem::OpenExternally(const std::filesystem::path& path)
+	{
+		auto absolutePath = std::filesystem::canonical(path);
+		if (!Exists(absolutePath))
+			return false;
+
+		ShellExecute(NULL, L"open", absolutePath.c_str(), NULL, NULL, SW_SHOWNORMAL);
+		return true;
+	}
+}

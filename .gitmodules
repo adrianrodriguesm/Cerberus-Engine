@@ -1,0 +1,12 @@
+[submodule "Cerberus/vendor/GLFW"]
+	path = Cerberus/vendor/GLFW
+	url = https://github.com/adrianrodriguesm/glfw.git
+[submodule "Cerberus/vendor/spdlog"]
+	path = Cerberus/vendor/spdlog
+	url = https://github.com/adrianrodriguesm/spdlog.git
+[submodule "Cerberus/vendor/imgui"]
+	path = Cerberus/vendor/imgui
+	url = https://github.com/adrianrodriguesm/imgui.git
+[submodule "Cerberus/vendor/yaml-cpp"]
+	path = Cerberus/vendor/yaml-cpp
+	url = https://github.com/adrianrodriguesm/yaml-cpp.git

@@ -1,0 +1,23 @@
+# Binaries
+**/bin/
+**/intermediate/**
+**/bin-int/**
+
+# Python setup files cache
+__pycache__
+
+Cerberus/vendor/VulkanSDK
+!Cerberus/vendor/assimp/bin/
+!vendor/premake/bin/
+# Shaders cache
+**/Cache/
+
+
+
+# Visual Studio files and folder
+*.vs/
+**.sln
+**.vcxproj
+**.vcxproj.filters
+**.vcxproj.user
+**.csproj
