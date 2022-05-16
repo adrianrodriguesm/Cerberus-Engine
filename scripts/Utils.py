@@ -40,3 +40,20 @@ def YesOrNo():
             return True
         if reply[:1] == 'n':
             return False
+
+def IsValidIDE(ide):
+    if (ide == 'vs2019'):
+        return True
+    if (ide == 'vs2022'):
+        return True
+    else:
+        return False
+
+def ChooseIDE():
+    while True:
+        reply = str(input('[vs2019/vs2022]: ')).lower().strip()
+        if (len(reply) > 0):
+            if (not IsValidIDE(reply)):
+                print(f"Unsupported IDE argumet {reply}! Supported IDEs: [vs2019, vs2022]")
+            else:
+                return reply

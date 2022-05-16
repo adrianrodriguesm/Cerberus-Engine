@@ -6,6 +6,7 @@ import CheckPython
 CheckPython.ValidatePackages()
 
 import Vulkan
+import Utils
 
 # Change from Scripts directory to root
 os.chdir('../')
@@ -18,5 +19,11 @@ if (not Vulkan.CheckVulkanSDKDebugLibs()):
 
 subprocess.call(["git", "lfs", "pull"])
 
-print("Running premake...")
-subprocess.call(["vendor/premake/bin/premake5.exe", "vs2019"])
+ide = Utils.ChooseIDE()
+
+print(f"Running premake with target: {ide}")
+
+if (ide == 'vs2019'):
+    subprocess.call(["vendor/premake/bin/premake5.exe", ide])
+else:
+    subprocess.call(["vendor/premake/bin/premake5.exe", ide])

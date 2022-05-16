@@ -1,20 +1,6 @@
 #pragma once
 #include "Asset/Asset.h"
 
-namespace std 
-{
-
-	template <>
-	struct hash<std::filesystem::path>
-	{
-		std::size_t operator()(const std::filesystem::path& path) const
-		{
-			return hash_value(path);
-		}
-	};
-
-}
-
 namespace cerberus
 {
 	class AssetRegistry
