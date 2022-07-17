@@ -7,6 +7,7 @@
 namespace cerberus
 {
 	struct SceneRendererCamera;
+	class ForwardSceneRenderer;
 	class SceneRenderer;
 	class Entity;
 	class SceneHierarchyPanel;
@@ -19,7 +20,7 @@ namespace cerberus
 		Scene(const std::string& name = "Untitled Scene");
 		~Scene();
 
-		void OnUpdate(Ref<SceneRenderer>  sceneRenderer, const SceneRendererCamera& sceneRendererCamera, Timestep ts);
+		void OnUpdate(Ref<SceneRenderer> sceneRenderer, const SceneRendererCamera& sceneRendererCamera, Timestep ts);
 
 		//void OnViewportResize(uint32_t width, uint32_t height);
 		void SetViewport(uint32_t width, uint32_t height);
@@ -41,7 +42,7 @@ namespace cerberus
 		LightEnvironment m_LightEnvironment;
 
 		friend class Entity;
-		friend class SceneRenderer;
+		friend class ForwardSceneRenderer;
 		friend class SceneSerializer;
 		friend class SceneHierarchyPanel;
 		friend class ScenePropertiesPanel;

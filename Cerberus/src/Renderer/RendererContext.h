@@ -5,7 +5,6 @@
 #include <fstream>
 namespace cerberus
 {
-
 	class RendererContext
 	{
 	public:
@@ -18,6 +17,7 @@ namespace cerberus
 
 		static Ref<RendererContext> Get();
 		static Ref<Device> GetCurrentDevice() { return RendererContext::Get()->GetDevice(); }
+		static VkDevice GetCurrentVulkanDevice() { return RendererContext::Get()->GetDevice()->GetVulkanDevice(); }
 		static VkInstance GetInstance() { return m_VulkanInstance; }
 
 	private:

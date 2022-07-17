@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "Scene.h"
-#include "Scene/SceneRenderer.h"
+#include "Renderer/SceneRenderer/SceneRenderer.h"
 #include "Scene/Entity.h"
 #include "Renderer/Renderer.h"
 #include "Asset/AssetManager.h"

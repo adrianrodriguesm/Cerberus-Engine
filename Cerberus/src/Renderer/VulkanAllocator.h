@@ -18,12 +18,15 @@ namespace cerberus
 
 
 		VmaAllocation AllocateBuffer(VkBufferCreateInfo bufferCreateInfo, VmaMemoryUsage usage, VkBuffer& outBuffer);
+		VmaAllocation AllocateBuffer(VkBufferCreateInfo bufferCreateInfo, VmaMemoryUsage usage, VmaAllocationCreateFlags flags, VkBuffer& outBuffer);
 		VmaAllocation AllocateImage(VkImageCreateInfo imageCreateInfo, VmaMemoryUsage usage, VkImage& outImage);
 
 		void DestroyBuffer(VkBuffer buffer, VmaAllocation allocation);
 		void DestroyImage(VkImage image, VmaAllocation allocation);
 
 		void Free(VmaAllocation allocation);
+
+
 
 
 		template<typename T>

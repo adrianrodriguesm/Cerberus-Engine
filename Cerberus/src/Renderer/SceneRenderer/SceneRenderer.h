@@ -1,0 +1,43 @@
+#pragma once
+#include "Renderer/RenderCommandBuffer.h"
+#include "Renderer/Pipeline.h"
+#include "Scene/Scene.h"
+#include "Renderer/UniformBufferSet.h"
+#include "Renderer/Mesh.h"
+#include "Renderer/Camera.h"
+#include "Renderer/ComputePipeline.h"
+#include "Renderer/Shadow.h"
+namespace cerberus
+{
+	struct SceneRendererSpecification
+	{
+		bool SwapChainTarget = false;
+		glm::ivec2 Resolution;
+	};
+
+	struct SceneRendererCamera
+	{
+		Camera Camera;
+		glm::vec3 ViewPosition;
+		glm::vec3 Target;
+		glm::mat4 ViewMatrix;
+		float Near, Far;
+	};
+
+	class SceneRenderer
+	{
+	public:
+		SceneRenderer() = default;
+		virtual ~SceneRenderer() = default;
+
+		virtual void BeginScene(const SceneRendererCamera& sceneRendererCamera) = 0;
+		virtual void EndScene() = 0;
+		virtual void SubmitMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) = 0;
+		virtual void SetViewportSize(uint32_t width, uint32_t height) = 0;
+		virtual void SetSceneContext(const Ref<Scene>& scene) = 0;
+
+		virtual void OnImGuiRender() = 0;
+
+		virtual Ref<Image2D> GetFinalPassImage() const = 0;
+	};
+}

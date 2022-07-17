@@ -28,10 +28,11 @@
 //// Renderer
 /////////////////////////////////////////////
 #include "Renderer/Renderer.h"
+#include "Renderer/SceneRenderer/ForwardSceneRenderer.h"
+#include "Renderer/SceneRenderer/PathTracerSceneRenderer.h"
 /////////////////////////////////////////////
 //// Scene
 /////////////////////////////////////////////
-#include "Scene/SceneRenderer.h"
 #include "Scene/Components.h"
 #include "Scene/Entity.h"
 /////////////////////////////////////////////

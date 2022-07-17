@@ -115,15 +115,18 @@ namespace cerberus
 
 		// SHADERS
 		s_Data->ShaderLibrary = CreateRef<ShaderLibrary>();
-		s_Data->ShaderLibrary->Load("Resources/Shaders/PBR.glsl", true);
-		s_Data->ShaderLibrary->Load("Resources/Shaders/SceneComposite.glsl", true);
+		s_Data->ShaderLibrary->Load("Resources/Shaders/PBR.glsl", false);
+		s_Data->ShaderLibrary->Load("Resources/Shaders/SceneComposite.glsl", false);
 		s_Data->ShaderLibrary->Load("Resources/Shaders/EquirectangularToCubeMap.glsl", false);
 		s_Data->ShaderLibrary->Load("Resources/Shaders/EnvironmentMipFilter.glsl", false);
 		s_Data->ShaderLibrary->Load("Resources/Shaders/EnvironmentIrradiance.glsl", false);
 		s_Data->ShaderLibrary->Load("Resources/Shaders/BRDF.glsl", false);
 		s_Data->ShaderLibrary->Load("Resources/Shaders/Skybox.glsl", false);
 		s_Data->ShaderLibrary->Load("Resources/Shaders/PreDepth.glsl", false);
-		s_Data->ShaderLibrary->Load("Resources/Shaders/ShadowMap.glsl", false);
+		s_Data->ShaderLibrary->Load("Resources/Shaders/ShadowMap.glsl", false)
+			;
+			;
+		s_Data->ShaderLibrary->Load("Resources/Shaders/RayTraceTest.glsl", true);
 
 
 		// Textures

@@ -823,7 +823,7 @@ namespace cerberus
 	}
 	Ref<TextureCube> TextureFactory::CreateTextureCubeWithColor(const glm::vec4& color)
 	{
-		uint32_t textureData = ConvertRGBtoHex(color.r, color.g, color.b, color.a);
+		uint32_t textureData = ConvertRGBtoHex((float)color.r, (float)color.g, (float)color.b, (float)color.a);
 		uint32_t cubeTextureData[6] = { textureData, textureData, textureData, textureData, textureData, textureData };
 		TextureProperties prop;
 		prop.DebugName = "Colored Texture Cube";

@@ -61,6 +61,7 @@ namespace cerberus
 				case ShaderDataType::Bool:    return 1;
 			}
 
+
 			CORE_ASSERT(false, "Unknown ShaderDataType!");
 			return 0;
 		}
@@ -109,6 +110,7 @@ namespace cerberus
 		virtual ~VertexBuffer();
 
 		inline VkBuffer GetVulkanBuffer() const { return m_VertexBuffer; }
+		inline uint32_t GetSize() const { return m_Size; }
 
 	private:
 		VkBuffer m_VertexBuffer;

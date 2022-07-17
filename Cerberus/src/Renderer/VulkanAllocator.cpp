@@ -53,6 +53,7 @@ namespace cerberus
 		allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_2;
 		allocatorInfo.physicalDevice = device->GetPhysicalDevice()->GetVulkanPhysicalDevice();
 		allocatorInfo.device = device->GetVulkanDevice();
+		allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 		allocatorInfo.instance = RendererContext::GetInstance();
 
 		vmaCreateAllocator(&allocatorInfo, &s_Data->Allocator);
@@ -98,6 +99,27 @@ namespace cerberus
 
 		return allocation;
 	
+	}
+
+	VmaAllocation VulkanAllocator::AllocateBuffer(VkBufferCreateInfo bufferCreateInfo, VmaMemoryUsage usage, VmaAllocationCreateFlags flags, VkBuffer& outBuffer)
+	{
+
+		VmaAllocationCreateInfo allocCreateInfo = {};
+		allocCreateInfo.usage = usage;
+		//allocCreateInfo.flags = flags;
+
+		VmaAllocation allocation;
+		vmaCreateBuffer(s_Data->Allocator, &bufferCreateInfo, &allocCreateInfo, &outBuffer, &allocation, nullptr);
+
+		VmaAllocationInfo allocInfo{};
+		vmaGetAllocationInfo(s_Data->Allocator, allocation, &allocInfo);
+		ALLOCATOR_LOG("VulkanAllocator ({0}): allocating buffer; size = {1}", m_Tag, utils::BytesToString(allocInfo.size));
+		{
+			s_Data->TotalAllocatedBytes += allocInfo.size;
+			ALLOCATOR_LOG("VulkanAllocator ({0}): total allocated since start is {1}", m_Tag, utils::BytesToString(s_Data->TotalAllocatedBytes));
+		}
+
+		return allocation;
 	}
 
 	VmaAllocation VulkanAllocator::AllocateImage(VkImageCreateInfo imageCreateInfo, VmaMemoryUsage usage, VkImage& outImage)

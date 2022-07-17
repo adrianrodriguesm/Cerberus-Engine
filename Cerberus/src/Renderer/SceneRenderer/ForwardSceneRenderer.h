@@ -1,45 +1,23 @@
 #pragma once
-#include "Renderer/RenderCommandBuffer.h"
-#include "Renderer/Pipeline.h"
-#include "Scene/Scene.h"
-#include "Renderer/UniformBufferSet.h"
-#include "Renderer/Mesh.h"
-#include "Renderer/Camera.h"
-#include "Renderer/ComputePipeline.h"
-#include "Renderer/Shadow.h"
+#include "Renderer/SceneRenderer/SceneRenderer.h"
+
 namespace cerberus
 {
-	struct SceneRendererSpecification
-	{
-		bool SwapChainTarget = false;
-		glm::ivec2 Resolution;
-	};
-
-	struct SceneRendererCamera
-	{
-		Camera Camera;
-		glm::vec3 ViewPosition;
-		glm::vec3 Target;
-		glm::mat4 ViewMatrix;
-		float Near, Far;
-	};
-
-	class SceneRenderer
+	class ForwardSceneRenderer final: public SceneRenderer
 	{
 	public:
-		SceneRenderer(Ref<Scene> scene, const SceneRendererSpecification& spec = {});
-		~SceneRenderer();
+		ForwardSceneRenderer(Ref<Scene> scene, const SceneRendererSpecification& spec = {});
+		virtual ~ForwardSceneRenderer();
 
-		void BeginScene(const SceneRendererCamera& sceneRendererCamera);
-		void EndScene();
-		void SubmitMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform);
-		void SetViewportSize(uint32_t width, uint32_t height);
-		void SetSceneContext(const Ref<Scene>& scene);
+		virtual void BeginScene(const SceneRendererCamera& sceneRendererCamera) override;
+		virtual void EndScene() override;
+		virtual void SubmitMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) override;
+		virtual void SetViewportSize(uint32_t width, uint32_t height) override;
+		virtual void SetSceneContext(const Ref<Scene>& scene) override { m_Scene = scene; }
 
-		void OnImGuiRender();
+		virtual void OnImGuiRender() override;
 
-		Ref<Image2D> GetFinalPassImage() const;
-
+		virtual Ref<Image2D> GetFinalPassImage() const override;
 	private:
 		void FlushAndReset();
 		void PreDepthPass();
@@ -75,17 +53,17 @@ namespace cerberus
 		};
 		struct RendererDataUB
 		{
-			glm::vec4 CascadeSplits;				
+			glm::vec4 CascadeSplits;
 			bool ShowCascades = false;				// Bool are 4 byte in glsl
 			char Padding_0[3] = { 0,0,0 };
-			bool SoftShadows = true;				
+			bool SoftShadows = true;
 			char Padding_1[3] = { 0,0,0 };
-			float LightSize = .17f;				
-			float MaxShadowDistance = 500.f;		
-			float ShadowFade = 1.f;				
-			bool CascadeFading = true;			
+			float LightSize = .17f;
+			float MaxShadowDistance = 500.f;
+			float ShadowFade = 1.f;
+			bool CascadeFading = true;
 			char Padding_2[3] = { 0,0,0 };
-			float CascadeTransitionFade = 1.f;	
+			float CascadeTransitionFade = 1.f;
 		} m_RendererDataUB;
 
 
@@ -129,6 +107,8 @@ namespace cerberus
 		bool m_EnableFXAA = true;
 
 		Shadow m_ShadowData;
+		int m_CascadeIndex = 0;
+		bool m_DebugShadowMap = false;
 
 		struct DrawableEntity
 		{

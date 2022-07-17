@@ -7,7 +7,7 @@
 #include "Renderer/Pipeline.h"
 #include "Renderer/Mesh.h"
 #include "Renderer/UniformBufferSet.h"
-#include "Scene/SceneRenderer.h"
+#include "Renderer/SceneRenderer/SceneRenderer.h"
 namespace cerberus
 {
 	struct RendererConfig

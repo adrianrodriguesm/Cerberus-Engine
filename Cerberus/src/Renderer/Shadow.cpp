@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "Shadow.h"
-#include "Scene/SceneRenderer.h"
 #include "Renderer/Renderer.h"
 #include <glm/glm/ext/matrix_transform.hpp>
 #include <glm/glm/ext/matrix_clip_space.hpp>

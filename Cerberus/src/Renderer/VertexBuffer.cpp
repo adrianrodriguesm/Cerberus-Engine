@@ -39,11 +39,11 @@ namespace cerberus
 			vertexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 			vertexBufferCreateInfo.size = instance->m_Size;
 			// VK_BUFFER_USAGE_TRANSFER_DST_BIT : will receive data from another tranfer source (staging buffer)
-			vertexBufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+			vertexBufferCreateInfo.usage = VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 			vertexBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 			// Create Vertex buffer
-			instance->m_MemoryAllocation = allocator.AllocateBuffer(vertexBufferCreateInfo, VMA_MEMORY_USAGE_GPU_ONLY, instance->m_VertexBuffer);
+			instance->m_MemoryAllocation = allocator.AllocateBuffer(vertexBufferCreateInfo, VMA_MEMORY_USAGE_GPU_ONLY, VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT, instance->m_VertexBuffer);
 
 			// Get a copy command buffer to tranfer the data 
 			// from the staging buffer to the vertex buffer
