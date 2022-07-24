@@ -33,7 +33,6 @@ project "Cerberus"
 		"%{IncludeDir.yaml_cpp}",
 		"%{IncludeDir.glm}",
 		"%{IncludeDir.spdlog}",
-		"%{IncludeDir.VulkanSDK_LocalInclude}",
 		"%{IncludeDir.VulkanSDK}",
 		"%{IncludeDir.assimp}",
 		"%{IncludeDir.entt}",

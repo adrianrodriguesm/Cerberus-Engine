@@ -104,7 +104,7 @@ namespace cerberus
 		const VkPhysicalDeviceLimits GetPhysicalDeviceLimits() const { return m_PhysicalDevice->m_Properties.limits; }
 
 	private:
-		void InitRayTracing();
+		void QueryRayTracingProperties();
 
 	private:
 		VkDevice m_LogicalDevice;
@@ -112,29 +112,11 @@ namespace cerberus
 		VkQueue m_GraphicsQueue, m_ComputeQueue;
 		VkPhysicalDeviceFeatures m_Features;
 
-		// TODO: (Sort this out) Ray Tracing features/extension
-		// Function pointers for ray tracing related stuff
-		PFN_vkGetBufferDeviceAddressKHR vkGetBufferDeviceAddressKHR;
-		PFN_vkCreateAccelerationStructureKHR vkCreateAccelerationStructureKHR;
-		PFN_vkDestroyAccelerationStructureKHR vkDestroyAccelerationStructureKHR;
-		PFN_vkGetAccelerationStructureBuildSizesKHR vkGetAccelerationStructureBuildSizesKHR;
-		PFN_vkGetAccelerationStructureDeviceAddressKHR vkGetAccelerationStructureDeviceAddressKHR;
-		PFN_vkBuildAccelerationStructuresKHR vkBuildAccelerationStructuresKHR;
-		PFN_vkCmdBuildAccelerationStructuresKHR vkCmdBuildAccelerationStructuresKHR;
-		PFN_vkCmdTraceRaysKHR vkCmdTraceRaysKHR;
-		PFN_vkGetRayTracingShaderGroupHandlesKHR vkGetRayTracingShaderGroupHandlesKHR;
-		PFN_vkCreateRayTracingPipelinesKHR vkCreateRayTracingPipelinesKHR;
-
 		// Available features and properties
 		// -- It will obtain the maximum recursion depth (e.g the number of nested ray tracing calls that can be performed from a single ray)
 		VkPhysicalDeviceRayTracingPipelinePropertiesKHR  rayTracingPipelineProperties{};
 		// -- 
-		VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{};
-
-		// Enabled features and properties
-		VkPhysicalDeviceBufferDeviceAddressFeatures enabledBufferDeviceAddresFeatures{};
-		VkPhysicalDeviceRayTracingPipelineFeaturesKHR enabledRayTracingPipelineFeatures{};
-		VkPhysicalDeviceAccelerationStructureFeaturesKHR enabledAccelerationStructureFeatures{};
+		VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties{};
 	};
 }
 

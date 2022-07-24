@@ -268,7 +268,14 @@ namespace cerberus
 		enabledAccelerationStructureFeatures.accelerationStructure = VK_TRUE;
 		enabledAccelerationStructureFeatures.pNext = &enabledRayTracingPipelineFeatures;
 
-		void* deviceCreatepNextChain = &enabledAccelerationStructureFeatures;
+		/**/
+		// Provided by VK_EXT_host_query_reset
+		VkPhysicalDeviceHostQueryResetFeatures enabledHostQueryResetFeatures{};
+		enabledHostQueryResetFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES;
+		enabledHostQueryResetFeatures.hostQueryReset = VK_TRUE;
+		enabledHostQueryResetFeatures.pNext = &enabledAccelerationStructureFeatures;
+		/**/
+		void* deviceCreatepNextChain = &enabledHostQueryResetFeatures;
 
 		physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 		physicalDeviceFeatures2.features = deviceFeatures;
@@ -285,11 +292,11 @@ namespace cerberus
 
 		// Queues are created at the same time as the device...
 		// So we want handle queues
-		// From given logical device, of given Queue family, of given Queue Index (0 since only one queue), place reference in given vkQueue
+		// From given logical device, of given Queue family, of given Queue Index (0 since only one queue), place reference in given vkQueuek
 		vkGetDeviceQueue(m_LogicalDevice, m_PhysicalDevice->m_QueueFamilyIndices.Graphics, 0, &m_GraphicsQueue);
 		vkGetDeviceQueue(m_LogicalDevice, m_PhysicalDevice->m_QueueFamilyIndices.Compute, 0, &m_ComputeQueue);
 
-		InitRayTracing();
+		QueryRayTracingProperties();
 	}
 	Device::~Device()
 	{
@@ -300,7 +307,7 @@ namespace cerberus
 		m_LogicalDevice = VK_NULL_HANDLE;
 	}
 
-	void Device::InitRayTracing()
+	void Device::QueryRayTracingProperties()
 	{
 		
 		VkPhysicalDevice physicalDevice = m_PhysicalDevice->GetVulkanPhysicalDevice();
@@ -312,14 +319,11 @@ namespace cerberus
 		vkGetPhysicalDeviceProperties2(physicalDevice, &deviceProperties2);
 
 		// Get acceleration structure properties, which will be used later on in the sample
-		accelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+		accelerationStructureProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
 		VkPhysicalDeviceFeatures2 deviceFeatures2{};
 		deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-		deviceFeatures2.pNext = &accelerationStructureFeatures;
+		deviceFeatures2.pNext = &accelerationStructureProperties;
 		vkGetPhysicalDeviceFeatures2(physicalDevice, &deviceFeatures2);
-
-		NV_CORE_INFO("Max recursion pipeline properties {0}", rayTracingPipelineProperties.maxRayRecursionDepth);
-
 	}
 
 

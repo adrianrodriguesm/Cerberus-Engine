@@ -55,7 +55,6 @@ project "Cerberus-Editor"
 		postbuildcommands 
 		{
 			'{COPY} "../Cerberus/vendor/assimp/bin/Debug/assimp-vc141-mtd.dll" "%{cfg.targetdir}"',	
-			'{COPY} "../Cerberus/vendor/VulkanSDK/Bin/shaderc_sharedd.dll" "%{cfg.targetdir}"'
 		}
 
 	filter "configurations:Release"

@@ -8,8 +8,7 @@ namespace cerberus
 {
 	inline VkDeviceAddress GetBufferDeviceAddress(VkBuffer& buffer)
 	{
-		VkBufferDeviceAddressInfo info = { VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO };
-		info.buffer = buffer;
+		VkBufferDeviceAddressInfo info = { VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, nullptr, buffer };
 		return vkGetBufferDeviceAddress(RendererContext::GetCurrentVulkanDevice(), &info);
 	}
 
@@ -44,12 +43,12 @@ namespace cerberus
 		triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;  // vec3 vertex position data.
 		triangles.vertexData.deviceAddress = vertexAddress;
 		triangles.vertexStride = vertexBufferStride;
+		triangles.maxVertex = mesh->GetMeshSource()->GetVertexBuffer()->GetSize() / vertexBufferStride;
 		// Describe index data (32-bit unsigned int)
 		triangles.indexType = VK_INDEX_TYPE_UINT32;
 		triangles.indexData.deviceAddress = indexAddress;
 		// Indicate identity transform by setting transformData to null device pointer.
 		//triangles.transformData = {};
-		triangles.maxVertex = mesh->GetMeshSource()->GetVertexBuffer()->GetSize() / vertexBufferStride;
 
 		BLAStructureInputData blas;
 		// Identify the above data as containing opaque triangles.

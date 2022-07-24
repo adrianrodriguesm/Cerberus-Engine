@@ -41,6 +41,7 @@ namespace cerberus
 			VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeature{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR };
 			deviceCapabilities.AddDeviceExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, false, &rtPipelineFeature);  // To use vkCmdTraceRaysKHR
 			deviceCapabilities.AddDeviceExtension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);  // Required by ray tracing pipeline
+			deviceCapabilities.AddDeviceExtension(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);  // Required by ray tracing pipeline
 			m_VulkanDevice = CreateRef<Device>(m_VulkanPhyicalDevice, deviceCapabilities);
 		}
 		extensions::LoadVKExtensions(m_VulkanInstance, vkGetInstanceProcAddr, m_VulkanDevice->GetVulkanDevice(), vkGetDeviceProcAddr);
