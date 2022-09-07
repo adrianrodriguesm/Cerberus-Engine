@@ -39,11 +39,11 @@ namespace cerberus
 			m_Material = CreateRef<Material>(shader, "RayTraceTest");
 		}
 
-		AssetHandle cubeHandle = AssetManager::GetAssetHandleFromFilePath(AssetManager::GetAssetPath().string() + "/Meshes/Default/Sphere.cmesh");
+		AssetHandle cubeHandle = AssetManager::GetAssetHandleFromFilePath(AssetManager::GetAssetPath().string() + "/Meshes/Default/Cube.cmesh");
 		m_Cube = AssetManager::GetAsset<Mesh>(cubeHandle);
 		m_ASBuilder = CreateScope<AccelerationStructureBuilder>();
 		Renderer::ExecuteRenderQueue();
-		m_ASBuilder->BeginBLASBuild(VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR);
+		m_ASBuilder->BeginBLASBuild( VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
 		m_ASBuilder->SummitMesh(m_Cube);
 		m_ASBuilder->EndBLASBuild();
 		// UniformBuffer;
@@ -61,12 +61,15 @@ namespace cerberus
 
 	void PathTracerSceneRenderer::EndScene()
 	{
+		m_CommandBuffer->Begin();
 		// Composite pass
 		Renderer::BeginRenderPass(m_CommandBuffer, m_Pipeline->GetSpecification().RenderPass, true);
 		{
 			Renderer::RenderFullscreenQuad(m_CommandBuffer, m_Pipeline, m_UniformBufferSet, m_Material);
 		}
 		Renderer::EndRenderPass(m_CommandBuffer);
+		m_CommandBuffer->End();
+		m_CommandBuffer->Submit();
 	}
 
 	void PathTracerSceneRenderer::SubmitMesh(const Ref<Mesh>&mesh, const Ref<MaterialTable>&materialTable, const glm::mat4 & transform)

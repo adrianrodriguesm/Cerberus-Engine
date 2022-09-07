@@ -310,7 +310,7 @@ namespace cerberus
 					}
 					else
 					{
-						float shininess, metalness;
+						float shininess;
 						if (aiMaterial->Get(AI_MATKEY_SHININESS, shininess) != aiReturn_SUCCESS)
 							shininess = 80.0f; // Default value
 
@@ -386,7 +386,7 @@ namespace cerberus
 		const auto& meshMaterials = meshSource->GetMaterialsAsset();
 		m_Materials = CreateRef<MaterialTable>(meshMaterials.size());
 
-		for (size_t i = 0; i < meshMaterials.size(); i++)
+		for (uint32_t i = 0; i < meshMaterials.size(); i++)
 			m_Materials->SetMaterial(i, meshMaterials[i]);
 	}
 

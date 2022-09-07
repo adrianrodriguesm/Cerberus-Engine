@@ -145,7 +145,7 @@ namespace cerberus
 		samplerCreateInfo.mipLodBias = 0.0f;
 		samplerCreateInfo.compareOp = VK_COMPARE_OP_NEVER;
 		samplerCreateInfo.minLod = 0.0f;
-		samplerCreateInfo.maxLod = m_Specification.Mips;
+		samplerCreateInfo.maxLod = (float)m_Specification.Mips;
 		samplerCreateInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;		// Border beyond texture (only work for texture clamp)
 		// Enable anisotropic filtering
 		// This feature is optional, so we must check if it's supported on the device

@@ -329,7 +329,7 @@ namespace cerberus
 		pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		pipelineLayoutCreateInfo.setLayoutCount = (uint32_t)descriptorSetLayout.size();
 		pipelineLayoutCreateInfo.pSetLayouts = descriptorSetLayout.data();
-		pipelineLayoutCreateInfo.pushConstantRangeCount = pushConstantRanges.size();
+		pipelineLayoutCreateInfo.pushConstantRangeCount = (uint32_t)pushConstantRanges.size();
 		pipelineLayoutCreateInfo.pPushConstantRanges = pushConstantRanges.data();
 			
 		// Create Pipeline Layout

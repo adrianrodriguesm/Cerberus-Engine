@@ -16,6 +16,9 @@ namespace Assimp {
 
 namespace cerberus
 {
+	using MeshHandle = AssetHandle;
+
+	class BottomLevelAccelerationStructure;
 
 	class Submesh
 	{
@@ -64,6 +67,8 @@ namespace cerberus
 
 		const std::vector<Index>& GetIndices() const { return m_Indices; }
 
+		const std::vector<Ref<BottomLevelAccelerationStructure>>& GetBLAccelerationStructure() const { return m_BLAS; }
+
 		std::vector<Ref<MaterialAsset>>& GetMaterialsAsset() { return m_MaterialsAsset; }
 		const std::vector<Ref<MaterialAsset>>& GetMaterialsAsset() const { return m_MaterialsAsset; }
 
@@ -93,6 +98,7 @@ namespace cerberus
 		// Materials
 		Ref<Shader> m_MeshShader;
 		std::vector<Ref<MaterialAsset>> m_MaterialsAsset;
+		std::vector<Ref<BottomLevelAccelerationStructure>> m_BLAS;
 
 		// Assimp
 		const aiScene* m_Scene;

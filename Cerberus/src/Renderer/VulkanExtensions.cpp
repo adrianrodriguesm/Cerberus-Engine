@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "VulkanExtensions.h"
 #include <vulkan/vulkan_core.h>
-namespace cerberus::extensions
+namespace cerberus::ext
 {
 	/* NVVK_GENERATE_VERSION_INFO */
 	// Generated using Vulkan 198

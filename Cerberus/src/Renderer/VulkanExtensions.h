@@ -1,6 +1,6 @@
 #pragma once
 
-namespace cerberus::extensions
+namespace cerberus::ext
 {
 #ifdef VK_KHR_acceleration_structure
 	VKAPI_ATTR VkResult VKAPI_CALL vkBuildAccelerationStructuresKHR(

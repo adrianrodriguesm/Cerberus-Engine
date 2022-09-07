@@ -21,24 +21,48 @@ namespace cerberus
 			uint32_t Size;
 			VmaAllocation Allocation;
 		};
+
 	public:
-		AccelerationStructure(AccelerationStructureType type, uint32_t size);
-		~AccelerationStructure();
-
+		VkDeviceAddress GetDeviceAddress() const;
 		VkAccelerationStructureKHR GetVulkanAccelerationStructure() const { return m_AStructure; }
-
-		void Release();
-
-	private:
+		virtual ~AccelerationStructure() = default;
+	protected:
+		AccelerationStructure() = default;
+		AccelerationStructure(AccelerationStructureType type, uint32_t size);
+	protected:
 		AccelerationStructureType m_ASType;
 		ASBuffer m_Buffer;
 		VkAccelerationStructureKHR m_AStructure = VK_NULL_HANDLE;
 	};
 
+	class BottomLevelAccelerationStructure final : public AccelerationStructure
+	{
+	public:
+		BottomLevelAccelerationStructure(AccelerationStructureType type, uint32_t size, MeshHandle sourceHandle);
+		virtual ~BottomLevelAccelerationStructure();
+		void Release();
+
+		inline MeshHandle GetMeshSourceHandle() const { return m_MeshSourceHandle; }
+	private:
+		MeshHandle m_MeshSourceHandle;
+	};
+
+	class TopLevelAccelerationStructure final : public AccelerationStructure
+	{
+	public:
+		TopLevelAccelerationStructure() = default;
+		TopLevelAccelerationStructure(AccelerationStructureType type, uint32_t size, int32_t countInstance, bool motion);
+		virtual ~TopLevelAccelerationStructure();
+		void Release();
+
+		
+	private:
+		uint32_t m_InstancesCount;
+		VkAccelerationStructureGeometryInstancesDataKHR m_ASInstances{};
+	};
 
 
-
-	class AccelerationStructureBuilder
+	class AccelerationStructureBuilder final
 	{
 	public:
 		struct BuildAccelerationStructure
@@ -46,8 +70,8 @@ namespace cerberus
 			VkAccelerationStructureBuildGeometryInfoKHR BuildInfo{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR };
 			VkAccelerationStructureBuildSizesInfoKHR SizeInfo{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR };
 			const VkAccelerationStructureBuildRangeInfoKHR* RangeInfo;
-			Ref<AccelerationStructure> AStructure;
-			Ref<AccelerationStructure> CleanupAStructure;
+			Ref<BottomLevelAccelerationStructure> AStructure;
+			Ref<BottomLevelAccelerationStructure> CleanupAStructure;
 		};
 		struct BLAStructureInputData
 		{
@@ -57,17 +81,26 @@ namespace cerberus
 			// Data used to build acceleration structure geometry
 			VkAccelerationStructureGeometryKHR       ASGeometry;
 			VkAccelerationStructureBuildRangeInfoKHR ASBuildOffsetInfo;
+			MeshHandle MeshSourceHandle;
 		};
 	public:
 		AccelerationStructureBuilder();
 		~AccelerationStructureBuilder();
 
+		// Creating the top-level acceleration structure from the vector of Instance
+		 // - See struct of Instance
+		 // - The resulting TLAS will be stored in m_tlas
+		 // - update is to rebuild the Tlas with updated matrices
+		void BeginTLASBuild(VkBuildAccelerationStructureFlagsKHR flags, bool update = false, bool motion = false);
+		void SubmitMeshInstance(const Ref<Mesh>& mesh, glm::mat4& transform);
+		void EndTLAS();
 		//--------------------------------------------------------------------------------------------------
 		// - There will be one BLAS per geometry (e.g mesh, submesh, etc) submission 
 		// - The resulting BLAS (along with the inputs used to build) are stored in m_BLAS,
 		//   and can be referenced by index.
 		// - If flag has the 'Compact' flag, the BLAS will be compacted
 		void BeginBLASBuild(VkBuildAccelerationStructureFlagsKHR flags);
+		// Change to submesh
 		void SummitMesh(const Ref<Mesh>& mesh);
 		void EndBLASBuild();
 
@@ -88,12 +121,27 @@ namespace cerberus
 			std::vector<uint32_t>                    indices,
 			std::vector<BuildAccelerationStructure>& buildAs,
 			VkDeviceAddress                          scratchAddress,
-			VkQueryPool                              queryPool);
+			VkQueryPool                              queryPool,
+			MeshHandle								 meshHandle);
+		//--------------------------------------------------------------------------------------------------
+		// Creating the TLAS, called by buildTlas
+		void CreateTlas(VkCommandBuffer                      cmdBuf,			// Command buffer
+			uint32_t                             countInstance,					// number of instances
+			VkDeviceAddress                      instBufferAddr,				// Buffer address of instances
+			VkBuildAccelerationStructureFlagsKHR flags,							// Build creation flag
+			bool                                 update,						// Update == animation
+			bool                                 motion);						// Motion Blur
 	private:
-		std::vector<BLAStructureInputData> m_BLASInputData;
-		VkBuildAccelerationStructureFlagsKHR m_Flags;
 		Scope<RenderCommandBuffer> m_CommandBuffer;
+		VkBuildAccelerationStructureFlagsKHR m_Flags;
 
-		std::vector<Ref<AccelerationStructure>> m_BLAS;
+		// Bottom Level Acceleration Structure related:
+		uint32_t m_ScratchAlignment;
+		std::vector<BLAStructureInputData> m_BLASInputData;
+		std::vector<Ref<BottomLevelAccelerationStructure>> m_BLAS;
+		// Top Level Acceleration Structure related:
+		std::vector<VkAccelerationStructureInstanceKHR> m_TLASInstances;
+		Ref<TopLevelAccelerationStructure> m_TLAS;
+		bool m_UpdateTLAS = false, m_MotionTLAS = false;
 	};
 }

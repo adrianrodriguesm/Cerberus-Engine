@@ -11,7 +11,7 @@ namespace cerberus
 		if (m_OwnedBySwapchain)
 		{
 			Ref<Swapchain> swapchain = Window::GetCurrentSwapchain();
-			uint32_t frames = swapchain->GetSwapchainImages().size();
+			uint32_t frames = (uint32_t)swapchain->GetSwapchainImages().size();
 			m_CommandBuffers.resize(frames);
 			for (uint32_t frame = 0; frame < frames; frame++)
 				m_CommandBuffers[frame] = swapchain->GetDrawCommandBuffer(frame);

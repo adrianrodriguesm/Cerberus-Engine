@@ -126,7 +126,7 @@ namespace cerberus
 		s_Data->ShaderLibrary->Load("Resources/Shaders/ShadowMap.glsl", false)
 			;
 			;
-		s_Data->ShaderLibrary->Load("Resources/Shaders/RayTraceTest.glsl", true);
+		s_Data->ShaderLibrary->Load("Resources/Shaders/RayTraceTest.glsl", false);
 
 
 		// Textures

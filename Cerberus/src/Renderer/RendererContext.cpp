@@ -42,9 +42,10 @@ namespace cerberus
 			deviceCapabilities.AddDeviceExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, false, &rtPipelineFeature);  // To use vkCmdTraceRaysKHR
 			deviceCapabilities.AddDeviceExtension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);  // Required by ray tracing pipeline
 			deviceCapabilities.AddDeviceExtension(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);  // Required by ray tracing pipeline
+			deviceCapabilities.AddDeviceExtension(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
 			m_VulkanDevice = CreateRef<Device>(m_VulkanPhyicalDevice, deviceCapabilities);
 		}
-		extensions::LoadVKExtensions(m_VulkanInstance, vkGetInstanceProcAddr, m_VulkanDevice->GetVulkanDevice(), vkGetDeviceProcAddr);
+		ext::LoadVKExtensions(m_VulkanInstance, vkGetInstanceProcAddr, m_VulkanDevice->GetVulkanDevice(), vkGetDeviceProcAddr);
 		NV_CORE_INFO("Vulkan Logical Device created with success");
 		NV_CORE_INFO("...");
 

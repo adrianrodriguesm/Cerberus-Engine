@@ -16,7 +16,7 @@ namespace cerberus
 		float maxZ = camera.Far;
 		float rangeZ = maxZ - minZ;
 		float ratio = maxZ / minZ;
-		const float shadowMapResolution = Renderer::GetRendererConfig().ShadowMapResolution;
+		const float shadowMapResolution = (float)Renderer::GetRendererConfig().ShadowMapResolution;
 
 		uint32_t shadowCascadesCount = Renderer::GetRendererConfig().ShadowCascadesCount;
 		float cascadeSplits[4];

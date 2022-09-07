@@ -59,11 +59,12 @@ namespace cerberus
 			m_WriteDescriptors[frameIndex].push_back(pendingDescriptor->WriteDescriptorSet);
 		}
 
-		VkDescriptorSetLayout descriptorSetLayout = m_Shader->GetDescriptorSetLayouts()[0];
+		auto& descriptorSetLayouts = m_Shader->GetDescriptorSetLayouts();
 		//const bool persistent = m_Persistent;
 		const bool persistent = false;
-		if (!persistent || m_DescriptorSets[frameIndex] == VK_NULL_HANDLE)
+		if ((!persistent || m_DescriptorSets[frameIndex] == VK_NULL_HANDLE) && descriptorSetLayouts.size())
 		{
+			VkDescriptorSetLayout descriptorSetLayout = descriptorSetLayouts[0];
 			m_DescriptorSets[frameIndex] = Renderer::AllocateDescriptorSet(descriptorSetLayout, persistent);
 
 			CORE_ASSERT(m_DescriptorSets[frameIndex], "Invalid descriptor set created!");

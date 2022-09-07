@@ -230,8 +230,8 @@ namespace cerberus
 		for (const auto& extension : deviceCapabilities.DeviceExtensions)
 		{
 			// If the device will be used for presenting to a display via a swapchain we need to request the swapchain extension
-			CORE_ASSERT(m_PhysicalDevice->IsExtensionSupported(extension.Name), "Swapchain extension not supported by the Physical Device!");
 			NV_CORE_INFO("{0} extension supported by the Physical Device!", extension.Name);
+			CORE_ASSERT(m_PhysicalDevice->IsExtensionSupported(extension.Name), "Swapchain extension not supported by the Physical Device!");
 			deviceExtensions.push_back(extension.Name.c_str());
 		}
 
@@ -274,6 +274,7 @@ namespace cerberus
 		enabledHostQueryResetFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES;
 		enabledHostQueryResetFeatures.hostQueryReset = VK_TRUE;
 		enabledHostQueryResetFeatures.pNext = &enabledAccelerationStructureFeatures;
+
 		/**/
 		void* deviceCreatepNextChain = &enabledHostQueryResetFeatures;
 
@@ -312,18 +313,16 @@ namespace cerberus
 		
 		VkPhysicalDevice physicalDevice = m_PhysicalDevice->GetVulkanPhysicalDevice();
 		// Get ray tracing pipeline properties, which will be used later on in the sample
-		rayTracingPipelineProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+		m_RayTracingPipelineProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
 		VkPhysicalDeviceProperties2 deviceProperties2{};
 		deviceProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-		deviceProperties2.pNext = &rayTracingPipelineProperties;
+		deviceProperties2.pNext = &m_RayTracingPipelineProperties;
 		vkGetPhysicalDeviceProperties2(physicalDevice, &deviceProperties2);
 
 		// Get acceleration structure properties, which will be used later on in the sample
-		accelerationStructureProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
-		VkPhysicalDeviceFeatures2 deviceFeatures2{};
-		deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-		deviceFeatures2.pNext = &accelerationStructureProperties;
-		vkGetPhysicalDeviceFeatures2(physicalDevice, &deviceFeatures2);
+		m_AccelerationStructureProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+		deviceProperties2.pNext = &m_AccelerationStructureProperties;
+		vkGetPhysicalDeviceProperties2(physicalDevice, &deviceProperties2);
 	}
 
 

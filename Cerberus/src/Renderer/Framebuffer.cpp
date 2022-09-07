@@ -71,8 +71,8 @@ namespace cerberus
 					ImageSpecification spec;
 					spec.Format = attachmentSpec.Format;
 					spec.Usage = ImageUsage::Attachment;
-					spec.Width = m_Width * m_Specification.Scale;
-					spec.Height = m_Height * m_Specification.Scale;
+					spec.Width = m_Width * (uint32_t)m_Specification.Scale;
+					spec.Height = m_Height * (uint32_t)m_Specification.Scale;
 					spec.DebugName = fmt::format("{0}-DepthAttachment{1}", m_Specification.DebugName.empty() ? "Unnamed FB" : m_Specification.DebugName, attachmentIndex);
 					m_DepthAttachmentImage = CreateRef<Image2D>(spec);
 				}
@@ -81,8 +81,8 @@ namespace cerberus
 					ImageSpecification spec;
 					spec.Format = attachmentSpec.Format;
 					spec.Usage = ImageUsage::Attachment;
-					spec.Width = m_Width * m_Specification.Scale;
-					spec.Height = m_Height * m_Specification.Scale;
+					spec.Width = m_Width * (uint32_t)m_Specification.Scale;
+					spec.Height = m_Height * (uint32_t)m_Specification.Scale;
 					spec.DebugName = fmt::format("{0}-ColorAttachment{1}", m_Specification.DebugName.empty() ? "Unnamed FB" : m_Specification.DebugName, attachmentIndex);
 					m_AttachmentImages.emplace_back(CreateRef<Image2D>(spec));
 				}
@@ -94,8 +94,8 @@ namespace cerberus
 
 		CORE_ASSERT(m_Specification.AttachmentsSpecification.Attachments.size(), "Zero attachments specified!");
 
-		m_Width *= m_Specification.Scale;
-		m_Height *= m_Specification.Scale;
+		m_Width *= (uint32_t)m_Specification.Scale;
+		m_Height *= (uint32_t)m_Specification.Scale;
 
 		if (!m_Specification.SwapchainTarget)
 		{
@@ -137,8 +137,8 @@ namespace cerberus
 		if ((!forceRecreate && (m_Width == width && m_Height == height)) || m_Specification.NoResize)
 			return;
 
-		m_Width = width * m_Specification.Scale;
-		m_Height = height * m_Specification.Scale;
+		m_Width = width * (uint32_t)m_Specification.Scale;
+		m_Height = height * (uint32_t)m_Specification.Scale;
 
 		if (!m_Specification.SwapchainTarget)
 		{
@@ -421,7 +421,7 @@ namespace cerberus
 		///////////////////////////////////////////////////////////
 		// Create the actual Framebuffer
 		///////////////////////////////////////////////////////////
-		uint32_t attachmentsSize = m_AttachmentImages.size();
+		uint32_t attachmentsSize = (uint32_t)m_AttachmentImages.size();
 		std::vector<VkImageView> attachments(attachmentsSize);
 		for (uint32_t i = 0; i < m_AttachmentImages.size(); i++)
 		{

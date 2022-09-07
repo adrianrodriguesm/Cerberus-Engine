@@ -101,7 +101,11 @@ namespace cerberus
 
 		VkPhysicalDeviceFeatures GetDeviceFeatures() { return m_Features; }
 
-		const VkPhysicalDeviceLimits GetPhysicalDeviceLimits() const { return m_PhysicalDevice->m_Properties.limits; }
+		inline const VkPhysicalDeviceLimits GetPhysicalDeviceLimits() const { return m_PhysicalDevice->m_Properties.limits; }
+
+		inline const VkPhysicalDeviceAccelerationStructurePropertiesKHR& GetAccelerationStructureProperties() const {
+			return m_AccelerationStructureProperties;
+		}
 
 	private:
 		void QueryRayTracingProperties();
@@ -114,9 +118,9 @@ namespace cerberus
 
 		// Available features and properties
 		// -- It will obtain the maximum recursion depth (e.g the number of nested ray tracing calls that can be performed from a single ray)
-		VkPhysicalDeviceRayTracingPipelinePropertiesKHR  rayTracingPipelineProperties{};
+		VkPhysicalDeviceRayTracingPipelinePropertiesKHR  m_RayTracingPipelineProperties{};
 		// -- 
-		VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties{};
+		VkPhysicalDeviceAccelerationStructurePropertiesKHR m_AccelerationStructureProperties{};
 	};
 }
 
