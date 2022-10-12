@@ -29,6 +29,12 @@ namespace cerberus
             NV_CORE_WARN("Validation layer\n Message: {0}\n", pCallbackData->pMessage);
             return VK_FALSE;
         }
+        else
+        {
+            // Message is important enough to show
+            NV_CORE_INFO("Validation layer\n Message: {0}\n", pCallbackData->pMessage);
+            return VK_FALSE;
+        }
         return VK_FALSE;
     }
 

@@ -14,9 +14,9 @@ namespace cerberus
 		: m_Scene(scene), m_Specification(sceneRendererSpec), m_ViewportWidth(m_Specification.Resolution.x), m_ViewportHeight(m_Specification.Resolution.y)
 	{
 			if (m_Specification.SwapChainTarget)
-				m_CommandBuffer = RenderCommandBuffer::CreateFromSwapchain();
+				m_CommandBuffer = CommandBuffer::CreateFromSwapchain();
 			else
-				m_CommandBuffer = RenderCommandBuffer::Create(Renderer::GetRendererConfig().FramesInFlight, "SceneRenderer");
+				m_CommandBuffer = CommandBuffer::Create(Renderer::GetRendererConfig().FramesInFlight, "SceneRenderer");
 
 
 			// PreDepth
@@ -312,7 +312,7 @@ namespace cerberus
 			{
 				ImGui::Separator();
 				ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-				GPUMemoryStats memoryStats = VulkanAllocator::GetStats();
+				GPUMemoryStats memoryStats = ResourceAllocator::GetStats();
 				std::string used = utils::BytesToString(memoryStats.Used);
 				std::string free = utils::BytesToString(memoryStats.Free);
 				ImGui::Text("Used VRAM: %s", used.c_str());

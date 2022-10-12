@@ -2,6 +2,7 @@
 #include "PathTracerSceneRenderer.h"
 #include "Renderer/Renderer.h"
 #include "Asset/AssetManager.h"
+#include "Math/Matrix.h"
 namespace cerberus
 {
 
@@ -9,9 +10,9 @@ namespace cerberus
 	{
 
 		if (m_Specification.SwapChainTarget)
-			m_CommandBuffer = RenderCommandBuffer::CreateFromSwapchain();
+			m_CommandBuffer = CommandBuffer::CreateFromSwapchain();
 		else
-			m_CommandBuffer = RenderCommandBuffer::Create(Renderer::GetRendererConfig().FramesInFlight, "SceneRenderer");
+			m_CommandBuffer = CommandBuffer::Create(Renderer::GetRendererConfig().FramesInFlight, "SceneRenderer");
 
 
 		// Test
@@ -45,7 +46,15 @@ namespace cerberus
 		Renderer::ExecuteRenderQueue();
 		m_ASBuilder->BeginBLASBuild( VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
 		m_ASBuilder->SummitMesh(m_Cube);
-		m_ASBuilder->EndBLASBuild();
+		std::vector<Ref<BottomLevelAccelerationStructure>> blas;
+		m_ASBuilder->EndBLASBuild(blas);
+		Renderer::ExecuteRenderQueue();
+		m_Cube->GetMeshSource()->SetBottomLevelAccelerationStructures(blas);
+
+		m_ASBuilder->BeginTLASBuild(VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+		m_ASBuilder->SubmitMeshInstance(m_Cube, math::MatFactory::CreateIdentityMat4());
+		m_ASBuilder->EndTLASBuild();
+		Renderer::ExecuteRenderQueue();
 		// UniformBuffer;
 		m_UniformBufferSet = CreateRef<UniformBufferSet>(Renderer::GetRendererConfig().FramesInFlight);
 

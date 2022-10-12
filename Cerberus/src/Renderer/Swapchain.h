@@ -1,6 +1,6 @@
 #pragma once
 #include "Renderer/Device.h"
-#include "Renderer/VulkanAllocator.h"
+#include "Renderer/ResourceAllocator.h"
 namespace cerberus
 {
 	class Swapchain

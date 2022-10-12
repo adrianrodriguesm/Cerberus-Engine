@@ -17,8 +17,6 @@ namespace cerberus
 		{
 		}
 
-
-
 		static Buffer Copy(const void* data, uint32_t size)
 		{
 			Buffer buffer;

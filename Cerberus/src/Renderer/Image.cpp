@@ -66,7 +66,7 @@ namespace cerberus
 		Release();
 
 		VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-		VulkanAllocator allocator("Image2D");
+		ResourceAllocator allocator("Image2D");
 
 
 		// Define the usage type of the image
@@ -203,7 +203,7 @@ namespace cerberus
 			NV_CORE_WARN("Image2D::Release ImageView = {0}", (const void*)info.ImageView);
 			vkDestroyImageView(vulkanDevice, info.ImageView, nullptr);
 			vkDestroySampler(vulkanDevice, info.Sampler, nullptr);
-			VulkanAllocator allocator("VulkanImage2D");
+			ResourceAllocator allocator("VulkanImage2D");
 			allocator.DestroyImage(info.Image, info.MemoryAlloc);
 		});
 		m_PerLayerImageViews.clear();

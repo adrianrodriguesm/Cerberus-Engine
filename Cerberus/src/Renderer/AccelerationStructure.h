@@ -1,8 +1,8 @@
 #pragma once
 #include "Renderer/Mesh.h"
-#include "Renderer/RenderCommandBuffer.h"
+#include "Renderer/CommandBuffer.h"
 #include "Scene/Scene.h"
-#include "Renderer/VulkanAllocator.h"
+#include "Renderer/ResourceAllocator.h"
 namespace cerberus
 {
 	enum class AccelerationStructureType
@@ -61,7 +61,6 @@ namespace cerberus
 		VkAccelerationStructureGeometryInstancesDataKHR m_ASInstances{};
 	};
 
-
 	class AccelerationStructureBuilder final
 	{
 	public:
@@ -92,8 +91,8 @@ namespace cerberus
 		 // - The resulting TLAS will be stored in m_tlas
 		 // - update is to rebuild the Tlas with updated matrices
 		void BeginTLASBuild(VkBuildAccelerationStructureFlagsKHR flags, bool update = false, bool motion = false);
-		void SubmitMeshInstance(const Ref<Mesh>& mesh, glm::mat4& transform);
-		void EndTLAS();
+		void SubmitMeshInstance(const Ref<Mesh>& mesh, const glm::mat4& transform);
+		void EndTLASBuild();
 		//--------------------------------------------------------------------------------------------------
 		// - There will be one BLAS per geometry (e.g mesh, submesh, etc) submission 
 		// - The resulting BLAS (along with the inputs used to build) are stored in m_BLAS,
@@ -102,10 +101,11 @@ namespace cerberus
 		void BeginBLASBuild(VkBuildAccelerationStructureFlagsKHR flags);
 		// Change to submesh
 		void SummitMesh(const Ref<Mesh>& mesh);
-		void EndBLASBuild();
+		void EndBLASBuild(std::vector<Ref<BottomLevelAccelerationStructure>>& outBlas);
 
 	private:
 		bool HasFlag(VkFlags item, VkFlags flag) { return (item & flag) == flag; }
+		VmaAllocation CreateInstanceBuffer(const std::vector<VkAccelerationStructureInstanceKHR>& m_TLASInstances, ResourceAllocator& allocator, VkBuffer& outInstanceBuffer);
 		//--------------------------------------------------------------------------------------------------
 		// Destroy all the non-compacted acceleration structures
 		void DestroyNonCompacted(std::vector<uint32_t> indices, std::vector<BuildAccelerationStructure>& buildAs);
@@ -125,14 +125,16 @@ namespace cerberus
 			MeshHandle								 meshHandle);
 		//--------------------------------------------------------------------------------------------------
 		// Creating the TLAS, called by buildTlas
-		void CreateTlas(VkCommandBuffer                      cmdBuf,			// Command buffer
+		VmaAllocation CreateTlas(VkCommandBuffer                      cmdBuf,			// Command buffer
 			uint32_t                             countInstance,					// number of instances
 			VkDeviceAddress                      instBufferAddr,				// Buffer address of instances
 			VkBuildAccelerationStructureFlagsKHR flags,							// Build creation flag
 			bool                                 update,						// Update == animation
-			bool                                 motion);						// Motion Blur
+			bool                                 motion,						// Motion Blur
+			ResourceAllocator& allocator, 
+			VkBuffer& outScratchBuffer);
 	private:
-		Scope<RenderCommandBuffer> m_CommandBuffer;
+		Scope<CommandBuffer> m_CommandBuffer;
 		VkBuildAccelerationStructureFlagsKHR m_Flags;
 
 		// Bottom Level Acceleration Structure related:

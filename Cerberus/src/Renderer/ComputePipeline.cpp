@@ -73,13 +73,13 @@ namespace cerberus
 		VK_CHECK_RESULT(vkCreateComputePipelines(device, m_PipelineCache, 1, &computePipelineCreateInfo, nullptr, &m_ComputePipeline));
 	}
 
-	void ComputePipeline::Begin(Ref<RenderCommandBuffer> renderCommandBuffer)
+	void ComputePipeline::Begin(Ref<CommandBuffer> commandBuffer)
 	{
 		CORE_ASSERT(!m_ActiveComputeCommandBuffer, "Command already created!");
-		if (renderCommandBuffer)
+		if (commandBuffer)
 		{
 			uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
-			m_ActiveComputeCommandBuffer = renderCommandBuffer->GetCommandBuffer(frameIndex);
+			m_ActiveComputeCommandBuffer = commandBuffer->GetCommandBuffer(frameIndex);
 			m_UsingGraphicsQueue = true;
 		}
 		else

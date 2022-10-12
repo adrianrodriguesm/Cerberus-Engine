@@ -20,7 +20,7 @@ namespace cerberus
 		UniformBuffer* instance = this;
 		Renderer::Submit([instance, offset] () mutable
 		{
-			VulkanAllocator allocator("UniformBuffer");
+				ResourceAllocator allocator("UniformBuffer");
 			// Copy data to staging buffer
 			// 1. Create pointer to   a point in normal memory and  "Map" the uniform buffer memory to that point
 			uint8_t* destData = allocator.MapMemory<uint8_t>(instance->m_MemoryAllocation);
@@ -40,7 +40,7 @@ namespace cerberus
 		VkBuffer uniformBuffer = m_UniformBuffer;
 		Renderer::SubmitResourceFree([uniformBuffer, memoryAllocation]()
 		{
-			VulkanAllocator allocator("UniformBuffer");
+			ResourceAllocator allocator("UniformBuffer");
 			NV_CORE_WARN("UniformBuffer::Release = {0}", (const void*)uniformBuffer);
 			allocator.DestroyBuffer(uniformBuffer, memoryAllocation);
 		});
@@ -67,7 +67,7 @@ namespace cerberus
 																						// to sent the data to the Vertex buffer on the GPU
 			uniformBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;			// Similar to Swap Chain images, can share uniform buffers
 
-			VulkanAllocator allocator("UniformBuffer");
+			ResourceAllocator allocator("UniformBuffer");
 			// Allocation is the piece of memory associate with the buffer
 			instance->m_MemoryAllocation = allocator.AllocateBuffer(uniformBufferCreateInfo, VMA_MEMORY_USAGE_CPU_TO_GPU, instance->m_UniformBuffer);
 			

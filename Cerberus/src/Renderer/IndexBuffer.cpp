@@ -22,7 +22,7 @@ namespace cerberus
 			stagingBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;			// Similar to Swap Chain images, can share vertex buffers
 
 			VkBuffer stagingBuffer;
-			VulkanAllocator allocator("IndexBuffer");
+			ResourceAllocator allocator("IndexBuffer");
 			// Allocation is the piece of memory associate with the buffer
 			VmaAllocation stagingBufferAllocation = allocator.AllocateBuffer(stagingBufferCreateInfo, VMA_MEMORY_USAGE_CPU_TO_GPU, stagingBuffer);
 
@@ -69,7 +69,7 @@ namespace cerberus
 		VmaAllocation memoryAllocation = m_MemoryAllocation;
 		Renderer::SubmitResourceFree([indexBuffer, memoryAllocation]() 
 		{
-			VulkanAllocator allocator("IndexBuffer");
+			ResourceAllocator allocator("IndexBuffer");
 			allocator.DestroyBuffer(indexBuffer, memoryAllocation);
 		});
 		

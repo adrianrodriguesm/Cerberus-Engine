@@ -79,6 +79,8 @@ namespace cerberus
 		static AssetType GetStaticType() { return AssetType::MeshSource; }
 		AssetType GetAssetType() const { return GetStaticType(); }
 
+		inline void SetBottomLevelAccelerationStructures(std::vector<Ref<BottomLevelAccelerationStructure>>& blas) { m_BLAS = blas; }
+
 	private:
 		void LoadGeometry();
 		void LoadMaterials();

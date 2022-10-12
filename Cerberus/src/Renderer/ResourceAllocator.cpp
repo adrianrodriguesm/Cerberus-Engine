@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "VulkanAllocator.h"
+#include "ResourceAllocator.h"
 #include "Renderer/RendererContext.h"
 #include "Utils/StringUtils.h"
 
@@ -15,25 +15,25 @@ namespace cerberus
 {
 
 
-	struct VulkanAllocatorData
+	struct ResourceAllocatorData
 	{
 		VmaAllocator Allocator;
 		uint64_t TotalAllocatedBytes = 0;
 	};
 
-	static VulkanAllocatorData* s_Data = nullptr;
+	static ResourceAllocatorData* s_Data = nullptr;
 
-	void VulkanAllocator::Free(VmaAllocation allocation)
+	void ResourceAllocator::Free(VmaAllocation allocation)
 	{
 		vmaFreeMemory(s_Data->Allocator, allocation);
 	}
 
-	void VulkanAllocator::UnmapMemory(VmaAllocation allocation)
+	void ResourceAllocator::UnmapMemory(VmaAllocation allocation)
 	{
 		vmaUnmapMemory(s_Data->Allocator, allocation);
 	}
 
-	GPUMemoryStats VulkanAllocator::GetStats()
+	GPUMemoryStats ResourceAllocator::GetStats()
 	{
 		VmaStats stats;
 		vmaCalculateStats(s_Data->Allocator, &stats);
@@ -44,9 +44,9 @@ namespace cerberus
 		return { usedMemory, freeMemory };
 	}
 
-	void VulkanAllocator::Init(Ref<Device> device)
+	void ResourceAllocator::Init(Ref<Device> device)
 	{
-		s_Data = new VulkanAllocatorData();
+		s_Data = new ResourceAllocatorData();
 
 		// Initialize VulkanMemoryAllocator
 		VmaAllocatorCreateInfo allocatorInfo = {};
@@ -59,12 +59,12 @@ namespace cerberus
 		vmaCreateAllocator(&allocatorInfo, &s_Data->Allocator);
 	}
 
-	VmaAllocator& VulkanAllocator::GetVMAAllocator()
+	VmaAllocator& ResourceAllocator::GetVMAAllocator()
 	{
 		return s_Data->Allocator;
 	}
 
-	void VulkanAllocator::Shutdown()
+	void ResourceAllocator::Shutdown()
 	{
 		vmaDestroyAllocator(s_Data->Allocator);
 
@@ -72,16 +72,16 @@ namespace cerberus
 		s_Data = nullptr;
 	}
 
-	VulkanAllocator::VulkanAllocator(const std::string& tag)
+	ResourceAllocator::ResourceAllocator(const std::string& tag)
 		: m_Tag(tag)
 	{
 	}
 
-	VulkanAllocator::~VulkanAllocator()
+	ResourceAllocator::~ResourceAllocator()
 	{
 	}
 
-	VmaAllocation VulkanAllocator::AllocateBuffer(VkBufferCreateInfo bufferCreateInfo, VmaMemoryUsage usage, VkBuffer& outBuffer)
+	VmaAllocation ResourceAllocator::AllocateBuffer(VkBufferCreateInfo bufferCreateInfo, VmaMemoryUsage usage, VkBuffer& outBuffer)
 	{
 		VmaAllocationCreateInfo allocCreateInfo = {};
 		allocCreateInfo.usage = usage;
@@ -91,17 +91,17 @@ namespace cerberus
 		
 		VmaAllocationInfo allocInfo{};
 		vmaGetAllocationInfo(s_Data->Allocator, allocation, &allocInfo);
-		ALLOCATOR_LOG("VulkanAllocator ({0}): allocating buffer; size = {1}", m_Tag, utils::BytesToString(allocInfo.size));
+		ALLOCATOR_LOG("ResourceAllocator ({0}): allocating buffer; size = {1}", m_Tag, utils::BytesToString(allocInfo.size));
 		{
 			s_Data->TotalAllocatedBytes += allocInfo.size;
-			ALLOCATOR_LOG("VulkanAllocator ({0}): total allocated since start is {1}", m_Tag, utils::BytesToString(s_Data->TotalAllocatedBytes));
+			ALLOCATOR_LOG("ResourceAllocator ({0}): total allocated since start is {1}", m_Tag, utils::BytesToString(s_Data->TotalAllocatedBytes));
 		}
 
 		return allocation;
 	
 	}
 
-	VmaAllocation VulkanAllocator::AllocateBuffer(VkBufferCreateInfo bufferCreateInfo, VmaMemoryUsage usage, VmaAllocationCreateFlags flags, VkBuffer& outBuffer)
+	VmaAllocation ResourceAllocator::AllocateBuffer(VkBufferCreateInfo bufferCreateInfo, VmaMemoryUsage usage, VmaAllocationCreateFlags flags, VkBuffer& outBuffer)
 	{
 
 		VmaAllocationCreateInfo allocCreateInfo = {};
@@ -113,16 +113,16 @@ namespace cerberus
 
 		VmaAllocationInfo allocInfo{};
 		vmaGetAllocationInfo(s_Data->Allocator, allocation, &allocInfo);
-		ALLOCATOR_LOG("VulkanAllocator ({0}): allocating buffer; size = {1}", m_Tag, utils::BytesToString(allocInfo.size));
+		ALLOCATOR_LOG("ResourceAllocator ({0}): allocating buffer; size = {1}", m_Tag, utils::BytesToString(allocInfo.size));
 		{
 			s_Data->TotalAllocatedBytes += allocInfo.size;
-			ALLOCATOR_LOG("VulkanAllocator ({0}): total allocated since start is {1}", m_Tag, utils::BytesToString(s_Data->TotalAllocatedBytes));
+			ALLOCATOR_LOG("ResourceAllocator ({0}): total allocated since start is {1}", m_Tag, utils::BytesToString(s_Data->TotalAllocatedBytes));
 		}
 
 		return allocation;
 	}
 
-	VmaAllocation VulkanAllocator::AllocateImage(VkImageCreateInfo imageCreateInfo, VmaMemoryUsage usage, VkImage& outImage)
+	VmaAllocation ResourceAllocator::AllocateImage(VkImageCreateInfo imageCreateInfo, VmaMemoryUsage usage, VkImage& outImage)
 	{
 		VmaAllocationCreateInfo allocCreateInfo = {};
 		allocCreateInfo.usage = usage;
@@ -132,23 +132,23 @@ namespace cerberus
 
 		VmaAllocationInfo allocInfo{};
 		vmaGetAllocationInfo(s_Data->Allocator, allocation, &allocInfo);
-		ALLOCATOR_LOG("VulkanAllocator ({0}): allocating buffer; size = {1}", m_Tag, utils::BytesToString(allocInfo.size));
+		ALLOCATOR_LOG("ResourceAllocator ({0}): allocating buffer; size = {1}", m_Tag, utils::BytesToString(allocInfo.size));
 		{
 			s_Data->TotalAllocatedBytes += allocInfo.size;
-			ALLOCATOR_LOG("VulkanAllocator ({0}): total allocated since start is {1}", m_Tag, utils::BytesToString(s_Data->TotalAllocatedBytes));
+			ALLOCATOR_LOG("ResourceAllocator ({0}): total allocated since start is {1}", m_Tag, utils::BytesToString(s_Data->TotalAllocatedBytes));
 		}
 
 		return allocation;
 	}
 
-	void VulkanAllocator::DestroyBuffer(VkBuffer buffer, VmaAllocation allocation)
+	void ResourceAllocator::DestroyBuffer(VkBuffer buffer, VmaAllocation allocation)
 	{
 		CORE_ASSERT(buffer, "Null buffer");
 		CORE_ASSERT(allocation, "Null memory allocation");
 		vmaDestroyBuffer(s_Data->Allocator, buffer, allocation);
 	}
 
-	void VulkanAllocator::DestroyImage(VkImage image, VmaAllocation allocation)
+	void ResourceAllocator::DestroyImage(VkImage image, VmaAllocation allocation)
 	{
 		CORE_ASSERT(image, "Null buffer");
 		CORE_ASSERT(allocation, "Null memory allocation");

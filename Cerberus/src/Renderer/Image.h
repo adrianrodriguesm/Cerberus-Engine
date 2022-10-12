@@ -1,6 +1,6 @@
 #pragma once
 #include "Core/Buffer.h"
-#include "Renderer/VulkanAllocator.h"
+#include "Renderer/ResourceAllocator.h"
 namespace cerberus
 {
 	enum class ImageUsage

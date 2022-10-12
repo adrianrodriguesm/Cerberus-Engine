@@ -49,14 +49,14 @@ namespace cerberus
 		NV_CORE_INFO("Vulkan Logical Device created with success");
 		NV_CORE_INFO("...");
 
-		VulkanAllocator::Init(m_VulkanDevice);
+		ResourceAllocator::Init(m_VulkanDevice);
 		
 	}
 	void RendererContext::Shutdown()
 	{
 		auto vulkanLogicalDevice = m_VulkanDevice->GetVulkanDevice();
 		
-		VulkanAllocator::Shutdown();
+		ResourceAllocator::Shutdown();
 
 		m_VulkanDevice->Shutdown();
 		m_ValidationLayer->Shutdown();
@@ -96,13 +96,10 @@ namespace cerberus
 		auto intanceExtension = GetRequiredExtensions();
 
 		// Check instance extension supported
-		ASSERT(CheckInstanceExtensionSupport(&intanceExtension), "Vulkan Instance does not support required extensions!");
+		CORE_ASSERT(CheckInstanceExtensionSupport(&intanceExtension), "Vulkan Instance does not support required extensions!");
 
 		createInfo.enabledExtensionCount = static_cast<uint32_t>(intanceExtension.size());
 		createInfo.ppEnabledExtensionNames = intanceExtension.data();
-
-		createInfo.enabledLayerCount = 0;
-		createInfo.ppEnabledLayerNames = nullptr;
 
 		// If validation enabled, include the validation layer names
 		if (ValidationLayer::s_EnableValidationLayers)
@@ -115,6 +112,15 @@ namespace cerberus
 			createInfo.enabledLayerCount = 0;
 			createInfo.ppEnabledLayerNames = nullptr;
 		}
+
+		VkValidationFeatureEnableEXT enables[] = { /*VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,*/  VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
+												   VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT, VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT };
+		VkValidationFeaturesEXT features = {};
+		features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+		features.enabledValidationFeatureCount = 4;
+		features.pEnabledValidationFeatures = enables;
+
+		createInfo.pNext = &features;
 
 		// VkAllocationCallbacks(2º parameter) is a paremeter that 
 		// allow us to specify where and how store the memory -> Require good knowledge in memory manegement

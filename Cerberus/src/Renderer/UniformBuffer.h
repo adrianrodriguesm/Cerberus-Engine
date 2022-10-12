@@ -1,5 +1,5 @@
 #pragma once
-#include "Renderer/VulkanAllocator.h"
+#include "Renderer/ResourceAllocator.h"
 #include "Core/Buffer.h"
 namespace cerberus
 {

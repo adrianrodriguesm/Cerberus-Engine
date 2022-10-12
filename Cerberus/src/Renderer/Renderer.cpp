@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "Renderer.h"
 #include "Core/Application.h"
-#include "Renderer/VulkanAllocator.h"
+#include "Renderer/ResourceAllocator.h"
 #include "Renderer/UniformBufferSet.h"
 #include "Renderer/ComputePipeline.h"
 #include "Renderer/Descriptor.h"
@@ -54,7 +54,7 @@ namespace cerberus
 
 		VkPhysicalDeviceLimits DeviceLimits;
 
-		Ref<RenderCommandBuffer> MainRenderCommandBuffer;
+		Ref<CommandBuffer> MainCommandBuffer;
 
 	};
 
@@ -141,7 +141,7 @@ namespace cerberus
 		s_Data->EmptyEnvironment->RadianceMap = s_Data->BlackCubeTexture;
 		s_Data->EmptyEnvironment->DebugName = "Empty Environment";
 
-		s_Data->MainRenderCommandBuffer = RenderCommandBuffer::CreateFromSwapchain();
+		s_Data->MainCommandBuffer = CommandBuffer::CreateFromSwapchain();
 		// Compile Shader and Create default textures
 		Renderer::ExecuteRenderQueue();
 		Renderer::InitImGui();
@@ -171,7 +171,7 @@ namespace cerberus
 		Renderer::ExecuteRenderQueue();
 
 		Renderer::ShutdownImGui();
-		auto& stats = VulkanAllocator::GetStats();
+		auto& stats = ResourceAllocator::GetStats();
 		NV_CORE_WARN("Memory allocated: {0}", stats.Used);
 		NV_CORE_WARN("Memory free: {0}", stats.Free);
 		
@@ -300,13 +300,12 @@ namespace cerberus
 		vkDestroyDescriptorPool(device, s_Data->ImGuiDescriptorPool, nullptr);
 	}
 
-	void Renderer::RenderImGui(Ref<RenderCommandBuffer> renderCommandBuffer)
+	void Renderer::RenderImGui(Ref<CommandBuffer> commandBuffer)
 	{
-		Renderer::Submit([renderCommandBuffer]()
+		Renderer::Submit([commandBuffer]() mutable
 		{
-			Ref<RenderCommandBuffer> commandBuffer = renderCommandBuffer;
 			if (!commandBuffer)
-				commandBuffer = s_Data->MainRenderCommandBuffer;
+				commandBuffer = s_Data->MainCommandBuffer;
 
 			BeginImGui(commandBuffer);
 
@@ -317,7 +316,7 @@ namespace cerberus
 		});
 	}
 
-	void Renderer::BeginImGui(Ref<RenderCommandBuffer> renderCommandBuffer)
+	void Renderer::BeginImGui(Ref<CommandBuffer> CommandBuffer)
 	{
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -325,7 +324,7 @@ namespace cerberus
 		ImGuizmo::BeginFrame();
 	}
 
-	void Renderer::EndImGui(Ref<RenderCommandBuffer> renderCommandBuffer)
+	void Renderer::EndImGui(Ref<CommandBuffer> CommandBuffer)
 	{
 		ImGui::Render();
 
@@ -414,7 +413,7 @@ namespace cerberus
 #if 0
 		ImGui::Render();
 
-		VkCommandBuffer drawCommandBuffer = renderCommandBuffer->GetCommandBuffer();
+		VkCommandBuffer drawCommandBuffer = CommandBuffer->GetCommandBuffer();
 
 		ImDrawData* main_draw_data = ImGui::GetDrawData();
 		ImGui_ImplVulkan_RenderDrawData(main_draw_data, drawCommandBuffer);
@@ -606,13 +605,13 @@ namespace cerberus
 		return Application::Get().GetWindow()->GetRendererContext();
 	}
 
-	void Renderer::BeginRenderPass(Ref<RenderCommandBuffer> renderCommandBuffer, Ref<RenderPass> renderPass, bool explicitClear)
+	void Renderer::BeginRenderPass(Ref<CommandBuffer> CommandBuffer, Ref<RenderPass> renderPass, bool explicitClear)
 	{
-		Renderer::Submit([renderCommandBuffer, renderPass, explicitClear]()
+		Renderer::Submit([CommandBuffer, renderPass, explicitClear]()
 		{
 			Ref<Framebuffer> framebuffer = renderPass->GetSpecification().TargetFramebuffer;
 			uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
-			VkCommandBuffer commandBuffer = renderCommandBuffer->GetCommandBuffer(frameIndex);
+			VkCommandBuffer commandBuffer = CommandBuffer->GetCommandBuffer(frameIndex);
 			uint32_t width, height;
 			if (framebuffer->GetSpecification().SwapchainTarget)
 			{
@@ -699,12 +698,12 @@ namespace cerberus
 
 	}
 
-	void Renderer::EndRenderPass(Ref<RenderCommandBuffer> renderCommandBuffer)
+	void Renderer::EndRenderPass(Ref<CommandBuffer> CommandBuffer)
 	{
-		Renderer::Submit([renderCommandBuffer]()
+		Renderer::Submit([CommandBuffer]()
 		{
 			// End Render Pass
-			vkCmdEndRenderPass(renderCommandBuffer->GetCommandBuffer(Renderer::GetCurrentFrameIndex()));
+			vkCmdEndRenderPass(CommandBuffer->GetCommandBuffer(Renderer::GetCurrentFrameIndex()));
 
 			s_Data->DrawCallCount = 0;
 		});
@@ -752,7 +751,7 @@ namespace cerberus
 		return cmdBuffer;
 	}
 
-	void Renderer::FlushCommandBuffer(VkCommandBuffer commandBuffer, bool compute)
+	void Renderer::FlushCommandBuffer(VkCommandBuffer commandBuffer, bool compute, bool waitToCompute)
 	{
 		CORE_ASSERT(commandBuffer != VK_NULL_HANDLE, "Null command buffer");
 
@@ -778,6 +777,9 @@ namespace cerberus
 		VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, fence));
 		// Wait for the fence to signal that command buffer has finished executing
 		VK_CHECK_RESULT(vkWaitForFences(vulkanDevice, 1, &fence, VK_TRUE, UINT64_MAX));
+
+		if (waitToCompute)
+			VK_CHECK_RESULT(vkQueueWaitIdle(queue));
 
 		vkDestroyFence(vulkanDevice, fence, nullptr);
 		VkCommandPool commandPool = compute ? s_Data->ComputeCommandPool: s_Data->CommandPool;
@@ -1009,12 +1011,12 @@ namespace cerberus
 
 
 
-	void Renderer::RenderFullscreenQuad(Ref<RenderCommandBuffer> renderCommandBuffer, Ref<Pipeline> pipeline, Ref<UniformBufferSet> uniformBufferSet, Ref<Material> material)
+	void Renderer::RenderFullscreenQuad(Ref<CommandBuffer> CommandBuffer, Ref<Pipeline> pipeline, Ref<UniformBufferSet> uniformBufferSet, Ref<Material> material)
 	{
-		Renderer::Submit([renderCommandBuffer, uniformBufferSet, pipeline, material]() mutable
+		Renderer::Submit([CommandBuffer, uniformBufferSet, pipeline, material]() mutable
 		{
 			uint32_t currentFrame = Renderer::GetCurrentFrameIndex();
-			VkCommandBuffer vulkanCommandBuffer = renderCommandBuffer->GetCommandBuffer(currentFrame);
+			VkCommandBuffer vulkanCommandBuffer = CommandBuffer->GetCommandBuffer(currentFrame);
 			// Bind Pipeline to be used in render pass
 			vkCmdBindPipeline(vulkanCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->GetVulkanPipeline());
 
@@ -1036,13 +1038,13 @@ namespace cerberus
 		});
 	}
 
-	void Renderer::RenderMesh(Ref<RenderCommandBuffer> renderCommandBuffer, Ref<UniformBufferSet> uniformBufferSet, Ref<Pipeline> pipeline, Ref<Mesh> mesh, Ref<MaterialTable> materialTable, glm::mat4& transform)
+	void Renderer::RenderMesh(Ref<CommandBuffer> CommandBuffer, Ref<UniformBufferSet> uniformBufferSet, Ref<Pipeline> pipeline, Ref<Mesh> mesh, Ref<MaterialTable> materialTable, glm::mat4& transform)
 	{
-		Renderer::Submit([renderCommandBuffer, uniformBufferSet, pipeline, mesh, materialTable, transform]() mutable
+		Renderer::Submit([CommandBuffer, uniformBufferSet, pipeline, mesh, materialTable, transform]() mutable
 		{
 			Ref<MeshSource> meshSource = mesh->GetMeshSource();
 			uint32_t currentFrame = Renderer::GetCurrentFrameIndex();
-			VkCommandBuffer vulkanCommandBuffer = renderCommandBuffer->GetCommandBuffer(currentFrame);
+			VkCommandBuffer vulkanCommandBuffer = CommandBuffer->GetCommandBuffer(currentFrame);
 			// Bind Pipeline to be used in render pass
 			vkCmdBindPipeline(vulkanCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->GetVulkanPipeline());
 
@@ -1097,18 +1099,18 @@ namespace cerberus
 		});
 	}
 
-	void Renderer::RenderMeshWithMaterial(Ref<RenderCommandBuffer> renderCommandBuffer, Ref<UniformBufferSet> uniformBufferSet, Ref<Pipeline> pipeline, Ref<Mesh> mesh, glm::mat4& transform, Ref<Material> material, const Buffer& additionalUniforms)
+	void Renderer::RenderMeshWithMaterial(Ref<CommandBuffer> CommandBuffer, Ref<UniformBufferSet> uniformBufferSet, Ref<Pipeline> pipeline, Ref<Mesh> mesh, glm::mat4& transform, Ref<Material> material, const Buffer& additionalUniforms)
 	{
 		Buffer pushConstantBuffer;
 		pushConstantBuffer.Allocate(sizeof(glm::mat4) + additionalUniforms.Size);
 		if (additionalUniforms.Size)
 			pushConstantBuffer.Write(additionalUniforms.Data, additionalUniforms.Size, sizeof(glm::mat4));
 
-		Renderer::Submit([renderCommandBuffer, uniformBufferSet, pipeline, mesh, transform, material, pushConstantBuffer]() mutable
+		Renderer::Submit([CommandBuffer, uniformBufferSet, pipeline, mesh, transform, material, pushConstantBuffer]() mutable
 		{
 			Ref<MeshSource> meshSource = mesh->GetMeshSource();
 			uint32_t currentFrame = Renderer::GetCurrentFrameIndex();
-			VkCommandBuffer vulkanCommandBuffer = renderCommandBuffer->GetCommandBuffer(currentFrame);
+			VkCommandBuffer vulkanCommandBuffer = CommandBuffer->GetCommandBuffer(currentFrame);
 			// Bind Pipeline to be used in render pass
 			vkCmdBindPipeline(vulkanCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->GetVulkanPipeline());
 
@@ -1156,15 +1158,15 @@ namespace cerberus
 		});
 	}
 
-	void Renderer::DispatchComputeShader(Ref<RenderCommandBuffer> renderCommandBuffer, Ref<ComputePipeline> pipeline, Ref<UniformBufferSet> uniformBufferSet, Ref<Material> material, const glm::ivec3& workGroups, Buffer pushConstantBuffer)
+	void Renderer::DispatchComputeShader(Ref<CommandBuffer> CommandBuffer, Ref<ComputePipeline> pipeline, Ref<UniformBufferSet> uniformBufferSet, Ref<Material> material, const glm::ivec3& workGroups, Buffer pushConstantBuffer)
 	{
-		Renderer::Submit([renderCommandBuffer, uniformBufferSet, pipeline, workGroups, material, pushConstantBuffer]() mutable
+		Renderer::Submit([CommandBuffer, uniformBufferSet, pipeline, workGroups, material, pushConstantBuffer]() mutable
 		{
 			uint32_t currentFrame = Renderer::GetCurrentFrameIndex();
 			// Update Descripor set per material
 			Renderer::UpdateMaterialForRendering(material, uniformBufferSet);
 			VkDescriptorSet descriptorSet = material->GetDescriptorSet(currentFrame);
-			pipeline->Begin(renderCommandBuffer);
+			pipeline->Begin(CommandBuffer);
 			{
 				if (pushConstantBuffer.Size)
 					pipeline->SetPushConstants(pushConstantBuffer.Data, pushConstantBuffer.Size);

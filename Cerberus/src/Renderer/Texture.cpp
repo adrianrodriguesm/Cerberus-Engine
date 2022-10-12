@@ -159,7 +159,7 @@ namespace cerberus
 		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		// STAGING BUFFER
 		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-		VulkanAllocator allocator("Texture2D");
+		ResourceAllocator allocator("Texture2D");
 		// Create staging buffer to hold loaded data, ready to copy to device
 		VkBuffer stagingBuffer;
 		VkBufferCreateInfo bufferCreateInfo{};
@@ -364,7 +364,7 @@ namespace cerberus
 			vkDestroyImageView(vulkanDevice, info.ImageView, nullptr);
 			vkDestroySampler(vulkanDevice, info.Sampler, nullptr);
 
-			VulkanAllocator allocator("TextureCube");
+			ResourceAllocator allocator("TextureCube");
 			allocator.DestroyImage(info.Image, info.MemoryAlloc);
 		});
 		m_Info.MemoryAlloc = nullptr;
@@ -526,7 +526,7 @@ namespace cerberus
 
 		VkFormat vulkanFormat = utils::VulkanImageFormat(m_Format);
 		uint32_t mipCount = GetMipLevelCount();
-		VulkanAllocator allocator("TextureCube");
+		ResourceAllocator allocator("TextureCube");
 		/////////////////////////////////////////////////
 		////// Create Image
 		/////////////////////////////////////////////////

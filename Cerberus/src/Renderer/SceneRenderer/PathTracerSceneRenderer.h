@@ -21,7 +21,7 @@ namespace cerberus
 		virtual Ref<Image2D> GetFinalPassImage() const override;
 	private:
 		SceneRendererSpecification m_Specification;
-		Ref<RenderCommandBuffer> m_CommandBuffer;
+		Ref<CommandBuffer> m_CommandBuffer;
 
 		Ref<Scene> m_Scene;
 		

@@ -85,7 +85,7 @@ namespace cerberus
 	private:
 		Ref<Scene> m_Scene;
 		SceneRendererSpecification m_Specification;
-		Ref<RenderCommandBuffer> m_CommandBuffer;
+		Ref<CommandBuffer> m_CommandBuffer;
 		// Pipelines
 		Ref<Pipeline> m_PreDepthPipeline;
 		Ref<Pipeline> m_SkyboxPipeline;
