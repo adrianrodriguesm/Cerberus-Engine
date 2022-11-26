@@ -20,7 +20,7 @@ namespace cerberus
 		UniformBuffer* instance = this;
 		Renderer::Submit([instance, offset] () mutable
 		{
-				ResourceAllocator allocator("UniformBuffer");
+			ResourceAllocator allocator("UniformBuffer");
 			// Copy data to staging buffer
 			// 1. Create pointer to   a point in normal memory and  "Map" the uniform buffer memory to that point
 			uint8_t* destData = allocator.MapMemory<uint8_t>(instance->m_MemoryAllocation);

@@ -6,7 +6,7 @@ namespace cerberus
 	class IndexBuffer
 	{
 	public:
-		IndexBuffer(void* data, const uint32_t size);
+		IndexBuffer(const void* data, const uint32_t size);
 		~IndexBuffer();
 
 		uint32_t GetCount() const { return m_Size / sizeof(uint32_t); }

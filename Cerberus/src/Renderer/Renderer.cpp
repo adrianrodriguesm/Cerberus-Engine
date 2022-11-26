@@ -751,7 +751,7 @@ namespace cerberus
 		return cmdBuffer;
 	}
 
-	void Renderer::FlushCommandBuffer(VkCommandBuffer commandBuffer, bool compute, bool waitToCompute)
+	void Renderer::FlushCommandBuffer(VkCommandBuffer commandBuffer, bool compute, bool waitToCompute, bool detroyCommandBuffer)
 	{
 		CORE_ASSERT(commandBuffer != VK_NULL_HANDLE, "Null command buffer");
 
@@ -782,8 +782,12 @@ namespace cerberus
 			VK_CHECK_RESULT(vkQueueWaitIdle(queue));
 
 		vkDestroyFence(vulkanDevice, fence, nullptr);
-		VkCommandPool commandPool = compute ? s_Data->ComputeCommandPool: s_Data->CommandPool;
-		vkFreeCommandBuffers(vulkanDevice, commandPool, 1, &commandBuffer);
+
+		if (detroyCommandBuffer)
+		{
+			VkCommandPool commandPool = compute ? s_Data->ComputeCommandPool : s_Data->CommandPool;
+			vkFreeCommandBuffers(vulkanDevice, commandPool, 1, &commandBuffer);
+		}
 	}
 
 	RendererConfig& Renderer::GetRendererConfig()
@@ -1077,7 +1081,7 @@ namespace cerberus
 				std::array<VkDescriptorSet, 2> descriptorSets = 
 				{	
 					material->GetDescriptorSet(currentFrame),		// Set 0
-					s_Data->ActiveRendererDescriptorSet				// Set 1 (Environment)
+					s_Data->ActiveRendererDescriptorSet						// Set 1 (Environment)
 				};
 
 				// Bind the descriptor set

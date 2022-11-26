@@ -219,9 +219,20 @@ namespace cerberus
 
 		DrawComponent<TransformComponent>("TRANSFORM", entity, [](auto& component)
 		{
-			DrawVec3Control("Translation", component.Translation);
-			DrawVec3Control("Rotation", component.Rotation, 1.f);
-			DrawVec3Control("Scale", component.Scale, 0.1f, 1.f);
+			// Translation
+			glm::vec3 translation = component.GetTranslation();
+			DrawVec3Control("Translation", translation);
+			component.SetTranslation(translation);
+
+			// Rotation
+			glm::vec3 rotation = component.GetRotation();
+			DrawVec3Control("Rotation", rotation, 1.f);
+			component.SetRotation(rotation);
+
+			// Scale
+			glm::vec3 scale = component.GetScale();
+			DrawVec3Control("Scale", scale, 0.1f, 1.f);
+			component.SetScale(scale);
 		});
 
 		DrawComponent<DirectionalLightComponent>("DIRECTIONAL LIGHT", entity, [](auto& component)

@@ -3,7 +3,6 @@
 #include "Renderer/Renderer.h"
 
 #include <Core/Application.h>
-#include "Scene/Components.h"
 //#include "glm/gtx/string_cast.hpp"
 #include "Utils/StringUtils.h"
 #include "Core/Input.h"

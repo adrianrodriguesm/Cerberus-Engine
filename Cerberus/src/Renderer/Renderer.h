@@ -100,7 +100,7 @@ namespace cerberus
 		// -- Dispatch Compute Shader
 		static void DispatchComputeShader(Ref<CommandBuffer> CommandBuffer, Ref<ComputePipeline> pipeline, Ref<UniformBufferSet> uniformBufferSet, Ref<Material> material, const glm::ivec3& workGroups, Buffer additionalUniforms = {});
 		// Command Buffers
-		static void FlushCommandBuffer(VkCommandBuffer commandBuffer, bool compute = false, bool waitToCompute = false);
+		static void FlushCommandBuffer(VkCommandBuffer commandBuffer, bool compute = false, bool waitToCompute = false, bool detroyCommandBuffer = true);
 		static VkCommandBuffer GetCommandBuffer(bool beginCommand = false, bool compute = false);
 		static VkCommandBuffer CreateSecondaryCommandBuffer();
 		// -- Environment Map

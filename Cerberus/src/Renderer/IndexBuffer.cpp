@@ -4,7 +4,7 @@
 
 namespace cerberus
 {
-	IndexBuffer::IndexBuffer(void* data, const uint32_t size)
+	IndexBuffer::IndexBuffer(const void* data, const uint32_t size)
 		: m_Size(size)
 	{
 		m_LocalData = Buffer::Copy(data, size);
@@ -48,6 +48,7 @@ namespace cerberus
 			// Get a copy command buffer to tranfer the data 
 			// from the staging buffer to the vertex buffer
 			VkCommandBuffer copyCmd = Renderer::GetCommandBuffer(true);
+			
 			// Region of data to copy from and to
 			VkBufferCopy copyRegion = {};
 			copyRegion.srcOffset = 0;			// Copy from the begining of the fisrt buffer

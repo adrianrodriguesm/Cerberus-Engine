@@ -36,8 +36,18 @@ namespace cerberus
 		virtual void SetViewportSize(uint32_t width, uint32_t height) = 0;
 		virtual void SetSceneContext(const Ref<Scene>& scene) = 0;
 
+		virtual bool IsRegistered(const Ref<Mesh>& mesh) = 0;
+		virtual bool RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) { return false; }
+		virtual bool UnregisterMesh(const Ref<Mesh>& mesh) { return false; }
+		virtual void UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform) {}
+
+		virtual void Render(const SceneRendererCamera& sceneRendererCamera) = 0;
+		
 		virtual void OnImGuiRender() = 0;
 
 		virtual Ref<Image2D> GetFinalPassImage() const = 0;
+
+
+		
 	};
 }

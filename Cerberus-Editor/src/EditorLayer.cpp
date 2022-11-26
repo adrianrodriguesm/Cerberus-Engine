@@ -269,9 +269,9 @@ namespace cerberus
 				{
 					glm::vec3 translation, rotation, scale;
 					math::DecomposeTransform(transform, translation, rotation, scale);
-					tc.Translation = translation;
-					tc.Rotation += glm::degrees(rotation) - tc.Rotation;
-					tc.Scale = scale;
+					tc.SetTranslation(translation);
+					tc.SetRotation(tc.GetRotation() + glm::degrees(rotation) - tc.GetRotation());
+					tc.SetScale(scale);
 				}
 			}
 			// Drag scene into the viewport

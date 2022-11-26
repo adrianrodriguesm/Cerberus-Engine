@@ -15,6 +15,8 @@ namespace cerberus
 		virtual void SetViewportSize(uint32_t width, uint32_t height) override;
 		virtual void SetSceneContext(const Ref<Scene>& scene) override { m_Scene = scene; }
 
+		virtual void Render(const SceneRendererCamera& sceneRendererCamera) override {}
+
 		virtual void OnImGuiRender() override;
 
 		virtual Ref<Image2D> GetFinalPassImage() const override;

@@ -1,0 +1,65 @@
+#pragma once
+#include "Renderer/VertexBuffer.h"
+#include "Renderer/Mesh.h"
+#include "Core/Handle.h"
+#include "Math/Matrix.h"
+namespace cerberus
+{
+	struct SubmeshSourceProxy
+	{
+		uint32_t BaseVertex;
+		uint32_t BaseIndex, IndexCount;
+		uint32_t MaterialIndex;
+		glm::mat4 Transform = math::MatFactory::CreateIdentityMat4();
+		Handle<struct AccelerationStructure> BLAS;
+		//std::vector<Handle<MeshInstanceProxy>> Instances;
+		SubmeshSourceProxy() = default;
+		SubmeshSourceProxy(uint32_t baseVertex, uint32_t baseIndex, uint32_t indexCount)
+			: BaseVertex(baseVertex), BaseIndex(baseIndex), IndexCount(indexCount)
+		{
+		}
+	};
+
+	// Render Core representation of a mesh
+	struct MeshSourceProxy
+	{
+		VertexBuffer* VertexBuffer;
+		IndexBuffer*  IndexBuffer;
+		std::vector<SubmeshSourceProxy> Submeshes;
+
+		MeshSourceProxy(const void* vertexData, uint32_t vertexSize, const void* indexData, uint32_t indexSize)
+		{
+			VertexBuffer = new cerberus::VertexBuffer(vertexData, vertexSize);
+			IndexBuffer = new cerberus::IndexBuffer(indexData, indexSize);
+			VertexBufferLayout layout = {{ ShaderDataType::Float3, "a_Position"	},
+										 { ShaderDataType::Float3, "a_Normal"	},
+										 { ShaderDataType::Float3, "a_Tangent"	},
+										 { ShaderDataType::Float3, "a_Binormal"	},
+										 { ShaderDataType::Float2, "a_TexCoord"	},
+										};
+			VertexBuffer->SetVertexBufferLayout(layout);
+		}
+
+		~MeshSourceProxy()
+		{
+			if(VertexBuffer)
+				delete VertexBuffer;
+			if(IndexBuffer)
+				delete IndexBuffer;
+		}
+	};
+
+	struct MeshInstanceProxy
+	{
+		Handle<MeshSourceProxy> MeshSource;
+		uint32_t SubmeshIndex;
+		// TODO: Switch to binding group
+		Ref<MaterialAsset> Material;
+		glm::mat4 WorldTransform;
+
+		MeshInstanceProxy(const Handle<MeshSourceProxy>& meshSource, const uint32_t submeshIndex, const Ref<MaterialAsset>& material,
+			const glm::mat4& transform) : MeshSource(meshSource), SubmeshIndex(submeshIndex), Material(material), WorldTransform(transform)
+		{}
+
+	};
+}

@@ -137,7 +137,7 @@ namespace cerberus
 			}
 		}
 
-		m_VertexBuffer = CreateRef<VertexBuffer>(m_Vertices.data(), (uint32_t)(m_Vertices.size() * sizeof(Vertex)));
+		//m_VertexBuffer = CreateRef<VertexBuffer>(m_Vertices.data(), (uint32_t)(m_Vertices.size() * sizeof(Vertex)));
 		m_VertexBufferLayout = {
 			{ ShaderDataType::Float3, "a_Position"	},
 			{ ShaderDataType::Float3, "a_Normal"	},
@@ -145,7 +145,8 @@ namespace cerberus
 			{ ShaderDataType::Float3, "a_Binormal"	},
 			{ ShaderDataType::Float2, "a_TexCoord"	},
 		};
-		m_IndexBuffer = CreateRef<IndexBuffer>(m_Indices.data(), (uint32_t)(m_Indices.size() * sizeof(Index)));
+		//m_VertexBuffer->SetVertexBufferLayout(m_VertexBufferLayout);
+		//m_IndexBuffer = CreateRef<IndexBuffer>(m_Indices.data(), (uint32_t)(m_Indices.size() * sizeof(Index)));
 
 	}
 

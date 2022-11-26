@@ -16,9 +16,8 @@ namespace Assimp {
 
 namespace cerberus
 {
+	using MeshSourceHandle = AssetHandle;
 	using MeshHandle = AssetHandle;
-
-	class BottomLevelAccelerationStructure;
 
 	class Submesh
 	{
@@ -66,8 +65,7 @@ namespace cerberus
 		const std::vector<Submesh>& GetSubmeshes() const { return m_Submeshes; }
 
 		const std::vector<Index>& GetIndices() const { return m_Indices; }
-
-		const std::vector<Ref<BottomLevelAccelerationStructure>>& GetBLAccelerationStructure() const { return m_BLAS; }
+		const std::vector<Vertex>& GetVertices() const { return m_Vertices; }
 
 		std::vector<Ref<MaterialAsset>>& GetMaterialsAsset() { return m_MaterialsAsset; }
 		const std::vector<Ref<MaterialAsset>>& GetMaterialsAsset() const { return m_MaterialsAsset; }
@@ -79,7 +77,6 @@ namespace cerberus
 		static AssetType GetStaticType() { return AssetType::MeshSource; }
 		AssetType GetAssetType() const { return GetStaticType(); }
 
-		inline void SetBottomLevelAccelerationStructures(std::vector<Ref<BottomLevelAccelerationStructure>>& blas) { m_BLAS = blas; }
 
 	private:
 		void LoadGeometry();
@@ -91,7 +88,7 @@ namespace cerberus
 
 		Ref<VertexBuffer> m_VertexBuffer;
 		VertexBufferLayout m_VertexBufferLayout;
-		
+
 		Ref<IndexBuffer> m_IndexBuffer;
 		std::vector<Index> m_Indices;
 		std::vector<Vertex> m_Vertices;
@@ -100,7 +97,8 @@ namespace cerberus
 		// Materials
 		Ref<Shader> m_MeshShader;
 		std::vector<Ref<MaterialAsset>> m_MaterialsAsset;
-		std::vector<Ref<BottomLevelAccelerationStructure>> m_BLAS;
+
+		bool m_IsRenderStateCreated = false;
 
 		// Assimp
 		const aiScene* m_Scene;

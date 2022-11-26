@@ -4,6 +4,7 @@
 #include <entt.hpp>
 #include <glm/glm.hpp>
 #include "Asset/Asset.h"
+#include "Components/Components.h"
 namespace cerberus
 {
 	struct SceneRendererCamera;
@@ -13,6 +14,25 @@ namespace cerberus
 	class SceneHierarchyPanel;
 	class ScenePropertiesPanel;
 	class SceneSerializer;
+
+	class RegisterContext
+	{
+	public:
+		RegisterContext(Scene* scene)
+			: m_Scene(scene)
+		{}
+
+		void AddMesh(MeshComponent& PrimitiveComponent)
+		{
+			AddPrimitiveBatches.emplace_back(PrimitiveComponent);
+		}
+
+		void Process();
+
+	private:
+		Scene* m_Scene;
+		std::vector<MeshComponent> AddPrimitiveBatches;
+	};
 
 	class Scene : public Asset
 	{
@@ -40,6 +60,7 @@ namespace cerberus
 		std::string m_Name;
 
 		LightEnvironment m_LightEnvironment;
+		std::vector<Entity> m_DirtyTransform;
 
 		friend class Entity;
 		friend class ForwardSceneRenderer;

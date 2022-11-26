@@ -105,18 +105,21 @@ namespace cerberus
 	class VertexBuffer
 	{
 	public:
-		VertexBuffer(void* data, uint32_t size);
+		VertexBuffer(const void* data, uint32_t size);
 		VertexBuffer(uint32_t size);
 		virtual ~VertexBuffer();
 
 		inline VkBuffer GetVulkanBuffer() const { return m_VertexBuffer; }
 		inline uint32_t GetSize() const { return m_Size; }
+		const VertexBufferLayout& GetLayout() const { return m_VertexBufferLayout; }
+		void SetVertexBufferLayout(const VertexBufferLayout& layout) { m_VertexBufferLayout = layout; }
 
 	private:
 		VkBuffer m_VertexBuffer;
 		uint32_t m_Size;
 		Buffer m_LocalData;
 		VmaAllocation m_MemoryAllocation;
+		VertexBufferLayout m_VertexBufferLayout;
 
 	};
 }

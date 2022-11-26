@@ -16,7 +16,6 @@ namespace cerberus
 		ResourceAllocator(const std::string& tag);
 		~ResourceAllocator();
 
-
 		VmaAllocation AllocateBuffer(VkBufferCreateInfo bufferCreateInfo, VmaMemoryUsage usage, VkBuffer& outBuffer);
 		VmaAllocation AllocateBuffer(VkBufferCreateInfo bufferCreateInfo, VmaMemoryUsage usage, VmaAllocationCreateFlags flags, VkBuffer& outBuffer);
 		VmaAllocation AllocateImage(VkImageCreateInfo imageCreateInfo, VmaMemoryUsage usage, VkImage& outImage);

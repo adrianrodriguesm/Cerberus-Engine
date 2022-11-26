@@ -68,11 +68,24 @@ namespace cerberus
 			for (auto& entity : group)
 			{
 				auto& [transform, mesh] = group.get<TransformComponent, MeshComponent>(entity);
-				if(mesh.MeshHandle != 0)
-					sceneRenderer->SubmitMesh(AssetManager::GetAsset<Mesh>(mesh.MeshHandle), mesh.MaterialTable, transform.GetTransform());
+				if (!mesh.m_Registered)
+				{
+					bool registered = sceneRenderer->RegisterMesh(AssetManager::GetAsset<Mesh>(mesh.MeshHandle), mesh.MaterialTable, transform.GetTransform());
+					mesh.m_Registered = registered;
+					transform.m_TransformStateDirty = false;
+					//sceneRenderer->SubmitMesh(AssetManager::GetAsset<Mesh>(mesh.MeshHandle), mesh.MaterialTable, transform.GetTransform());
+				}
+				else if (transform.IsTransformDirty())
+				{
+					sceneRenderer->UpdateMeshTransform(AssetManager::GetAsset<Mesh>(mesh.MeshHandle), transform.GetTransform());
+					transform.m_TransformStateDirty = false;
+				}
+
+					
 			}
 		}
 		sceneRenderer->EndScene();
+		sceneRenderer->Render(sceneRendererCamera);
 	}
 
 	Entity Scene::CreateEntity(const std::string& tagName)

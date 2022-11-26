@@ -4,7 +4,7 @@
 
 namespace cerberus
 {
-	VertexBuffer::VertexBuffer(void* data, uint32_t size)
+	VertexBuffer::VertexBuffer(const void* data, uint32_t size)
 		: m_Size(size)
 	{
 		m_LocalData = Buffer::Copy(data, size);

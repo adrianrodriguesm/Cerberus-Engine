@@ -152,9 +152,9 @@ namespace cerberus
 			out << YAML::BeginMap; // TransformComponent
 
 			auto& tc = entity.GetComponent<TransformComponent>();
-			out << YAML::Key << "Translation" << YAML::Value << tc.Translation;
-			out << YAML::Key << "Rotation" << YAML::Value << tc.Rotation;
-			out << YAML::Key << "Scale" << YAML::Value << tc.Scale;
+			out << YAML::Key << "Translation" << YAML::Value << tc.GetTranslation();
+			out << YAML::Key << "Rotation" << YAML::Value << tc.GetRotation();
+			out << YAML::Key << "Scale" << YAML::Value << tc.GetScale();
 
 			out << YAML::EndMap; // TransformComponent
 		}
@@ -263,9 +263,9 @@ namespace cerberus
 				{
 					// Entities always have transforms
 					auto& tc = deserializedEntity.GetComponent<TransformComponent>();
-					tc.Translation = transformComponent["Translation"].as<glm::vec3>();
-					tc.Rotation = transformComponent["Rotation"].as<glm::vec3>();
-					tc.Scale = transformComponent["Scale"].as<glm::vec3>();
+					tc.SetTranslation(transformComponent["Translation"].as<glm::vec3>());
+					tc.SetRotation(transformComponent["Rotation"].as<glm::vec3>());
+					tc.SetScale(transformComponent["Scale"].as<glm::vec3>());
 				}
 
 				auto meshComponent = entity["MeshComponent"];

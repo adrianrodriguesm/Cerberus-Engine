@@ -1,12 +1,6 @@
 #pragma once
 namespace cerberus
 {
-	
-	///////////////////////////////////////////////////////////////////////
-	enum class EventType;
-	enum EventCategory;
-	class Event;
-
 	/////////////////////////////////////////////////////////////////////// EventType
 	// Events are currently blocking, meaning when an event occurs it
 	// immediately gets dispatched and must be dealt with right then an there.

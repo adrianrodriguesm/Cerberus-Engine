@@ -2,6 +2,7 @@
 #include "Core/Application.h"
 #include "Core/Timer.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/ResourceManager.h"
 #include "Asset/AssetManager.h"
 
 #include <imgui/imgui.h>
@@ -22,9 +23,10 @@ namespace cerberus
 		windowSpec.Height = m_Specification.WindowHeight;
 		m_Window = CreateRef<Window>(windowSpec);
 		m_Window->SetEventCallback(BIND_EVENT_FN(Application::OnEvent));
-		Log::init();
+		Log::Init();
 		m_Window->Init();
 		Renderer::Init();
+		ResourceManager::Init();
 		AssetManager::Init();
 
 		
@@ -37,6 +39,7 @@ namespace cerberus
 			layer->OnDetach();
 			delete layer;
 		}
+		ResourceManager::Shutdown();
 		AssetManager::Shutdown();
 		Renderer::Shutdown();
 		m_Window->Shutdown();
