@@ -14,12 +14,12 @@ namespace cerberus
 		Handle() : m_ID(0), m_Index(0){}
 		bool IsValid() const { return m_ID != 0; }
 		const UUID_16 GetUUID_16() const { return m_ID; }
-		/**/
+
 		bool operator == (const Handle<T>& otherHandle) const 
 		{
 			return otherHandle.m_ID == m_ID && otherHandle.m_Index == m_Index;;
 		}
-		/**/
+
 	private:
 		Handle(uint16_t generationID, uint16_t index) : m_ID(generationID), m_Index(index) {}
 
@@ -33,8 +33,6 @@ namespace cerberus
 		UUID_16 m_ID = 0;
 		uint16_t m_Index = 0;
 
-
-		friend class ResourceManager;
 		template<typename U> friend class Pool;
 	};
 }

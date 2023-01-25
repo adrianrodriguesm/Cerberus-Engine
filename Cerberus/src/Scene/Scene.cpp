@@ -21,7 +21,7 @@ namespace cerberus
 		{
 			// Sky Light - Environment Map
 			{
-				auto& view = m_Registry.view<SkyLightComponent>();
+				const auto& view = m_Registry.view<SkyLightComponent>();
 				CORE_ASSERT(view.size() <= 1, "There is more than one SkyLightComponenet in the Scene!");
 				if (view.size())
 				{
@@ -41,7 +41,7 @@ namespace cerberus
 			}
 			// Directional Light
 			{
-				auto& view = m_Registry.view<DirectionalLightComponent>();
+				const auto& view = m_Registry.view<DirectionalLightComponent>();
 				uint32_t directionalLightIndex = 0;
 				for (auto& entity : view)
 				{
@@ -64,10 +64,10 @@ namespace cerberus
 		sceneRenderer->BeginScene(sceneRendererCamera);
 		// Submit Meshes
 		{
-			auto& group = m_Registry.group<TransformComponent>(entt::get<MeshComponent>);
+			const auto& group = m_Registry.group<TransformComponent>(entt::get<MeshComponent>);
 			for (auto& entity : group)
 			{
-				auto& [transform, mesh] = group.get<TransformComponent, MeshComponent>(entity);
+				const auto& [transform, mesh] = group.get<TransformComponent, MeshComponent>(entity);
 				if (!mesh.m_Registered)
 				{
 					bool registered = sceneRenderer->RegisterMesh(AssetManager::GetAsset<Mesh>(mesh.MeshHandle), mesh.MaterialTable, transform.GetTransform());

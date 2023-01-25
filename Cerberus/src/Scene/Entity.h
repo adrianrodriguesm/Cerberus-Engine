@@ -43,7 +43,7 @@ namespace cerberus
 		}
 
 
-		glm::mat4& Transform() { return m_Scene->m_Registry.get<TransformComponent>(m_EntityHandle).GetTransform(); }
+		//glm::mat4& Transform() { return m_Scene->m_Registry.get<TransformComponent>(m_EntityHandle).GetTransform(); }
 		const glm::mat4& Transform() const { return m_Scene->m_Registry.get<TransformComponent>(m_EntityHandle).GetTransform(); }
 
 

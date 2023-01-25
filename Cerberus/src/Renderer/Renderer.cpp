@@ -126,7 +126,7 @@ namespace cerberus
 		s_Data->ShaderLibrary->Load("Resources/Shaders/ShadowMap.glsl", false)
 			;
 			;
-		s_Data->ShaderLibrary->Load("Resources/Shaders/RayTraceTest.glsl", false);
+		s_Data->ShaderLibrary->Load("Resources/Shaders/RayTraceTest.glsl", true);
 
 
 		// Textures
@@ -171,7 +171,7 @@ namespace cerberus
 		Renderer::ExecuteRenderQueue();
 
 		Renderer::ShutdownImGui();
-		auto& stats = ResourceAllocator::GetStats();
+		const auto& stats = ResourceAllocator::GetStats();
 		NV_CORE_WARN("Memory allocated: {0}", stats.Used);
 		NV_CORE_WARN("Memory free: {0}", stats.Free);
 		
@@ -1067,7 +1067,7 @@ namespace cerberus
 			// Update Descripor set per material
 			for (uint32_t i = 0; i < materialTableMesh->GetMaterialCount(); i++)
 			{
-				auto& materialAsset = materialTableMesh->GetMaterial(i);
+				Ref<MaterialAsset> materialAsset = materialTableMesh->GetMaterial(i);
 				Renderer::UpdateMaterialForRendering(materialAsset->GetMaterial(), uniformBufferSet);
 			}
 

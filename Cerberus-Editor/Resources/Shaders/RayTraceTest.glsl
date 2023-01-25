@@ -8,12 +8,17 @@ struct OutputBlock
 
 layout (location = 0) out OutputBlock Output;
 
+layout(std140, set = 3, binding = 0) uniform RatTracingData
+{
+	mat4 u_Matrix;
+};
+
 void main()
 {
 	// Create texture coordenate
 	Output.TexCoord = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
 	// Create vertex position
-    gl_Position = vec4(Output.TexCoord * 2.0f + -1.0f, 0.0f, 1.0f);
+    gl_Position = u_Matrix * vec4(Output.TexCoord * 2.0f + -1.0f, 0.0f, 1.0f);
 }
 
 #type fragment

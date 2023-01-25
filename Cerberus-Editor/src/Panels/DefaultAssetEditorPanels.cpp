@@ -94,7 +94,7 @@ namespace cerberus
 
 	void MaterialPanel::Render()
 	{
-		auto& material = m_Material->GetMaterial();
+		const auto& material = m_Material->GetMaterial();
 		ImGui::Text("Shader: %s", material->GetShader()->GetName().c_str());
 		bool needsSerialize = false;
 

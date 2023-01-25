@@ -2,6 +2,7 @@
 #include "Renderer/Texture.h"
 #include "ImGui/ImGuiUtils.h"
 #include <glm/gtc/type_ptr.hpp>
+#include "Asset/AssetManager.h"
 namespace cerberus::ui
 {
 	static int s_UIContextID = 0;

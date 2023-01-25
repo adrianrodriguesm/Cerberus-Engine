@@ -184,10 +184,10 @@ namespace cerberus
 				NV_CORE_TRACE(shader);
 				NV_CORE_TRACE("----------");
 			}
-			std::unordered_map<VkShaderStageFlagBits, std::vector<uint32_t>> shaderData;
-			instance->CompileOrGetVulkanBinary(shaderData, forceCompile);
-			instance->LoadAndCreateShaders(shaderData);
-			instance->ReflectAllShaderStages(shaderData);
+			//std::unordered_map<VkShaderStageFlagBits, std::vector<uint32_t>> shaderData;
+			instance->CompileOrGetVulkanBinary(instance->m_ShaderByteCodeData, forceCompile);
+			instance->LoadAndCreateShaders(instance->m_ShaderByteCodeData);
+			instance->ReflectAllShaderStages(instance->m_ShaderByteCodeData);
 			instance->CreateDescriptors();
 		});
 

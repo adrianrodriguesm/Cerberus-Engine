@@ -62,13 +62,14 @@ namespace cerberus
 		uint32_t RendererID;
 		//std::vector<ShaderUniform> Uniforms;
 	};
-
+	// PushConstants
 	struct ShaderBuffer
 	{
 		std::string Name;
 		uint32_t Size = 0;
 		std::unordered_map<std::string, ShaderUniform> Uniforms;
 	};
+
 
 	class Shader
 	{
@@ -114,6 +115,7 @@ namespace cerberus
 		void Reload(bool forceCompile = false);
 		const size_t GetHash() const;
 		const std::string& GetName() const { return  m_Name; }
+		const std::unordered_map<VkShaderStageFlagBits, std::vector<uint32_t >>& GetShaderByteCode() const { return m_ShaderByteCodeData; }
 		const std::unordered_map<std::string, ShaderBuffer>& GetShaderBuffers() const  { return m_Buffers; }
 		const std::unordered_map<std::string, ShaderResourceDeclaration>& GetResources() const { return m_Resources; }
 		const std::vector<VkPushConstantRange>& GetVulkanPushConstantRanges() const { return m_VulkanPushConstantRanges; }
@@ -128,6 +130,7 @@ namespace cerberus
 		// Compile or Get Binary shader cached
 		void CompileOrGetVulkanBinary(std::unordered_map<VkShaderStageFlagBits, std::vector<uint32_t>>& outputBinary, bool forceCompile);
 		// Create Shader Modules
+
 		void LoadAndCreateShaders(const std::unordered_map<VkShaderStageFlagBits, std::vector<uint32_t>>& shaderData);
 		// Cache the data from push constant and the 
 		void Reflect(VkShaderStageFlagBits shaderStage, const std::vector<uint32_t>& shaderData);
@@ -147,11 +150,13 @@ namespace cerberus
 
 		std::unordered_map<std::string, ShaderBuffer> m_Buffers;
 
+
 		std::vector<VkDescriptorSetLayout> m_DescriptorSetLayouts;
 		VkDescriptorSet m_DescriptorSet;
 		//VkDescriptorPool m_DescriptorPool = nullptr;
 
 		std::unordered_map<uint32_t, std::vector<VkDescriptorPoolSize>> m_TypeCounts;
+		std::unordered_map<VkShaderStageFlagBits, std::vector<uint32_t >> m_ShaderByteCodeData;
 	};
 
 	class Renderer;

@@ -39,6 +39,12 @@ namespace cerberus
 		// Allocate and create the actual buffer
 		ResourceAllocator allocator(DebugName);
 		Allocation = allocator.AllocateBuffer(bufferCreateInfo, bufferSpec.MemoryUsage, Buffer);
+
+		// Buffer info and data offset info
+		BufferDescriptorInfo = {};
+		BufferDescriptorInfo.buffer = Buffer;						// Buffer to get data from
+		BufferDescriptorInfo.offset = 0;							// Position of start of data
+		BufferDescriptorInfo.range = bufferSpec.Size;				// Size of data
 	}
 
 	GPUBuffer::~GPUBuffer()

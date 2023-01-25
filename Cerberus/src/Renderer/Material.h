@@ -132,6 +132,7 @@ namespace cerberus
 		MaterialAsset(Ref<Material> material);
 		~MaterialAsset();
 
+
 		const std::string& GetName() const;
 
 		glm::vec3& GetAlbedoColor();

@@ -257,7 +257,7 @@ namespace cerberus
 			if (mesh && ui::BeginTreeNode("Material Table", true))
 			{
 				ui::BeginPropertyGrid();
-				auto& meshMaterialTable = mesh->GetMaterialTable();
+				const auto& meshMaterialTable = mesh->GetMaterialTable();
 				uint32_t materialCount = meshMaterialTable->GetMaterialCount();
 				// New mesh update the material table
 				if (succeeded)

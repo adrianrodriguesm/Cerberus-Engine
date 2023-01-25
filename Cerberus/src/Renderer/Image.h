@@ -138,7 +138,7 @@ namespace cerberus
 		virtual void Invalidate() override;
 		virtual void Release() override;
 		void UpdateDescriptor();
-		void UpdateImageLayout();
+
 		void CreatePerLayerImageViews();
 		void CreatePerSpecificLayerImageViews(const std::vector<uint32_t>& layerIndices);
 		

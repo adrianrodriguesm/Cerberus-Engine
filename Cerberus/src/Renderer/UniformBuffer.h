@@ -1,6 +1,8 @@
 #pragma once
 #include "Renderer/ResourceAllocator.h"
 #include "Core/Buffer.h"
+#include "Renderer/GPUBuffer.h"
+#include "Core/Handle.h"
 namespace cerberus
 {
 	enum class BufferUsageType
@@ -24,10 +26,10 @@ namespace cerberus
 		void Invalidate();
 	private:
 		VkDescriptorBufferInfo m_BufferDescriptorInfo;
-		VkBuffer m_UniformBuffer;
-		uint32_t m_Size, m_BindingPoint;
+		Handle<GPUBuffer> m_UniformBuffer;
+		uint32_t m_BindingPoint;
 		Buffer m_LocalData;
-		VmaAllocation m_MemoryAllocation;
+		uint32_t m_Size;
 		BufferUsageType m_BufferUsageType;
 		uint64_t m_AligmentData;
 	};

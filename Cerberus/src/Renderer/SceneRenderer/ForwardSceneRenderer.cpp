@@ -7,194 +7,197 @@
 #include "Utils/StringUtils.h"
 #include "Core/Input.h"
 #include "ImGui/ImGuiUI.h"
+
+#if 0
+
 namespace cerberus
 {
 	ForwardSceneRenderer::ForwardSceneRenderer(Ref<Scene> scene, const SceneRendererSpecification& sceneRendererSpec)
 		: m_Scene(scene), m_Specification(sceneRendererSpec), m_ViewportWidth(m_Specification.Resolution.x), m_ViewportHeight(m_Specification.Resolution.y)
 	{
-			if (m_Specification.SwapChainTarget)
-				m_CommandBuffer = CommandBuffer::CreateFromSwapchain();
-			else
-				m_CommandBuffer = CommandBuffer::Create(Renderer::GetRendererConfig().FramesInFlight, "SceneRenderer");
+		if (m_Specification.SwapChainTarget)
+			m_CommandBuffer = CommandBuffer::CreateFromSwapchain();
+		else
+			m_CommandBuffer = CommandBuffer::Create(Renderer::GetRendererConfig().FramesInFlight, "SceneRenderer");
 
 
-			// PreDepth
+		// PreDepth
+		{
+			FramebufferSpecification preDepthFramebufferSpec;
+			preDepthFramebufferSpec.AttachmentsSpecification = { ImageFormat::RED32F, ImageFormat::DEPTH24STENCIL8 };
+			//preDepthFramebufferSpec.ClearColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+			preDepthFramebufferSpec.DebugName = "PreDepth";
+
+			RenderPassSpecification preDepthRenderPassSpec;
+			preDepthRenderPassSpec.TargetFramebuffer = CreateRef<Framebuffer>(preDepthFramebufferSpec);
+			preDepthRenderPassSpec.DebugName = "PreDepth";
+
+			PipelineSpecification pipelineSpec;
+			pipelineSpec.DebugName = "PreDepth";
+			Ref<Shader> shader = Renderer::GetShaderLibrary().Get("PreDepth");
+			pipelineSpec.Shader = shader;
+			pipelineSpec.Layout = {
+				{ ShaderDataType::Float3, "a_Position" },
+				{ ShaderDataType::Float3, "a_Normal" },
+				{ ShaderDataType::Float3, "a_Tangent" },
+				{ ShaderDataType::Float3, "a_Binormal" },
+				{ ShaderDataType::Float2, "a_TexCoord" }
+			};
+			pipelineSpec.CullMode = CullMode::Back;
+			pipelineSpec.DepthOperator = DepthCompareOperator::LessOrEqual;
+			pipelineSpec.RenderPass = CreateRef<RenderPass>(preDepthRenderPassSpec);
+			m_PreDepthPipeline = CreateRef<Pipeline>(pipelineSpec);
+			m_PreDepthMaterial = CreateRef<Material>(shader, "PreDepth");
+		}
+		// Shadow Map
+		{
+			uint32_t shadowMapRes = Renderer::GetRendererConfig().ShadowMapResolution;
+			ImageSpecification imgSpec;
+			imgSpec.Width = shadowMapRes;
+			imgSpec.Height = shadowMapRes;
+			imgSpec.Layers = 4;         // One layer per cascade
+			imgSpec.Usage = ImageUsage::Attachment;
+			imgSpec.DebugName = "ShadowCascadeImage";
+			imgSpec.Format = ImageFormat::DEPTH32STENCIL8;
+			Ref<Image2D> image = CreateRef<Image2D>(imgSpec);
+			image->Invalidate();
+			image->CreatePerLayerImageViews();
+
+			FramebufferSpecification shadowFramebufferSpec;
+			shadowFramebufferSpec.AttachmentsSpecification = { ImageFormat::DEPTH32STENCIL8 };
+			shadowFramebufferSpec.ClearColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+			//shadowFramebufferSpec.DepthClearValue = 1.0f;
+			shadowFramebufferSpec.NoResize = true;
+			shadowFramebufferSpec.DebugName = "ShadowMapCascade";
+			shadowFramebufferSpec.ExistingImage = image;
+			shadowFramebufferSpec.Width = shadowMapRes;
+			shadowFramebufferSpec.Height = shadowMapRes;
+
+			// 4 cascades
+			auto shadowPassShader = Renderer::GetShaderLibrary().Get("ShadowMap");
+			PipelineSpecification pipelineSpec;
+			pipelineSpec.DebugName = "ShadowMapCascade";
+			pipelineSpec.Shader = shadowPassShader;
+			pipelineSpec.DepthOperator = DepthCompareOperator::LessOrEqual;
+			pipelineSpec.CullMode = CullMode::Back;
+			pipelineSpec.Layout = {
+				{ ShaderDataType::Float3, "a_Position" },
+				{ ShaderDataType::Float3, "a_Normal" },
+				{ ShaderDataType::Float3, "a_Tangent" },
+				{ ShaderDataType::Float3, "a_Binormal" },
+				{ ShaderDataType::Float2, "a_TexCoord" }
+			};
+
+			for (uint32_t i = 0; i < 4; i++)
 			{
-				FramebufferSpecification preDepthFramebufferSpec;
-				preDepthFramebufferSpec.AttachmentsSpecification = { ImageFormat::RED32F, ImageFormat::DEPTH24STENCIL8 };
-				//preDepthFramebufferSpec.ClearColor = { 0.0f, 0.0f, 0.0f, 0.0f };
-				preDepthFramebufferSpec.DebugName = "PreDepth";
+				// Defining which layer (cascade of the shadow map) is going to be attach to each pipeline
+				shadowFramebufferSpec.ExistingImageLayers.clear();
+				shadowFramebufferSpec.ExistingImageLayers.emplace_back(i);
 
-				RenderPassSpecification preDepthRenderPassSpec;
-				preDepthRenderPassSpec.TargetFramebuffer = CreateRef<Framebuffer>(preDepthFramebufferSpec);
-				preDepthRenderPassSpec.DebugName = "PreDepth";
-
-				PipelineSpecification pipelineSpec;
-				pipelineSpec.DebugName = "PreDepth";
-				Ref<Shader> shader = Renderer::GetShaderLibrary().Get("PreDepth");
-				pipelineSpec.Shader = shader;
-				pipelineSpec.Layout = {
-					{ ShaderDataType::Float3, "a_Position" },
-					{ ShaderDataType::Float3, "a_Normal" },
-					{ ShaderDataType::Float3, "a_Tangent" },
-					{ ShaderDataType::Float3, "a_Binormal" },
-					{ ShaderDataType::Float2, "a_TexCoord" }
-				};
-				pipelineSpec.CullMode = CullMode::Back;
-				pipelineSpec.DepthOperator = DepthCompareOperator::LessOrEqual;
-				pipelineSpec.RenderPass = CreateRef<RenderPass>(preDepthRenderPassSpec);
-				m_PreDepthPipeline = CreateRef<Pipeline>(pipelineSpec);
-				m_PreDepthMaterial = CreateRef<Material>(shader, "PreDepth");
-			}
-			// Shadow Map
-			{
-				uint32_t shadowMapRes = Renderer::GetRendererConfig().ShadowMapResolution;
-				ImageSpecification imgSpec;
-				imgSpec.Width = shadowMapRes;
-				imgSpec.Height = shadowMapRes;
-				imgSpec.Layers = 4;         // One layer per cascade
-				imgSpec.Usage = ImageUsage::Attachment;
-				imgSpec.DebugName = "ShadowCascadeImage";
-				imgSpec.Format = ImageFormat::DEPTH32STENCIL8;
-				Ref<Image2D> image = CreateRef<Image2D>(imgSpec);
-				image->Invalidate();
-				image->CreatePerLayerImageViews();
-
-				FramebufferSpecification shadowFramebufferSpec;
-				shadowFramebufferSpec.AttachmentsSpecification = { ImageFormat::DEPTH32STENCIL8 };
-				shadowFramebufferSpec.ClearColor = { 0.0f, 0.0f, 0.0f, 0.0f };
-				//shadowFramebufferSpec.DepthClearValue = 1.0f;
-				shadowFramebufferSpec.NoResize = true;
-				shadowFramebufferSpec.DebugName = "ShadowMapCascade";
-				shadowFramebufferSpec.ExistingImage = image;
-				shadowFramebufferSpec.Width = shadowMapRes;
-				shadowFramebufferSpec.Height = shadowMapRes;
-
-				// 4 cascades
-				auto shadowPassShader = Renderer::GetShaderLibrary().Get("ShadowMap");
-				PipelineSpecification pipelineSpec;
-				pipelineSpec.DebugName = "ShadowMapCascade";
-				pipelineSpec.Shader = shadowPassShader;
-				pipelineSpec.DepthOperator = DepthCompareOperator::LessOrEqual;
-				pipelineSpec.CullMode = CullMode::Back;
-				pipelineSpec.Layout = {
-					{ ShaderDataType::Float3, "a_Position" },
-					{ ShaderDataType::Float3, "a_Normal" },
-					{ ShaderDataType::Float3, "a_Tangent" },
-					{ ShaderDataType::Float3, "a_Binormal" },
-					{ ShaderDataType::Float2, "a_TexCoord" }
-				};
-
-				for (uint32_t i = 0; i < 4; i++)
-				{
-					// Defining which layer (cascade of the shadow map) is going to be attach to each pipeline
-					shadowFramebufferSpec.ExistingImageLayers.clear();
-					shadowFramebufferSpec.ExistingImageLayers.emplace_back(i);
-
-					RenderPassSpecification shadowMapRenderPassSpec;
-					shadowMapRenderPassSpec.TargetFramebuffer = CreateRef<Framebuffer>(shadowFramebufferSpec);
-					shadowMapRenderPassSpec.DebugName = "ShadowMapCascade";
-					pipelineSpec.RenderPass = CreateRef<RenderPass>(shadowMapRenderPassSpec);
-					m_ShadowMapPipelines[i] = CreateRef<Pipeline>(pipelineSpec);
-
-				}
-				Ref<Shader> shader = Renderer::GetShaderLibrary().Get("ShadowMap");
-				m_ShadowMapMaterial = CreateRef<Material>(shader, "ShadowMap");
+				RenderPassSpecification shadowMapRenderPassSpec;
+				shadowMapRenderPassSpec.TargetFramebuffer = CreateRef<Framebuffer>(shadowFramebufferSpec);
+				shadowMapRenderPassSpec.DebugName = "ShadowMapCascade";
+				pipelineSpec.RenderPass = CreateRef<RenderPass>(shadowMapRenderPassSpec);
+				m_ShadowMapPipelines[i] = CreateRef<Pipeline>(pipelineSpec);
 
 			}
-			// Geometry pass
-			{
-				// Framebuffer
-				FramebufferSpecification framebufferSpec;
-				framebufferSpec.SwapchainTarget = false;
-				framebufferSpec.DebugName = "Geometry";
-				framebufferSpec.AttachmentsSpecification = { ImageFormat::RGBA32F, ImageFormat::DEPTH24STENCIL8 };
-				framebufferSpec.ClearDepthOnLoad = false;
-				framebufferSpec.ExistingImages[1] = m_PreDepthPipeline->GetSpecification().RenderPass->GetSpecification().TargetFramebuffer->GetDepthImage();
-				Ref<Framebuffer> framebuffer = CreateRef<Framebuffer>(framebufferSpec);
-				// Render Pass
-				RenderPassSpecification renderPassSpec;
-				renderPassSpec.TargetFramebuffer = framebuffer;
-				renderPassSpec.DebugName = "Geometry Pass";
-				Ref<RenderPass> renderPass = CreateRef<RenderPass>(renderPassSpec);
-				// Pipeline
-				Ref<Shader> shader = Renderer::GetShaderLibrary().Get("PBR");
-				PipelineSpecification pipelineSpec;
-				pipelineSpec.Layout = { { ShaderDataType::Float3, "a_Position"	},
-										{ ShaderDataType::Float3, "a_Normal"	},
-										{ ShaderDataType::Float3, "a_Tangent"	},
-										{ ShaderDataType::Float3, "a_Binormal"	},
-										{ ShaderDataType::Float2, "a_TexCoord"	}, };
-				pipelineSpec.Shader = shader;
-				pipelineSpec.DepthWrite = false;
-				pipelineSpec.DepthOperator = DepthCompareOperator::Equal;
-				pipelineSpec.RenderPass = renderPass;
-				pipelineSpec.CullMode = CullMode::Back;
-				pipelineSpec.DebugName = "Geometry Pass";
-				m_GeometryPipeline = CreateRef<Pipeline>(pipelineSpec);
-			}
-			// Skybox
-			{
-				// Material
-				Ref<Shader> skyboxShader = Renderer::GetShaderLibrary().Get("Skybox");
-				m_SkyboxMaterial = CreateRef<Material>(skyboxShader);
-				// Pipeline
-				PipelineSpecification pipelineSpec;
-				pipelineSpec.DebugName = "Skybox";
-				pipelineSpec.Shader = skyboxShader;
-				// -- Full screen quad
-				pipelineSpec.Layout = {  };
+			Ref<Shader> shader = Renderer::GetShaderLibrary().Get("ShadowMap");
+			m_ShadowMapMaterial = CreateRef<Material>(shader, "ShadowMap");
+
+		}
+		// Geometry pass
+		{
+			// Framebuffer
+			FramebufferSpecification framebufferSpec;
+			framebufferSpec.SwapchainTarget = false;
+			framebufferSpec.DebugName = "Geometry";
+			framebufferSpec.AttachmentsSpecification = { ImageFormat::RGBA32F, ImageFormat::DEPTH24STENCIL8 };
+			framebufferSpec.ClearDepthOnLoad = false;
+			framebufferSpec.ExistingImages[1] = m_PreDepthPipeline->GetSpecification().RenderPass->GetSpecification().TargetFramebuffer->GetDepthImage();
+			Ref<Framebuffer> framebuffer = CreateRef<Framebuffer>(framebufferSpec);
+			// Render Pass
+			RenderPassSpecification renderPassSpec;
+			renderPassSpec.TargetFramebuffer = framebuffer;
+			renderPassSpec.DebugName = "Geometry Pass";
+			Ref<RenderPass> renderPass = CreateRef<RenderPass>(renderPassSpec);
+			// Pipeline
+			Ref<Shader> shader = Renderer::GetShaderLibrary().Get("PBR");
+			PipelineSpecification pipelineSpec;
+			pipelineSpec.Layout = { { ShaderDataType::Float3, "a_Position"	},
+									{ ShaderDataType::Float3, "a_Normal"	},
+									{ ShaderDataType::Float3, "a_Tangent"	},
+									{ ShaderDataType::Float3, "a_Binormal"	},
+									{ ShaderDataType::Float2, "a_TexCoord"	}, };
+			pipelineSpec.Shader = shader;
+			pipelineSpec.DepthWrite = false;
+			pipelineSpec.DepthOperator = DepthCompareOperator::Equal;
+			pipelineSpec.RenderPass = renderPass;
+			pipelineSpec.CullMode = CullMode::Back;
+			pipelineSpec.DebugName = "Geometry Pass";
+			m_GeometryPipeline = CreateRef<Pipeline>(pipelineSpec);
+		}
+		// Skybox
+		{
+			// Material
+			Ref<Shader> skyboxShader = Renderer::GetShaderLibrary().Get("Skybox");
+			m_SkyboxMaterial = CreateRef<Material>(skyboxShader);
+			// Pipeline
+			PipelineSpecification pipelineSpec;
+			pipelineSpec.DebugName = "Skybox";
+			pipelineSpec.Shader = skyboxShader;
+			// -- Full screen quad
+			pipelineSpec.Layout = {  };
 #if VK_INVERTED_UP_COORD_SYSTEM
-				pipelineSpec.CullMode = CullMode::Front;
+			pipelineSpec.CullMode = CullMode::Front;
 #else
-				pipelineSpec.CullMode = CullMode::Back;
+			pipelineSpec.CullMode = CullMode::Back;
 #endif
-				pipelineSpec.DepthTest = false;
-				pipelineSpec.DepthWrite = false;
-				// -- Render to the same target texture as the geometry pass
-				pipelineSpec.RenderPass = m_GeometryPipeline->GetSpecification().RenderPass;
-				m_SkyboxPipeline = CreateRef<Pipeline>(pipelineSpec);
+			pipelineSpec.DepthTest = false;
+			pipelineSpec.DepthWrite = false;
+			// -- Render to the same target texture as the geometry pass
+			pipelineSpec.RenderPass = m_GeometryPipeline->GetSpecification().RenderPass;
+			m_SkyboxPipeline = CreateRef<Pipeline>(pipelineSpec);
 
-			}
-			// Scene Composite pass
-			{
-				// Framebuffer
-				FramebufferSpecification framebufferSpec;
-				framebufferSpec.SwapchainTarget = m_Specification.SwapChainTarget;
-				framebufferSpec.DebugName = "Composite";
-				framebufferSpec.AttachmentsSpecification = { ImageFormat::RGBA };
-				Ref<Framebuffer> framebuffer = CreateRef<Framebuffer>(framebufferSpec);
-				// Render Pass
-				RenderPassSpecification renderPassSpec;
-				renderPassSpec.TargetFramebuffer = framebuffer;
-				renderPassSpec.DebugName = "Scene Composite Pass";
-				Ref<RenderPass> renderPass = CreateRef<RenderPass>(renderPassSpec);
-				// Material
-				Ref<Shader> sceneCompositeShader = Renderer::GetShaderLibrary().Get("SceneComposite");
-				m_SceneCompositeMaterial = CreateRef<Material>(sceneCompositeShader, "Scene Composite Material", false);
-				// Pipeline
-				PipelineSpecification pipelineSpec;
-				pipelineSpec.Layout = {  }; // Full Screen Quad (Positions ans Tex Coord are created inside the vertex shader)
+		}
+		// Scene Composite pass
+		{
+			// Framebuffer
+			FramebufferSpecification framebufferSpec;
+			framebufferSpec.SwapchainTarget = m_Specification.SwapChainTarget;
+			framebufferSpec.DebugName = "Composite";
+			framebufferSpec.AttachmentsSpecification = { ImageFormat::RGBA };
+			Ref<Framebuffer> framebuffer = CreateRef<Framebuffer>(framebufferSpec);
+			// Render Pass
+			RenderPassSpecification renderPassSpec;
+			renderPassSpec.TargetFramebuffer = framebuffer;
+			renderPassSpec.DebugName = "Scene Composite Pass";
+			Ref<RenderPass> renderPass = CreateRef<RenderPass>(renderPassSpec);
+			// Material
+			Ref<Shader> sceneCompositeShader = Renderer::GetShaderLibrary().Get("SceneComposite");
+			m_SceneCompositeMaterial = CreateRef<Material>(sceneCompositeShader, "Scene Composite Material", false);
+			// Pipeline
+			PipelineSpecification pipelineSpec;
+			pipelineSpec.Layout = {  }; // Full Screen Quad (Positions ans Tex Coord are created inside the vertex shader)
 #if VK_INVERTED_UP_COORD_SYSTEM
-				pipelineSpec.CullMode = CullMode::Front;
+			pipelineSpec.CullMode = CullMode::Front;
 #else
-				pipelineSpec.CullMode = CullMode::Back;
+			pipelineSpec.CullMode = CullMode::Back;
 #endif
-				pipelineSpec.Shader = sceneCompositeShader;
-				pipelineSpec.RenderPass = renderPass;
-				pipelineSpec.DebugName = "Scene Composite";
-				pipelineSpec.DepthTest = false;
-				pipelineSpec.DepthWrite = false;
-				m_SceneCompositePipeline = CreateRef<Pipeline>(pipelineSpec);
+			pipelineSpec.Shader = sceneCompositeShader;
+			pipelineSpec.RenderPass = renderPass;
+			pipelineSpec.DebugName = "Scene Composite";
+			pipelineSpec.DepthTest = false;
+			pipelineSpec.DepthWrite = false;
+			m_SceneCompositePipeline = CreateRef<Pipeline>(pipelineSpec);
 
-			}
-			// UniformBuffer;
-			m_UniformBufferSet = CreateRef<UniformBufferSet>(Renderer::GetRendererConfig().FramesInFlight);
-			m_UniformBufferSet->Create(sizeof(CameraUB), 0);
-			m_UniformBufferSet->Create(sizeof(EnvironmentUB), 1);
-			m_UniformBufferSet->Create(sizeof(RendererDataUB), 2);
-			m_UniformBufferSet->Create(sizeof(ShadowDataUB), 3);
-			m_UniformBufferSet->Create(sizeof(ScreenDataUB), 17);
+		}
+		// UniformBuffer;
+		m_UniformBufferSet = CreateRef<UniformBufferSet>(Renderer::GetRendererConfig().FramesInFlight);
+		m_UniformBufferSet->Create(sizeof(CameraUB), 0);
+		m_UniformBufferSet->Create(sizeof(EnvironmentUB), 1);
+		m_UniformBufferSet->Create(sizeof(RendererDataUB), 2);
+		m_UniformBufferSet->Create(sizeof(ShadowDataUB), 3);
+		m_UniformBufferSet->Create(sizeof(ScreenDataUB), 17);
 
 	}
 	ForwardSceneRenderer::~ForwardSceneRenderer()
@@ -331,7 +334,7 @@ namespace cerberus
 
 				if (ui::BeginTreeNode("Pipeline Statistics"))
 				{
-					auto& pipelineStats = m_CommandBuffer->GetPipelineStatistics();
+					const auto& pipelineStats = m_CommandBuffer->GetPipelineStatistics();
 					ImGui::Text("Input Assembly Vertices: %llu", pipelineStats.InputAssemblyVertices);
 					ImGui::Text("Input Assembly Primitives: %llu", pipelineStats.InputAssemblyPrimitives);
 					ImGui::Text("Vertex Shader Invocations: %llu", pipelineStats.VertexShaderInvocations);
@@ -485,3 +488,4 @@ namespace cerberus
 		m_CommandBuffer->EndTimestampQuery(queryIndex);
 	}
 }
+#endif // 0

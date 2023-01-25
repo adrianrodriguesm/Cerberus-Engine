@@ -95,7 +95,7 @@ namespace cerberus
 			return nullptr;
 		}
 
-		void Remove(Handle<T>& handle)
+		void Remove(const Handle<T>& handle)
 		{
 			if (handle.IsValid())
 			{

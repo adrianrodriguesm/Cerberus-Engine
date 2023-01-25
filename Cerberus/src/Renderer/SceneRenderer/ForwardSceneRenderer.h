@@ -1,9 +1,11 @@
 #pragma once
 #include "Renderer/SceneRenderer/SceneRenderer.h"
-
+// Currently there is a renderer refactoring
+// so this renderer will be deprecated
+#if 0
 namespace cerberus
 {
-	class ForwardSceneRenderer final: public SceneRenderer
+	class ForwardSceneRenderer final : public SceneRenderer
 	{
 	public:
 		ForwardSceneRenderer(Ref<Scene> scene, const SceneRendererSpecification& spec = {});
@@ -128,3 +130,4 @@ namespace cerberus
 
 	};
 }
+#endif // 0

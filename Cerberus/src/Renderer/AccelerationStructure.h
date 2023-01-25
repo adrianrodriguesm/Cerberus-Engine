@@ -1,8 +1,6 @@
 #pragma once
 #include "Renderer/Backend/MeshProxy.h"
 #include "Renderer/CommandBuffer.h"
-#include "Scene/Scene.h"
-#include "Renderer/ResourceAllocator.h"
 #include "Renderer/GPUBuffer.h"
 #include "Core/Handle.h"
 #include "Renderer/Backend/MeshProxy.h"

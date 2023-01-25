@@ -4,12 +4,12 @@
 #include "Asset/AssetManager.h"
 #include "Math/Matrix.h"
 #include "Renderer/ResourceManager.h"
+#include "Renderer/ShaderCompiler.h"
 namespace cerberus
 {
 
 	PathTracerSceneRenderer::PathTracerSceneRenderer(Ref<Scene> scene, const SceneRendererSpecification& spec)
 	{
-
 		if (m_Specification.SwapChainTarget)
 			m_CommandBuffer = CommandBuffer::CreateFromSwapchain();
 		else
@@ -39,28 +39,15 @@ namespace cerberus
 			pipelineSpec.RenderPass = CreateRef<RenderPass>(preDepthRenderPassSpec);
 			m_Pipeline = CreateRef<Pipeline>(pipelineSpec);
 			m_Material = CreateRef<Material>(shader, "RayTraceTest");
+
+			BindGroupLayout::BindGroupLayoutInfo layoutInfo = ShaderReflection::ReflectLayoutInfo(shader, 3);
+			m_RTBindGroupLayout = ResourceManager::CreateBindGroupLayout(layoutInfo);
+			BindGroupSpecification bindGroupSpec;
 		}
 
-		AssetHandle cubeHandle = AssetManager::GetAssetHandleFromFilePath(AssetManager::GetAssetPath().string() + "/Meshes/Default/Cube.cmesh");
-		//m_Cube = AssetManager::GetAsset<Mesh>(cubeHandle);
-		AccelerationStructureBuilder asBuilder();
-
-		Renderer::ExecuteRenderQueue();
-		/** /
-		m_ASBuilder->BeginBLASBuild( VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
-		m_ASBuilder->SummitMesh(m_Cube);
-		std::vector<Ref<BottomLevelAccelerationStructure>> blas;
-		m_ASBuilder->EndBLASBuild(blas);
-		Renderer::ExecuteRenderQueue();
-		/** /
-		m_ASBuilder->BeginTLASBuild(VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
-		m_ASBuilder->SubmitMeshInstance(m_Cube, math::MatFactory::CreateIdentityMat4());
-		m_ASBuilder->EndTLASBuild();
-		/**/
-		Renderer::ExecuteRenderQueue();
-		// UniformBuffer;
 		m_UniformBufferSet = CreateRef<UniformBufferSet>(Renderer::GetRendererConfig().FramesInFlight);
 
+		Renderer::ExecuteRenderQueue();
 	}
 
 	PathTracerSceneRenderer::~PathTracerSceneRenderer()
@@ -106,23 +93,9 @@ namespace cerberus
 		{
 			const auto& indices = meshSource->GetIndices();
 			const auto& vertices = meshSource->GetVertices();
-			// Create the mesh source proxy
-			meshProxyHandle = ResourceManager::CreateMeshSourceProxy(vertices.data(), vertices.size() * sizeof(MeshSource::Vertex), indices.data(), indices.size() * sizeof(MeshSource::Index));
-			// Add the submesh info 
-			// TODO: Move this code to the MeshSourceProxy constructor
-			MeshSourceProxy* meshSourceProxy = ResourceManager::GetMeshSourceProxy(meshProxyHandle);
 			const auto& submeshes = meshSource->GetSubmeshes();
-			meshSourceProxy->Submeshes.reserve(submeshes.size());
-			for(const auto& submesh : submeshes)
-			{
-				SubmeshSourceProxy& submeshProxy = meshSourceProxy->Submeshes.emplace_back();
-				submeshProxy.IndexCount = submesh.IndexCount;
-				submeshProxy.BaseIndex = submesh.BaseIndex;
-				submeshProxy.BaseVertex = submesh.BaseVertex;
-				submeshProxy.MaterialIndex = submesh.MaterialIndex;
-				submeshProxy.Transform = submesh.Transform;
-			}
-
+			// Create the mesh source proxy
+			meshProxyHandle = ResourceManager::CreateMeshSourceProxy(vertices.data(), vertices.size() * sizeof(MeshSource::Vertex), indices.data(), indices.size() * sizeof(MeshSource::Index), submeshes);
 			// Added to the register
 			m_MeshRegister.MeshSourceRegistered[meshSourceAssetHandle] = meshProxyHandle;
 			m_MeshRegister.ASRegisterInfo.BLASToBuild.push_back(meshProxyHandle);
@@ -137,7 +110,6 @@ namespace cerberus
 		const auto& submeshesProxy = meshSourceProxy->Submeshes;
 
 		auto& meshInstanceProxies = m_MeshRegister.MeshInstanceRegistered[mesh->Handle];
-		//meshInstanceProxies.reserve(submeshesProxy.size());
 		
 		m_MeshRegister.ASRegisterInfo.UpdateTLAS = true;
 		for (uint32_t submeshIndex = 0; submeshIndex < submeshesProxy.size(); submeshIndex++)
@@ -159,7 +131,9 @@ namespace cerberus
 		if (m_MeshRegister.ASRegisterInfo.BLASToBuild.size() > 0)
 		{
 			AccelerationStructureBuilder asBuilder;
-			asBuilder.BeginBLASBuild(VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+			asBuilder.BeginBLASBuild(
+				
+				VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
 			for (uint32_t i = 0; i < m_MeshRegister.ASRegisterInfo.BLASToBuild.size(); i++)
 			{
 				const auto& meshSourceProxy = m_MeshRegister.ASRegisterInfo.BLASToBuild[i];

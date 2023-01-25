@@ -6,7 +6,6 @@
 #include "Renderer/ResourceManager.h"
 namespace cerberus
 {
-
 #define AS_LOG_INFO(...) NV_CORE_INFO(__VA_ARGS__)
 
 	uint64_t RoundUp(uint64_t size, uint64_t granularity)
@@ -584,20 +583,6 @@ namespace cerberus
 			createInfo.pNext = &motionInfo;
 		}
 #endif
-		/** /
-		m_Buffer.Size = asSpecification.Size;
-		// Allocating the buffer to hold the acceleration structure
-		// Allocate the scratch buffers holding the temporary data of the acceleration structure builder
-		VkBufferCreateInfo bufferInfo = {};
-		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		bufferInfo.usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR;
-		if(ASType == AccelerationStructureType::BottomLevel)
-			bufferInfo.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-		bufferInfo.size = asSpecification.Size;
-
-		ResourceAllocator allocator("ASBuffer");
-		m_Buffer.Allocation = allocator.AllocateBuffer(bufferInfo, VMA_MEMORY_USAGE_GPU_ONLY, m_Buffer.Buffer);
-		/**/
 		
 		// Create the acceleration structure
 		ext::vkCreateAccelerationStructureKHR(RendererContext::GetCurrentVulkanDevice(), &createInfo, nullptr, &m_AStructure);
@@ -610,42 +595,4 @@ namespace cerberus
 		ext::vkDestroyAccelerationStructureKHR(device, m_AStructure, nullptr);
 		m_AStructure = nullptr;
 	}
-
-#if 0
-	TopLevelAccelerationStructure::TopLevelAccelerationStructure(AccelerationStructureType type, uint32_t size, int32_t countInstance, bool motion)
-	{
-		m_Buffer.Size = size;
-		m_ASType = type;
-		VkAccelerationStructureCreateInfoKHR createInfo{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR };
-		createInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
-		createInfo.size = size;
-		/**/
-#ifdef VK_NV_ray_tracing_motion_blur
-		if (motion)
-		{
-			VkAccelerationStructureMotionInfoNV motionInfo{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MOTION_INFO_NV };
-			motionInfo.maxInstances = countInstance;
-			createInfo.createFlags = VK_ACCELERATION_STRUCTURE_CREATE_MOTION_BIT_NV;
-			createInfo.pNext = &motionInfo;
-		}
-#endif
-		/**/
-		// Allocating the buffer to hold the acceleration structure
-		// Allocate the scratch buffers holding the temporary data of the acceleration structure builder
-		VkBufferCreateInfo bufferInfo = {};
-		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		bufferInfo.usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR;
-		bufferInfo.size = size;
-
-		ResourceAllocator allocator("ASBuffer");
-		m_Buffer.Allocation = allocator.AllocateBuffer(bufferInfo, VMA_MEMORY_USAGE_GPU_ONLY, m_Buffer.Buffer);
-		createInfo.buffer = m_Buffer.Buffer;
-
-		// Create the acceleration structure
-		ext::vkCreateAccelerationStructureKHR(RendererContext::GetCurrentVulkanDevice(), &createInfo, nullptr, &m_AStructure);
-
-
-	}
-#endif // 0
-
 }

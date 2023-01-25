@@ -27,7 +27,7 @@ namespace cerberus
 		IndexBuffer*  IndexBuffer;
 		std::vector<SubmeshSourceProxy> Submeshes;
 
-		MeshSourceProxy(const void* vertexData, uint32_t vertexSize, const void* indexData, uint32_t indexSize)
+		MeshSourceProxy(const void* vertexData, uint32_t vertexSize, const void* indexData, uint32_t indexSize, const std::vector<Submesh> submeshes)
 		{
 			VertexBuffer = new cerberus::VertexBuffer(vertexData, vertexSize);
 			IndexBuffer = new cerberus::IndexBuffer(indexData, indexSize);
@@ -38,6 +38,17 @@ namespace cerberus
 										 { ShaderDataType::Float2, "a_TexCoord"	},
 										};
 			VertexBuffer->SetVertexBufferLayout(layout);
+			// Add the submesh info 
+			Submeshes.reserve(submeshes.size());
+			for (const auto& submesh : submeshes)
+			{
+				SubmeshSourceProxy& submeshProxy = Submeshes.emplace_back();
+				submeshProxy.IndexCount = submesh.IndexCount;
+				submeshProxy.BaseIndex = submesh.BaseIndex;
+				submeshProxy.BaseVertex = submesh.BaseVertex;
+				submeshProxy.MaterialIndex = submesh.MaterialIndex;
+				submeshProxy.Transform = submesh.Transform;
+			}
 		}
 
 		~MeshSourceProxy()

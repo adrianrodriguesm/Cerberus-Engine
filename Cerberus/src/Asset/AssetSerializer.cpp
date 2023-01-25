@@ -11,7 +11,7 @@ namespace cerberus
 {
 	void MeshSourceSerializer::Serialize(const AssetMetadata& metadata, const Ref<Asset>& asset)
 	{
-		auto& filepath = (metadata.FilePath.string() + ".meta");
+		const auto& filepath = (metadata.FilePath.string() + ".meta");
 		YAML::Emitter out;
 		out << YAML::BeginMap; // MeshSourceImporter
 		out << YAML::Key << "MeshSourceImporter" << YAML::Value << YAML::BeginSeq;
@@ -232,7 +232,7 @@ namespace cerberus
 
 	bool SceneSerializer::TryToLoadData(const AssetMetadata& metadata, Ref<Asset>& asset)
 	{
-		auto& filepath = metadata.FilePath.string();
+		const auto& filepath = metadata.FilePath.string();
 		YAML::Node data = YAML::LoadFile(filepath);
 		if (!data["Scene"])
 			return false;
@@ -347,25 +347,25 @@ namespace cerberus
 			{
 				Ref<Texture2D> albedoMap = material->GetAlbedoMap();
 				bool hasAlbedoMap = albedoMap ? (albedoMap != Renderer::GetWhiteTexture()) : false;
-				AssetHandle albedoMapHandle = hasAlbedoMap ? albedoMap->Handle : 0;
+				AssetHandle albedoMapHandle = hasAlbedoMap ? albedoMap->Handle : AssetHandle(0);
 				out << YAML::Key << "AlbedoMapHandle" << YAML::Value << (uint64_t)albedoMapHandle;
 			}
 			{
 				Ref<Texture2D> normalMap = material->GetNormalMap();
 				bool hasNormalMap = normalMap ? (normalMap != Renderer::GetWhiteTexture()) : false;
-				AssetHandle normalMapHandle = hasNormalMap ? normalMap->Handle : 0;
+				AssetHandle normalMapHandle = hasNormalMap ? normalMap->Handle : AssetHandle(0);
 				out << YAML::Key << "NormalMapHandle" << YAML::Value << (uint64_t)normalMapHandle;
 			}
 			{
 				Ref<Texture2D> metalnessMap = material->GetMetalnessMap();
 				bool hasMetalnessMap = metalnessMap ? (metalnessMap != Renderer::GetWhiteTexture()) : false;
-				AssetHandle metalnessMapHandle = hasMetalnessMap ? metalnessMap->Handle : 0;
+				AssetHandle metalnessMapHandle = hasMetalnessMap ? metalnessMap->Handle : AssetHandle(0);
 				out << YAML::Key << "MetalnessMapHandle" << YAML::Value << (uint64_t)metalnessMapHandle;
 			}
 			{
 				Ref<Texture2D> roughnessMap = material->GetRoughnessMap();
 				bool hasRoughnessMap = roughnessMap ? (roughnessMap != Renderer::GetWhiteTexture()) : false;
-				AssetHandle roughnessMapHandle = hasRoughnessMap ? roughnessMap->Handle : 0;
+				AssetHandle roughnessMapHandle = hasRoughnessMap ? roughnessMap->Handle : AssetHandle(0);
 				out << YAML::Key << "RoughnessMapHandle" << YAML::Value << (uint64_t)roughnessMapHandle;
 			}
 
@@ -379,7 +379,7 @@ namespace cerberus
 
 	bool MaterialSerializer::TryToLoadData(const AssetMetadata& metadata, Ref<Asset>& asset)
 	{
-		auto& filepath = metadata.FilePath.string();
+		const auto& filepath = metadata.FilePath.string();
 		YAML::Node data = YAML::LoadFile(filepath);
 		if (!data["Material"])
 			return false;
@@ -428,7 +428,7 @@ namespace cerberus
 	{
 		Ref<Texture2D> texture = std::dynamic_pointer_cast<Texture2D>(asset);
 		const auto& textureProp = texture->GetTextureProperties();
-		auto& filepath = (metadata.FilePath.string() + ".meta");
+		const auto& filepath = (metadata.FilePath.string() + ".meta");
 		YAML::Emitter out;
 		out << YAML::BeginMap; // Texture2D
 		out << YAML::Key << "TextureImporter";
