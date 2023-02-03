@@ -13,7 +13,14 @@ namespace cerberus
 		Pool<MeshSourceProxy> MeshSourceProxy;
 		Pool<MeshInstanceProxy> MeshInstanceProxy;
 		Pool<BindGroupLayout> BindGroupLayouts;
+		Pool<BindGroup> BindGroup;
+		Pool<Image> Images;
+		Pool<ImageView> ImageViews;
+		Pool<Texture2D> Textures2D;
+
 		DescriptorAllocator* PersistentDescriptorAllocator;
+
+		std::unordered_map<Handle<Image>, std::vector<Handle<ImageView>>> ImageRegister;
 	};
 
 	static ResourceManagerData* s_RMData;

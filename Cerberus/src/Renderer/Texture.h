@@ -15,7 +15,7 @@ namespace cerberus
 		std::string DebugName = "None";
 	};
 
-	class Texture : public Asset
+	class Texture
 	{
 	public:
 		virtual ~Texture() {}
@@ -25,9 +25,6 @@ namespace cerberus
 		virtual uint32_t GetMipLevelCount() const = 0;
 		virtual std::pair<uint32_t, uint32_t> GetMipSize(uint32_t mip) const = 0;
 		virtual uint64_t GetHash() const = 0;
-
-		static AssetType GetStaticType() { return AssetType::Texture; }
-		AssetType GetAssetType() const { return GetStaticType(); }
 	};
 	////////////////////////////////////////////////
 	////// Texture2D
@@ -35,13 +32,13 @@ namespace cerberus
 	class Texture2D : public Texture
 	{
 	public:
-		Texture2D(const std::string& path, TextureProperties properties);
 		Texture2D(ImageFormat format, const uint32_t width, const uint32_t height, const void* data, TextureProperties properties = {});
-		Texture2D(const Ref<Image2D>& image2D);
 		virtual ~Texture2D();
 
 
-		Ref<Image2D> GetImage() const { return m_Image; }
+		Handle<ImageView> GetImageView() const { return m_ImageView; }
+		Handle<Image> GetImage() const { return m_ImageView; }
+
 		virtual ImageFormat GetFormat() const override { return m_Format; }
 		virtual uint32_t GetWidth() const override { return m_Width; }
 		virtual uint32_t GetHeight() const override { return m_Height; }
@@ -57,16 +54,9 @@ namespace cerberus
 		void Invalidate();
 		void GenerateMips();
 	private:
-		std::string m_Path;
-		uint32_t m_Width;
-		uint32_t m_Height;
 		TextureProperties m_Properties;
-
 		Buffer m_ImageData;
-
-		Ref<Image2D> m_Image;
-
-		ImageFormat m_Format = ImageFormat::None;
+		Handle<ImageView> m_ImageView;
 	};
 	////////////////////////////////////////////////
 	////// TextureCube

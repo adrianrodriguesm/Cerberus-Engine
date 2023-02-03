@@ -6,31 +6,9 @@ namespace cerberus
 	enum class ImageUsage
 	{
 		None = 0,
-		Texture,
+		Sampler,
 		Attachment,
 		Storage
-	};
-
-	enum class SamplerWrap
-	{
-		None = 0,
-		Clamp,
-		Repeat
-	};
-
-	enum class SamplerFilter
-	{
-		None = 0,
-		Linear,
-		Nearest
-	};
-
-	struct ImageInfo
-	{
-		VkImage Image = nullptr;
-		VkImageView ImageView = nullptr;
-		VkSampler Sampler = nullptr;
-		VmaAllocation MemoryAlloc = nullptr;
 	};
 
 	enum class ImageFormat
@@ -54,18 +32,10 @@ namespace cerberus
 		DEPTH = DEPTH24STENCIL8,
 	};
 
-	struct SamplerSpecification
-	{
-		SamplerWrap SamplerWrap = SamplerWrap::Repeat;
-		SamplerFilter SamplerFilter = SamplerFilter::Linear;
-		bool Anisotropy = false;
-	};
-
 	struct ImageSpecification
 	{
 		ImageFormat Format = ImageFormat::RGBA;
-		ImageUsage Usage = ImageUsage::Texture;
-		SamplerSpecification SamplerSpec;
+		ImageUsage Usage = ImageUsage::Sampler;
 		uint32_t Width = 1;
 		uint32_t Height = 1;
 		uint32_t Mips = 1;
@@ -73,23 +43,29 @@ namespace cerberus
 		std::string DebugName;
 	};
 
-	class Image
+	class Image final
 	{
 	public:
-		virtual ~Image() {}
+		Image(const ImageSpecification& specification);
+		~Image() {}
 
-		virtual void Invalidate() = 0;
-		virtual void Release() = 0;
+		void Invalidate();
+		void Release();
 
-		virtual uint32_t GetWidth() const = 0;
-		virtual uint32_t GetHeight() const = 0;
-		virtual float GetAspectRatio() const = 0;
+		uint32_t GetWidth() const { return m_Specification.Width; }
+		uint32_t GetHeight() const { return m_Specification.Height; }
+		float GetAspectRatio() const { return (float)m_Specification.Width / (float)m_Specification.Height; }
 
-		virtual ImageSpecification& GetSpecification() = 0;
-		virtual const ImageSpecification& GetSpecification() const = 0;
 
-		virtual Buffer GetBuffer() const = 0;
-		virtual Buffer& GetBuffer() = 0;
+		ImageSpecification& GetSpecification() { return m_Specification; }
+		const ImageSpecification& GetSpecification() const { return m_Specification; }
+		
+		const VkImageLayout GetImageLayout() const { return m_CurrentImgLayout; }
+
+		void SetLayout(VkCommandBuffer cmd, VkImageLayout newImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask);
+		void SetLayout(VkImageLayout newImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask);
+
+		VkImage GetHandle() const { return m_Image; }
 
 		static inline uint32_t GetImageFormatBPP(ImageFormat format)
 		{
@@ -127,53 +103,64 @@ namespace cerberus
 
 			return false;
 		}
-	};
-
-	class Image2D : public Image
-	{
-	public:
-		Image2D(const ImageSpecification& specification);
-		virtual ~Image2D();
-
-		virtual void Invalidate() override;
-		virtual void Release() override;
-		void UpdateDescriptor();
-
-		void CreatePerLayerImageViews();
-		void CreatePerSpecificLayerImageViews(const std::vector<uint32_t>& layerIndices);
-		
-		VkImageView GetLayerImageView(uint32_t layer)
-		{
-			CORE_ASSERT(layer < m_PerLayerImageViews.size(), "Layer level does not exists!");
-			return m_PerLayerImageViews[layer];
-		}
-
-		virtual uint32_t GetWidth() const override { return m_Specification.Width; }
-		virtual uint32_t GetHeight() const override { return m_Specification.Height; }
-		virtual float GetAspectRatio() const override { return (float)m_Specification.Width / (float)m_Specification.Height; }
-
-		uint64_t GetHash() const { return (uint64_t)m_Info.ImageView; };
-
-		virtual ImageSpecification& GetSpecification() override { return m_Specification; }
-		virtual const ImageSpecification& GetSpecification() const override { return m_Specification; }
-		
-		virtual Buffer GetBuffer() const { return m_ImageData; }
-		virtual Buffer& GetBuffer() override { return m_ImageData; }
-
-		ImageInfo& GetImageInfo() { return m_Info; }
-		const ImageInfo& GetImageInfo() const { return m_Info; }
-
-		const VkDescriptorImageInfo& GetVulkanDescriptorInfo() { return m_DescriptorImageInfo; }
-
 	private:
 		ImageSpecification m_Specification;
+		VkImage m_Image;
+		VmaAllocation m_MemoryAlloc = nullptr;
+		VkImageLayout m_CurrentImgLayout;
+	};
 
-		Buffer m_ImageData;
+	enum class SamplerWrap
+	{
+		None = 0,
+		Clamp,
+		Repeat
+	};
 
-		ImageInfo m_Info;
-		
-		std::vector<VkImageView> m_PerLayerImageViews;
+	enum class SamplerFilter
+	{
+		None = 0,
+		Linear,
+		Nearest
+	};
 
+	struct SamplerSpecification
+	{
+		SamplerWrap SamplerWrap = SamplerWrap::Repeat;
+		SamplerFilter SamplerFilter = SamplerFilter::Linear;
+		bool Anisotropy = false;
+		float MaxLOD, MinLOD;
+	};
+
+	struct ImageViewProperties
+	{
+		Handle<Image> Image;
+		uint32_t BaseMip, MipCount;
+		uint32_t BaseLayer, LayerCount;
+		SamplerSpecification* SamplerSpec;
+	};
+
+	class ImageView final
+	{
+	public:
+		ImageView(const ImageViewProperties& imgViewProp);
+		~ImageView();
+
+		void Release();
+		void Invalidate();
+		void UpdateDescriptor();
+
+		const VkDescriptorImageInfo& GetImageDescriptorInfo() { return m_DescriptorImageInfo; }
+		uint64_t GetHash() const { return (uint64_t)m_ImageView; }
+
+		VkImageView GetHandle() const { return m_ImageView; }
+
+	private:
+		Handle<Image> m_Image;
+		ImageViewProperties m_Properties;
+
+		VkImageView m_ImageView;
+		VkSampler m_Sampler;
 		VkDescriptorImageInfo m_DescriptorImageInfo = {};
 	};
 
@@ -184,7 +171,7 @@ namespace cerberus
 			if (samplerWrap == "Clamp")        return SamplerWrap::Clamp;
 			if (samplerWrap == "Repeat")       return SamplerWrap::Repeat;
 
-			CORE_ASSERT(false, "Unknown Asset Type");
+			CORE_ASSERT(false, "Unknown Sampler Wrap Type");
 			return SamplerWrap::None;
 		}
 
@@ -196,7 +183,7 @@ namespace cerberus
 			case SamplerWrap::Repeat:       return "Repeat";
 			}
 
-			CORE_ASSERT(false, "Unknown Asset Type");
+			CORE_ASSERT(false, "Unknown Sampler Wrap Type");
 			return "None";
 		}
 
@@ -205,7 +192,7 @@ namespace cerberus
 			if (samplerFilter == "Linear")        return SamplerFilter::Linear;
 			if (samplerFilter == "Nearest")       return SamplerFilter::Nearest;
 
-			CORE_ASSERT(false, "Unknown Asset Type");
+			CORE_ASSERT(false, "Unknown Sampler Filter Type");
 			return SamplerFilter::None;
 		}
 
@@ -217,7 +204,7 @@ namespace cerberus
 			case SamplerFilter::Nearest:      return "Nearest";
 			}
 
-			CORE_ASSERT(false, "Unknown Asset Type");
+			CORE_ASSERT(false, "Unknown Sampler Filter Type");
 			return "None";
 		}
 	}

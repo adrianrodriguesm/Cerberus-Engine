@@ -52,50 +52,6 @@ namespace cerberus
 	}
 
 
-	Texture2D::Texture2D(const std::string& path, TextureProperties properties)
-		: m_Path(path), m_Properties(properties)
-	{
-		int width, height, channels;
-
-		// Check if it is an HDR image
-		if (stbi_is_hdr(path.c_str()))
-		{
-			m_ImageData.Data = (byte*)stbi_loadf(path.c_str(), &width, &height, &channels, 4);
-			m_ImageData.Size = width * height * 4 * sizeof(float); // 4 = number of channels
-			m_Format = ImageFormat::RGBA32F;
-		}
-		else
-		{
-			m_ImageData.Data = stbi_load(path.c_str(), &width, &height, &channels, 4);
-			m_ImageData.Size = width * height * 4;
-			m_Format = m_Properties.SRGB ? ImageFormat::SRGBA : ImageFormat::RGBA;
-		}
-
-		// Check if the image was succesfully loaded
-		if (!m_ImageData.Data)
-		{
-			CORE_ASSERT(false, "Falied to load image!");
-			return;
-		}
-
-		m_Width = width;
-		m_Height = height;
-
-		ImageSpecification imageSpec;
-		imageSpec.Format = m_Format;
-		imageSpec.Width = m_Width;
-		imageSpec.Height = m_Height;
-		imageSpec.Mips = m_Properties.GenerateMips ? GetMipLevelCount() : 1;
-		imageSpec.DebugName = m_Path;
-		m_Image = CreateRef<Image2D>(imageSpec);
-
-		Texture2D* instance = this;
-		Renderer::Submit([instance]() mutable
-		{
-			instance->Invalidate();
-		});
-	}
-
 	Texture2D::Texture2D(ImageFormat format, const uint32_t width, const uint32_t height, const void* data, TextureProperties properties)
 		: m_Format(format), m_Width(width), m_Height(height), m_Properties(properties)
 	{
@@ -123,13 +79,13 @@ namespace cerberus
 			instance->Invalidate();
 		});
 	}
-
+#if 0
 	Texture2D::Texture2D(const Ref<Image2D>& image2D)
 		: m_Image(image2D), m_Format(image2D->GetSpecification().Format), m_Width(image2D->GetSpecification().Width), 
 		m_Height(image2D->GetSpecification().Height)
 	{
 	}
-
+#endif
 	Texture2D::~Texture2D()
 	{
 		if (m_Image)

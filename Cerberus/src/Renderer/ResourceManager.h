@@ -4,6 +4,7 @@
 #include "Renderer/Backend/MeshProxy.h"
 #include "Renderer/Backend/BindGroup.h"
 #include "Core/Handle.h"
+#include "Renderer/Texture.h"
 namespace cerberus
 {
 	struct RendererConfiguration
@@ -42,6 +43,20 @@ namespace cerberus
 		static Handle<BindGroupLayout> CreateBindGroupLayout(const BindGroupLayout::BindGroupLayoutInfo& info);
 		static void DestroyBindGroupLayout(Handle<BindGroupLayout>& handle);
 		static BindGroupLayout* GetBindGroupLayout(const Handle<BindGroupLayout>& handle);
+
+		// TODO: new Textures and Images
+		static Handle<Texture2D> CreateTexture2D(ImageFormat format, const uint32_t width, const uint32_t height, const void* data, TextureProperties properties = {});
+		static Texture2D* GetTexture2D(const Handle<Texture2D>& handle);
+		static void DestroyTexture(const Handle<Texture2D>& handle);
+
+		static Handle<Image> CreateImage(const ImageSpecification& specification);
+		static Image* GetImage(const Handle<Image>& handle);
+		static void DestroyImage(const Handle<Image>& handle);
+
+		static Handle<ImageView> CreateImageView(const ImageViewProperties& imgViewProp);
+		static ImageView* GetImageView(const Handle<ImageView>& handle);
+		static void DestroyImageView(const Handle<ImageView>& handle);
+
 
 		static const RendererConfiguration& GetRendererConfig();
 
