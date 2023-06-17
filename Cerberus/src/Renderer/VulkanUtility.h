@@ -4,7 +4,7 @@ namespace cerberus::utils
 {
 	struct ImageLayoutSpecification
 	{
-		VkCommandBuffer Commadbuffer;
+		VkCommandBuffer CommandBuffer;
 		VkImage Image;
 		VkImageAspectFlags AspectMask;
 		VkImageLayout OldImageLayout, NewImageLayout;

@@ -3,6 +3,7 @@
 #include "Renderer/Mesh.h"
 #include "Core/Handle.h"
 #include "Math/Matrix.h"
+#include "Renderer/Backend/BindGroup.h"
 namespace cerberus
 {
 	struct SubmeshSourceProxy
@@ -65,12 +66,15 @@ namespace cerberus
 		Handle<MeshSourceProxy> MeshSource;
 		uint32_t SubmeshIndex;
 		// TODO: Switch to binding group
-		Ref<MaterialAsset> Material;
+		Handle<BindGroup> Material;
 		glm::mat4 WorldTransform;
 
-		MeshInstanceProxy(const Handle<MeshSourceProxy>& meshSource, const uint32_t submeshIndex, const Ref<MaterialAsset>& material,
+		MeshInstanceProxy(const Handle<MeshSourceProxy>& meshSource, const uint32_t submeshIndex, const Handle<BindGroup>& material,
 			const glm::mat4& transform) : MeshSource(meshSource), SubmeshIndex(submeshIndex), Material(material), WorldTransform(transform)
 		{}
 
+		MeshInstanceProxy(const Handle<MeshSourceProxy>& meshSource, const uint32_t submeshIndex,
+			const glm::mat4& transform) : MeshSource(meshSource), SubmeshIndex(submeshIndex), WorldTransform(transform)
+		{}
 	};
 }

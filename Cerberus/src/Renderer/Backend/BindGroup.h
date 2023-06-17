@@ -2,6 +2,7 @@
 #include "Core/Handle.h"
 #include "Renderer/Shader.h"
 #include "Renderer/UniformBufferSet.h"
+#include "Renderer/Image.h"
 namespace cerberus
 {
 	class BindGroupLayout
@@ -53,7 +54,7 @@ namespace cerberus
 	struct BindGroupSpecification
 	{
 		Handle<BindGroupLayout> BindGroupLayout;
-		bool Persistent;
+		bool Persistent = false;
 	};
 
 	class BindGroup
@@ -63,14 +64,18 @@ namespace cerberus
 		~BindGroup();
 
 		void SetUniformBuffer(const Ref<UniformBufferSet> uboSet, uint32_t bindingPoint);
+		void SetImageView(const Handle<ImageView> imgView, uint32_t bindingPoint);
 
 		void Update(uint32_t frameIndex);
 		void Update();
+
+		VkDescriptorSet GetHandle(uint32_t frameIndex);
 	private:
 		Handle<BindGroupLayout> m_BindGroupLayout;
 		std::vector<VkDescriptorSet> m_Descriptors;
-		// Binding Point -> FrameIndex -> WriteDescriptor
-		std::map<uint32_t, std::vector<VkWriteDescriptorSet>> m_WriteDescriptors;
+		// FrameIndex -> [Binding Point, WriteDescriptor]
+		std::vector<std::vector<VkWriteDescriptorSet>> m_WriteDescriptors;
+		bool m_Persistent;
 	};
 
 	/** /

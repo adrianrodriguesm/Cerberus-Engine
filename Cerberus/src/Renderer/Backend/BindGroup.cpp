@@ -133,43 +133,54 @@ namespace cerberus
 
     BindGroupLayout::~BindGroupLayout()
     {
-		VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-		vkDestroyDescriptorSetLayout(device, m_DescriptorSetLayout, nullptr);
+		ResourceManager::SubmitResourceFree([descriptorLayout = m_DescriptorSetLayout]()
+		{
+			VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+			vkDestroyDescriptorSetLayout(device, descriptorLayout, nullptr);
+		});
+		
     }
 
 	BindGroup::BindGroup(const BindGroupSpecification& spec)
-		: m_BindGroupLayout(spec.BindGroupLayout)
+		: m_BindGroupLayout(spec.BindGroupLayout), m_Persistent(spec.Persistent)
 	{
 		BindGroupLayout* layout = ResourceManager::GetBindGroupLayout(m_BindGroupLayout);
 		const auto& writeDescriptors = layout->m_WriteDescriptors;
 
 		uint32_t framesInFlight = ResourceManager::GetRendererConfig().FramesInFlight;
 
+		m_WriteDescriptors = writeDescriptors;
+		m_Descriptors.resize(framesInFlight);
+		/** /
 		for (VkWriteDescriptorSet writeDescriptor : writeDescriptors[0])
 		{
+
 			std::vector<VkWriteDescriptorSet> entry;
-			entry.resize(framesInFlight);
+			entry.reserve(framesInFlight);
 
 			for (uint32_t frameIndex = 0; frameIndex < framesInFlight; frameIndex++)
 				entry.push_back(writeDescriptor);
 
 			m_WriteDescriptors[writeDescriptor.dstBinding] = entry;
 		}
-
-		
-		m_Descriptors.resize(framesInFlight);
-
-		for (uint32_t frameIndex = 0; frameIndex < framesInFlight; frameIndex++)
+		/**/
+		if (m_Persistent)
 		{
-			m_Descriptors[frameIndex] = ResourceManager::AllocateDescriptorSet(m_BindGroupLayout);
-
-			for (auto& writeDescriptor : m_WriteDescriptors[frameIndex])
+			for (uint32_t frameIndex = 0; frameIndex < framesInFlight; frameIndex++)
 			{
-				writeDescriptor.dstSet = m_Descriptors[frameIndex];
+				m_Descriptors[frameIndex] = ResourceManager::AllocateDescriptorSet(m_BindGroupLayout);
+
+				for (auto& writeDescriptor : m_WriteDescriptors[frameIndex])
+				{
+					writeDescriptor.dstSet = m_Descriptors[frameIndex];
+				}
 			}
 		}
-		
-		
+	}
+
+	BindGroup::~BindGroup()
+	{
+
 	}
 
 	void BindGroup::Update()
@@ -181,35 +192,65 @@ namespace cerberus
 		}
 	}
 
+	VkDescriptorSet BindGroup::GetHandle(uint32_t frameIndex)
+	{
+		CORE_ASSERT(m_Descriptors.size() > frameIndex, "")
+		return m_Descriptors[frameIndex];
+	}
+
 	void BindGroup::SetUniformBuffer(const Ref<UniformBufferSet> uboSet, uint32_t bindingPoint)
 	{
-		CORE_ASSERT(m_WriteDescriptors.find(bindingPoint) != m_WriteDescriptors.end(), "");
-
 		uint32_t framesInFlight = ResourceManager::GetRendererConfig().FramesInFlight;
 		for (uint32_t frameIndex = 0; frameIndex < framesInFlight; frameIndex++)
 		{
 			Ref<UniformBuffer> ubo = uboSet->Get(frameIndex);
 
-			auto& writeDescriptor = m_WriteDescriptors[bindingPoint][frameIndex];
-			writeDescriptor.pBufferInfo = &ubo->GetBufferDescriptorInfo();
+			auto& writeDescriptors = m_WriteDescriptors[frameIndex];
+			for (auto& writeDescriptor : writeDescriptors)
+			{
+				if (writeDescriptor.dstBinding == bindingPoint)
+				{
+					writeDescriptor.pBufferInfo = &ubo->GetBufferDescriptorInfo();
+				}
+			}
+			
 		}
 
 	}
 
+	void BindGroup::SetImageView(const Handle<ImageView> imgViewHandle, uint32_t bindingPoint)
+	{
+		ImageView* imgView = ResourceManager::GetImageView(imgViewHandle);
+		uint32_t framesInFlight = ResourceManager::GetRendererConfig().FramesInFlight;
+		imgView->UpdateDescriptor();
+		for (uint32_t frameIndex = 0; frameIndex < framesInFlight; frameIndex++)
+		{
+			auto& writeDescriptors = m_WriteDescriptors[frameIndex];
+			for (auto& writeDescriptor : writeDescriptors)
+			{
+				if (writeDescriptor.dstBinding == bindingPoint)
+				{
+					writeDescriptor.pImageInfo = &imgView->GetImageDescriptorInfo();
+				}
+			}
+		}
+	}
+
 	void BindGroup::Update(uint32_t frameIndex)
 	{
-		if (m_Descriptors[frameIndex] == VK_NULL_HANDLE)
+		if (!m_Persistent || m_Descriptors[frameIndex] == VK_NULL_HANDLE)
 		{
-			m_Descriptors[frameIndex] = ResourceManager::AllocateDescriptorSet(m_BindGroupLayout);
+			m_Descriptors[frameIndex] = ResourceManager::AllocateDescriptorSet(m_BindGroupLayout, m_Persistent);
 
 			CORE_ASSERT(m_Descriptors[frameIndex], "Invalid descriptor set created!");
 			//m_DescriptorSets[frameIndex] = descriptorSet;
 			for (auto& writeDescriptor : m_WriteDescriptors[frameIndex])
+			{
 				writeDescriptor.dstSet = m_Descriptors[frameIndex];
+			}
 		}
 
 		VkDevice vulkanDevice = RendererContext::GetCurrentVulkanDevice();
 		vkUpdateDescriptorSets(vulkanDevice, (uint32_t)m_WriteDescriptors[frameIndex].size(), m_WriteDescriptors[frameIndex].data(), 0, nullptr);
-
 	}
 }

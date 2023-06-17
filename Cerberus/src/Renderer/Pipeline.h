@@ -39,7 +39,9 @@ namespace cerberus
 	{
 		Ref<Shader> Shader;
 		VertexBufferLayout Layout;
-		Ref<RenderPass> RenderPass;
+
+		Handle<RenderPass> RenderPass;
+
 		PrimitiveTopology Topology = PrimitiveTopology::Triangles;
 		DepthCompareOperator DepthOperator = DepthCompareOperator::LessOrEqual;
 		CullMode CullMode = CullMode::None;
@@ -49,24 +51,25 @@ namespace cerberus
 		float LineWidth = 1.0f;
 		std::string DebugName;
 	};
-	class Pipeline
+
+	class GraphicsPipeline
 	{
 	public:
-		Pipeline(PipelineSpecification spec);
-		virtual ~Pipeline();
+		GraphicsPipeline(PipelineSpecification spec);
+		virtual ~GraphicsPipeline();
 
 		PipelineSpecification& GetSpecification() { return m_Specification; }
 		const PipelineSpecification& GetSpecification() const { return m_Specification; }
 
 		void Invalidate();
 
-		VkPipeline GetVulkanPipeline() { return m_VulkanPipeline; }
+		VkPipeline GetHandle() { return m_Pipeline; }
 		VkPipelineLayout GetVulkanPipelineLayout() { return m_PipelineLayout; }
 	private:
 		PipelineSpecification m_Specification;
 
-		VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
-		VkPipelineCache m_PipelineCache = VK_NULL_HANDLE;
-		VkPipeline m_VulkanPipeline = VK_NULL_HANDLE;
+		VkPipelineLayout m_PipelineLayout = nullptr;
+		VkPipelineCache m_PipelineCache = nullptr;
+		VkPipeline m_Pipeline = nullptr;
 	};
 }

@@ -266,17 +266,17 @@ namespace cerberus
 				ui::PropertyAssetReferenceSettings settings;
 				settings.AdvanceToNextColumn = false;
 				settings.WidthOffset = ImGui::GetStyle().ItemSpacing.x + 28.0f;
-
+#if OLD_RENDERER
 				for (size_t i = 0; i < materialCount; i++)
 				{
-					Ref<MaterialAsset> materialAsset =  component.MaterialTable->GetMaterial(i);
+					Ref<MaterialAsset> materialAsset =  AssetManager::GetAsset<MaterialAsset>(component.MaterialTable->GetMaterial(i));
 						
 					std::string label = fmt::format("[Material {0}]", i);
 					AssetHandle materialAssetHandle = materialAsset->Handle;
 
 					ui::PropertyAssetReferenceTarget<MaterialAsset>(label.c_str(), materialAssetHandle, [i, materialTable = component.MaterialTable](Ref<MaterialAsset> materialAsset) mutable
 					{
-						materialTable->SetMaterial(i, materialAsset);
+						materialTable->SetMaterial(i, materialAsset->Handle);
 					}, settings);
 
 
@@ -284,13 +284,18 @@ namespace cerberus
 					float prevItemHeight = ImGui::GetItemRectSize().y;
 
 					{
+#if OLD_RENDERER
+						/** /
 						ui::ScopedFont boldFont(ImGui::GetIO().Fonts->Fonts[0]);
 						if (ImGui::Button("X", { prevItemHeight, prevItemHeight }))
-							component.MaterialTable->SetMaterial(i, Renderer::GetDefaultPBRMaterial());
+							component.MaterialTable->SetMaterial(i, Renderer::GetDefaultPBRMaterial()->Handle);
+						/**/
+#endif
 					}
 					ImGui::NextColumn();
 					
 				}
+#endif
 				ui::EndPropertyGrid();
 				ui::EndTreeNode();
 			}

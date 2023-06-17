@@ -62,7 +62,8 @@ namespace cerberus
 			if (m_FreeIndexes.size() > 0)
 			{
 				int16_t index = m_FreeIndexes.top();
-				UUID_16 generationID = m_Generations[index];
+				UUID_16 generationID = UUID_16();
+				m_Generations[index] = generationID;
 
 				// Placement new operator to construct the object inside this specific piece of memory
 				new(&m_Data[index]) T(std::forward<Args>(args)...);
@@ -79,14 +80,15 @@ namespace cerberus
 			}
 
 			int16_t index = m_Size;
-			UUID_16 generationID = m_Generations[index];
+			UUID_16 generationID = UUID_16();
+			m_Generations[index] = generationID;
 			// Placement new operator to construct the object inside this specific piece of memory
 			new(&m_Data[index]) T(std::forward<Args>(args)...);
 			m_Size++;
 			return  Handle<T>(generationID, index);
 		}
 
-		T* Get(const Handle<T>& handle)
+		T* Get(const Handle<T> handle)
 		{
 			if (handle.IsValid())
 			{
@@ -95,13 +97,13 @@ namespace cerberus
 			return nullptr;
 		}
 
-		void Remove(const Handle<T>& handle)
+		void Remove(const Handle<T> handle)
 		{
 			if (handle.IsValid())
 			{
 				m_FreeIndexes.push(handle.m_Index);
 				m_Data[handle.m_Index].~T();
-				handle.Invalidate();
+				//handle.Invalidate();
 			}
 		}
 

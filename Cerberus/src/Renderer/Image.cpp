@@ -1,11 +1,10 @@
 #include "pch.h"
 #include "Image.h"
 #include "Renderer/Renderer.h"
-#include "Renderer/VulkanUtility.h"
 #include "Renderer/ResourceManager.h"
 namespace cerberus
 {
-	namespace utils 
+	namespace utils
 	{
 		inline VkFormat VulkanImageFormat(ImageFormat format)
 		{
@@ -14,8 +13,9 @@ namespace cerberus
 			case ImageFormat::RED32F:          return VK_FORMAT_R32_SFLOAT;
 			case ImageFormat::RG16F:		   return VK_FORMAT_R16G16_SFLOAT;
 			case ImageFormat::RG32F:		   return VK_FORMAT_R32G32_SFLOAT;
+			case ImageFormat::RGB:			   return VK_FORMAT_R8G8B8_UNORM;
 			case ImageFormat::RGBA:            return VK_FORMAT_R8G8B8A8_UNORM;
-			case ImageFormat::SRGBA:            return VK_FORMAT_R8G8B8A8_SRGB;
+			case ImageFormat::SRGBA:           return VK_FORMAT_R8G8B8A8_SRGB;
 			case ImageFormat::RGBA16F:         return VK_FORMAT_R16G16B16A16_SFLOAT;
 			case ImageFormat::RGBA32F:         return VK_FORMAT_R32G32B32A32_SFLOAT;
 			case ImageFormat::DEPTH32F:        return VK_FORMAT_D32_SFLOAT;
@@ -25,7 +25,7 @@ namespace cerberus
 			return VK_FORMAT_UNDEFINED;
 		}
 
-	
+
 		static VkSamplerAddressMode VulkanSamplerWrap(SamplerWrap wrap)
 		{
 			switch (wrap)
@@ -47,6 +47,17 @@ namespace cerberus
 			CORE_ASSERT(false, "Unknown filter");
 			return (VkFilter)0;
 		}
+
+		static VkImageViewType VulkanImageViewType(ImageViewType viewType)
+		{
+			switch (viewType)
+			{
+			case ImageViewType::Image2D:    return VK_IMAGE_VIEW_TYPE_2D;
+			case ImageViewType::ImageCube:	return VK_IMAGE_VIEW_TYPE_CUBE;
+			}
+			CORE_ASSERT(false, "Unknown view type");
+			return (VkImageViewType)0;
+		}
 	}
 
 	Image::Image(const ImageSpecification& specification)
@@ -56,7 +67,17 @@ namespace cerberus
 
 	Image::~Image()
 	{
-		Release();
+		if (!m_Image || !m_MemoryAlloc)
+			return;
+
+		ResourceManager::SubmitResourceFree([image = m_Image, memoryAlloc = m_MemoryAlloc]()
+		{
+			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+			ResourceAllocator allocator("VulkanImage2D");
+			allocator.DestroyImage(image, memoryAlloc);
+		});
+
+		m_Image = nullptr;
 	}
 
 
@@ -71,7 +92,11 @@ namespace cerberus
 
 		// Define the usage type of the image
 		// TODO: this (probably) shouldn't be implied
-		VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT; 
+		VkImageUsageFlags usage;
+		if (HasFlags(SAMPLE_COMPATIBLE))
+		{
+			usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+		}
 		if (m_Specification.Usage == ImageUsage::Attachment)
 		{
 			if (Image::IsDepthFormat(m_Specification.Format))
@@ -104,23 +129,35 @@ namespace cerberus
 		imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 		imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL; // Texels are laid out in an implementation-dependent arrangement, for more efficient memory access
 		imageCreateInfo.usage = usage;
+		if (HasFlags(CUBE_COMPATIBLE))
+		{
+			imageCreateInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+		}
 		m_MemoryAlloc = allocator.AllocateImage(imageCreateInfo, VMA_MEMORY_USAGE_GPU_ONLY, m_Image);
 	}
 
 	void Image::Release()
 	{
-		if (!m_Image)
+		if (!m_Image || !m_MemoryAlloc)
 			return;
 
-		
-		Renderer::SubmitResourceFree([image = m_Image, allocation = m_MemoryAlloc]() mutable
+		ResourceManager::SubmitResourceFree([image = m_Image, allocation = m_MemoryAlloc]() mutable
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			ResourceAllocator allocator("VulkanImage2D");
 			allocator.DestroyImage(image, allocation);
 		});
 
+#if OLD_RENDERER
+		Renderer::SubmitResourceFree([image = m_Image, allocation = m_MemoryAlloc]() mutable
+		{
+			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+			ResourceAllocator allocator("VulkanImage2D");
+			allocator.DestroyImage(image, allocation);
+		});
+#endif
 		m_Image = nullptr;
+		m_MemoryAlloc = nullptr;
 	}
 
 	void Image::SetLayout(VkCommandBuffer cmd, VkImageLayout newImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask)
@@ -130,7 +167,7 @@ namespace cerberus
 
 		const VkImageAspectFlags aspectMask = Image::IsDepthFormat(m_Specification.Format) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 		utils::SetImageLayout(cmd, m_Image,
-			VK_IMAGE_ASPECT_COLOR_BIT, // Image only contains color data
+			aspectMask,
 			m_CurrentImgLayout, newImageLayout,
 			srcStageMask, dstStageMask);
 
@@ -142,6 +179,39 @@ namespace cerberus
 		VkCommandBuffer cmdBuffer = Renderer::GetCommandBuffer(true);
 		SetLayout(cmdBuffer, newImageLayout, srcStageMask, dstStageMask);
 		Renderer::FlushCommandBuffer(cmdBuffer);
+	}
+
+	void Image::SetImageLayout(const utils::ImageLayoutSpecification& imgLayoutSpec)
+	{
+		if (m_CurrentImgLayout == imgLayoutSpec.NewImageLayout)
+			return;
+
+		VkImageSubresourceRange subresourceRange = {};
+		subresourceRange.aspectMask = imgLayoutSpec.AspectMask;
+		subresourceRange.baseMipLevel = imgLayoutSpec.BaseMipLevel;
+		subresourceRange.levelCount = imgLayoutSpec.LevelCount;
+		subresourceRange.layerCount = imgLayoutSpec.LayerCount;
+
+		utils::SetImageLayout(imgLayoutSpec.CommandBuffer, imgLayoutSpec.Image, m_CurrentImgLayout, imgLayoutSpec.NewImageLayout,
+			subresourceRange,
+			imgLayoutSpec.SrcStageMask, imgLayoutSpec.DstStageMask);
+
+		m_CurrentImgLayout = imgLayoutSpec.NewImageLayout;
+	}
+
+	void Image::InsertImageMemoryBarrier(VkCommandBuffer cmdbuffer,
+		VkAccessFlags srcAccessMask,
+		VkAccessFlags dstAccessMask,
+		VkImageLayout newImageLayout,
+		VkPipelineStageFlags srcStageMask,
+		VkPipelineStageFlags dstStageMask,
+		VkImageSubresourceRange subresourceRange)
+	{
+		if (m_CurrentImgLayout == newImageLayout)
+			return;
+
+		utils::InsertImageMemoryBarrier(cmdbuffer, m_Image, srcAccessMask, dstAccessMask, m_CurrentImgLayout, newImageLayout, srcStageMask, dstStageMask, subresourceRange);
+		m_CurrentImgLayout = newImageLayout;
 	}
 
 #if 0
@@ -185,7 +255,7 @@ namespace cerberus
 		VkImageAspectFlags aspectMask = Image::IsDepthFormat(m_Specification.Format) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 		if (m_Specification.Format == ImageFormat::DEPTH24STENCIL8)
 			aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-		
+
 		const VkFormat vulkanFormat = utils::VulkanImageFormat(m_Specification.Format);
 
 		if (m_PerLayerImageViews.empty())
@@ -215,28 +285,40 @@ namespace cerberus
 	ImageView::ImageView(const ImageViewProperties& imgViewProp)
 		: m_Properties(imgViewProp)
 	{
-		
+
 	}
 
 	ImageView::~ImageView()
 	{
-		Release();
+		if (!m_ImageView)
+			return;
+
+		ResourceManager::SubmitResourceFree([imageView = m_ImageView, sampler = m_Sampler]()
+		{
+			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+			NV_CORE_WARN("Image2D::Release ImageView = {0}", (const void*)imageView);
+			vkDestroyImageView(vulkanDevice, imageView, nullptr);
+
+			if (sampler)
+				vkDestroySampler(vulkanDevice, sampler, nullptr);
+		});
+		m_ImageView = nullptr;
+		m_Sampler = nullptr;
 	}
 
 	void ImageView::UpdateDescriptor()
 	{
 		Image* image = ResourceManager::GetImage(m_Properties.Image);
-#if 0
 		const ImageSpecification& imgSpec = image->GetSpecification();
 		// Image Layout when use
 		if (imgSpec.Usage == ImageUsage::Storage)
 			m_DescriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 		else if (imgSpec.Format == ImageFormat::DEPTH24STENCIL8 || imgSpec.Format == ImageFormat::DEPTH32F)
 			m_DescriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-		else
+		else if(m_Properties.SamplerSpec.ShaderResource)
 			m_DescriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-#endif
-		m_DescriptorImageInfo.imageLayout = image->GetImageLayout();
+		else
+			m_DescriptorImageInfo.imageLayout = image->GetImageLayout();
 		// Image to bind to set
 		m_DescriptorImageInfo.imageView = m_ImageView;
 		// Sampler to use for set
@@ -248,24 +330,35 @@ namespace cerberus
 		if (!m_ImageView)
 			return;
 
+		ResourceManager::SubmitResourceFree([imageView = m_ImageView, sampler = m_Sampler]() mutable
+		{
+			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+			NV_CORE_WARN("Image2D::Release ImageView = {0}", (const void*)imageView);
+			vkDestroyImageView(vulkanDevice, imageView, nullptr);
 
+			if (sampler)
+				vkDestroySampler(vulkanDevice, sampler, nullptr);
+		});
+
+#if OLD_RENDERER
 		Renderer::SubmitResourceFree([imageView = m_ImageView, sampler = m_Sampler]() mutable
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			NV_CORE_WARN("Image2D::Release ImageView = {0}", (const void*)imageView);
 			vkDestroyImageView(vulkanDevice, imageView, nullptr);
 
-			if(sampler)
+			if (sampler)
 				vkDestroySampler(vulkanDevice, sampler, nullptr);
 		});
-
+#endif
 		m_ImageView = nullptr;
 
-		
+
 	}
 
 	void ImageView::Invalidate()
 	{
+		Release();
 		VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 		Image* image = ResourceManager::GetImage(m_Properties.Image);
 		const ImageSpecification& imgSpec = image->GetSpecification();
@@ -281,7 +374,7 @@ namespace cerberus
 		const VkImageAspectFlags aspectMask = Image::IsDepthFormat(imgSpec.Format) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 		VkImageViewCreateInfo imageViewCreateInfo = {};
 		imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		imageViewCreateInfo.viewType = utils::VulkanImageViewType(m_Properties.ViewType);
 		imageViewCreateInfo.format = vulkanFormat;
 		imageViewCreateInfo.flags = 0;
 		// The subresource range describes the set of mip levels (and array layers) that can be accessed through this image view
@@ -296,9 +389,9 @@ namespace cerberus
 
 		VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCreateInfo, nullptr, &m_ImageView));
 
-		if (m_Properties.SamplerSpec)
+		if (m_Properties.SamplerSpec.ShaderResource)
 		{
-			const SamplerSpecification& samplerSpec = *m_Properties.SamplerSpec;
+			const SamplerSpecification& samplerSpec = m_Properties.SamplerSpec;
 			////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 			// CREATE TEXTURE SAMPLER
 			////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -334,8 +427,9 @@ namespace cerberus
 			// Update Descriptor
 			UpdateDescriptor();
 		}
-		
-		// Move to TextureStorage class
+
+		// TODO: Move to TextureStorage class
+#if OLD_RENDERER
 		if (m_Properties.Usage == ImageUsage::Storage)
 		{
 			// Transition image to GENERAL layout
@@ -355,5 +449,6 @@ namespace cerberus
 
 			Renderer::FlushCommandBuffer(commandBuffer);
 		}
-	
+#endif
 	}
+}

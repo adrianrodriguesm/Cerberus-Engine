@@ -114,10 +114,10 @@ namespace cerberus
 		}
 
 		VkValidationFeatureEnableEXT enables[] = { /*VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,*/  VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
-												   VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT, VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT };
+												   /*VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT,*/ VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT};
 		VkValidationFeaturesEXT features = {};
 		features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-		features.enabledValidationFeatureCount = 4;
+		features.enabledValidationFeatureCount = sizeof(enables)/sizeof(VkValidationFeatureEnableEXT);
 		features.pEnabledValidationFeatures = enables;
 
 		createInfo.pNext = &features;

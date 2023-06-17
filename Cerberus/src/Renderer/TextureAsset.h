@@ -12,7 +12,7 @@ namespace cerberus
 	struct TextureMetadata
 	{
 		std::string DebugName = "None";
-		std::filesystem::path& FilePath;
+		std::filesystem::path FilePath;
 		
 		TextureType TextureType = TextureType::Default;
 		SamplerWrap SamplerWrap = SamplerWrap::Repeat;

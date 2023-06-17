@@ -19,6 +19,17 @@ namespace cerberus
 	void UniformBuffer::SetData(void* data, uint32_t size, uint32_t offset)
 	{
 		m_LocalData.Write(data, size, offset);
+		GPUBuffer* buffer = ResourceManager::GetBuffer(m_UniformBuffer);
+		ResourceAllocator allocator("UniformBuffer");
+		// Copy data to staging buffer
+		// 1. Create pointer to   a point in normal memory and  "Map" the uniform buffer memory to that point
+		uint8_t* destData = allocator.MapMemory<uint8_t>(buffer->Allocation);
+		// 2. Copy memory to the point
+		memcpy(destData, (byte*)m_LocalData.Data + offset, m_LocalData.Size);
+		// 3. Unmap the uniform buffer memory
+		allocator.UnmapMemory(buffer->Allocation);
+
+#if OLD_RENDERER
 		UniformBuffer* instance = this;
 		Renderer::Submit([instance, offset] () mutable
 		{
@@ -32,20 +43,19 @@ namespace cerberus
 			// 3. Unmap the uniform buffer memory
 			allocator.UnmapMemory(buffer->Allocation);
 		});
+#endif
 	}
 	void UniformBuffer::Release()
 	{
-		// In case of creating a uniform buffer and never set the data
-		/** /
-		if (!m_MemoryAllocation)
-			return;
-		/**/
 		Handle<GPUBuffer> uniformBuffer = m_UniformBuffer;
-		Renderer::SubmitResourceFree([uniformBuffer]()
+		ResourceManager::DestroyBuffer(uniformBuffer);
+#if OLD_RENDERER
+		Renderer::SubmitResourceFree([this]()
 		{
+			Handle<GPUBuffer> uniformBuffer = m_UniformBuffer;
 			ResourceManager::DestroyBuffer(uniformBuffer);
 		});
-		
+#endif
 		m_LocalData.Release();
 	
 	}

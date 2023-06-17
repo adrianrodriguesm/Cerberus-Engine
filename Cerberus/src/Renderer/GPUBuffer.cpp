@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "GPUBuffer.h"
-
+#include "Renderer/ResourceManager.h"
 namespace cerberus
 {
 	namespace utils
@@ -19,6 +19,11 @@ namespace cerberus
 				return VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 			case GPUBufferUsage::StagingUsage:
 				return VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+			case GPUBufferUsage::UniformBufferUsage:
+				return VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+			default:
+				CORE_ASSERT(false, "Unknow buffer usage type");
+				break;
 			}
 			return 0;
 		}
@@ -39,21 +44,22 @@ namespace cerberus
 		// Allocate and create the actual buffer
 		ResourceAllocator allocator(DebugName);
 		Allocation = allocator.AllocateBuffer(bufferCreateInfo, bufferSpec.MemoryUsage, Buffer);
-
-		// Buffer info and data offset info
-		BufferDescriptorInfo = {};
-		BufferDescriptorInfo.buffer = Buffer;						// Buffer to get data from
-		BufferDescriptorInfo.offset = 0;							// Position of start of data
-		BufferDescriptorInfo.range = bufferSpec.Size;				// Size of data
 	}
 
 	GPUBuffer::~GPUBuffer()
 	{
-		if (Buffer)
+		if (!Buffer || !Allocation)
 		{
-			ResourceAllocator allocator(DebugName);
-			allocator.DestroyBuffer(Buffer, Allocation);
-			Buffer = nullptr;
+			return;
 		}
+
+		ResourceManager::SubmitResourceFree([name = DebugName, buffer = Buffer, allocation = Allocation]()
+		{
+			ResourceAllocator allocator(name);
+			allocator.DestroyBuffer(buffer, allocation);
+		});
+		
+		Buffer = nullptr;
+
 	}
 }

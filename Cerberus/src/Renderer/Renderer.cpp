@@ -8,6 +8,7 @@
 #include "Utils/StringUtils.h"
 #include "ImGui/ImGuizmo.h"
 #include "ImGui/ImGuiColors.h"
+#include "Renderer/ResourceManager.h"
 
 #include "imgui.h"
 #ifndef IMGUI_IMPL_API
@@ -40,6 +41,9 @@ namespace cerberus
 		DescriptorAllocator* DescriptorAllocator;
 		DescriptorLayoutCache* DescriptorLayoutCache;
 
+		CommandBuffer* MainCommandBuffer;
+		CommandBuffer* SwapchainCommandBuffer;
+
 		struct WriteDescriptorData
 		{
 			uint32_t Set;
@@ -53,9 +57,6 @@ namespace cerberus
 		Ref<ShaderLibrary> ShaderLibrary;
 
 		VkPhysicalDeviceLimits DeviceLimits;
-
-		Ref<CommandBuffer> MainCommandBuffer;
-
 	};
 
 	static RendererData* s_Data;
@@ -141,24 +142,28 @@ namespace cerberus
 		s_Data->EmptyEnvironment->RadianceMap = s_Data->BlackCubeTexture;
 		s_Data->EmptyEnvironment->DebugName = "Empty Environment";
 
-		s_Data->MainCommandBuffer = CommandBuffer::CreateFromSwapchain();
+		s_Data->MainCommandBuffer = new CommandBuffer(ResourceManager::GetFramesInFlight(), "Main Command Buffer");
+		s_Data->SwapchainCommandBuffer = new CommandBuffer(true, "Swapchain");
 		// Compile Shader and Create default textures
 		Renderer::ExecuteRenderQueue();
 		Renderer::InitImGui();
 
 		s_Data->DefaultMaterial = CreateRef<MaterialAsset>();
+
+
 		s_Data->DefaultMaterial->SetAlbedoColor({ 1.f, 0, 1.f });
 	}
 
 	void Renderer::Shutdown()
 	{
+#if OLD_RENDERER
 		s_Data->ShaderLibrary->SubmitResourceFree();
 		s_Data->WhiteTexture->GetImage()->Release();
 		s_Data->BrdfLutTexture->GetImage()->Release();
 		s_Data->BlackCubeTexture->Release();
 		s_Data->BlackTexture->GetImage()->Release();
 		s_Data->EmptyEnvironment = nullptr;
-		
+#endif	
 		ComputePipeline::ReleaseComputeFence();
 		Renderer::ExecuteRenderQueue();
 		
@@ -181,6 +186,9 @@ namespace cerberus
 		delete s_Data->DescriptorAllocator;
 		delete s_Data->PersistentDescriptorAllocator;
 		delete s_Data->DescriptorLayoutCache;
+
+		delete s_Data->MainCommandBuffer;
+		delete s_Data->SwapchainCommandBuffer;
 
 		s_Data->RendererDescriptorSetCache.clear();
 
@@ -300,23 +308,20 @@ namespace cerberus
 		vkDestroyDescriptorPool(device, s_Data->ImGuiDescriptorPool, nullptr);
 	}
 
-	void Renderer::RenderImGui(Ref<CommandBuffer> commandBuffer)
+	void Renderer::RenderImGui()
 	{
-		Renderer::Submit([commandBuffer]() mutable
+		Renderer::Submit([]() mutable
 		{
-			if (!commandBuffer)
-				commandBuffer = s_Data->MainCommandBuffer;
-
-			BeginImGui(commandBuffer);
+			BeginImGui(s_Data->MainCommandBuffer);
 
 			auto& application = Application::Get();
 			application.OnImGuiRender();
 
-			EndImGui(commandBuffer);
+			EndImGui(s_Data->MainCommandBuffer);
 		});
 	}
 
-	void Renderer::BeginImGui(Ref<CommandBuffer> CommandBuffer)
+	void Renderer::BeginImGui(CommandBuffer* commandBuffer)
 	{
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -324,7 +329,7 @@ namespace cerberus
 		ImGuizmo::BeginFrame();
 	}
 
-	void Renderer::EndImGui(Ref<CommandBuffer> CommandBuffer)
+	void Renderer::EndImGui(CommandBuffer* commandBuffer)
 	{
 		ImGui::Render();
 
@@ -542,6 +547,7 @@ namespace cerberus
 	static std::vector<std::vector<std::vector<VkWriteDescriptorSet>>>& RetrieveOrCreateUniformBufferWriteDescriptors(Ref<UniformBufferSet> uniformBufferSet, Ref<Shader> shader)
 	{
 		size_t shaderHash = shader->GetHash();
+#if OLD_RENDERER
 		// If the uniform buffer already extis in the map use that write descriptor set
 		if (s_Data->UniformBufferWriteDescriptorCache.find(uniformBufferSet.get()) != s_Data->UniformBufferWriteDescriptorCache.end())
 		{
@@ -584,15 +590,17 @@ namespace cerberus
 
 			}
 		}
-
+#endif
 		return s_Data->UniformBufferWriteDescriptorCache[uniformBufferSet.get()][shaderHash];
 	}
 
 	void Renderer::UpdateMaterialForRendering(Ref<Material> material, Ref<UniformBufferSet> uniformBufferSet)
 	{
+#if OLD_RENDERER
 		uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 		auto writeDescriptors = RetrieveOrCreateUniformBufferWriteDescriptors(uniformBufferSet, material->GetShader());
 		material->UpdateForRender(writeDescriptors);
+#endif
 	}
 
 	VkDescriptorSet Renderer::AllocateDescriptorSet(VkDescriptorSetLayout& layout, bool persistent)
@@ -605,12 +613,91 @@ namespace cerberus
 		return Application::Get().GetWindow()->GetRendererContext();
 	}
 
-	void Renderer::BeginRenderPass(Ref<CommandBuffer> CommandBuffer, Ref<RenderPass> renderPass, bool explicitClear)
+	void Renderer::BeginRenderPass(CommandBuffer* commandBuffer, Handle<RenderPass> hdRenderPass, Handle<Framebuffer> hdFramebuffer, bool explicitClear)
 	{
+		uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+		
+		Framebuffer* framebuffer = ResourceManager::GetFramebuffer(hdFramebuffer);
+		RenderPass* renderPass = ResourceManager::GetRenderPass(hdRenderPass);
+
+		VkCommandBuffer vulkanCmdBuffer = commandBuffer->GetCommandBuffer(frameIndex);
+		uint32_t width = framebuffer->GetWidth();
+		uint32_t height = framebuffer->GetHeight();
+		// Information about how to begin a render pass (only needed for graphical applications)
+		VkRenderPassBeginInfo renderPassBeginInfo = {};
+		renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		renderPassBeginInfo.renderPass = renderPass->GetHandle();				// Render Pass to begin
+		renderPassBeginInfo.renderArea.offset = { 0, 0 };						// Start point of render pass in pixels
+		renderPassBeginInfo.renderArea.extent = { width, height };				// Size of region to run render pass on (starting at offset)
+
+
+		// A clear value for each attachment
+		// Each element represent an attachement of the renderpass/framebuffer
+		// The order is important becuase is the same as the attachments in renderpass/framebuffer
+		std::vector< VkClearValue> clearValues = framebuffer->GetVulkanClearValues();
+		renderPassBeginInfo.pClearValues = clearValues.data();
+		renderPassBeginInfo.clearValueCount = (uint32_t)clearValues.size();
+		renderPassBeginInfo.framebuffer = framebuffer->GetHandle();
+		// Begin Render Pass
+		vkCmdBeginRenderPass(vulkanCmdBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+
+		if (explicitClear)
+		{
+			const uint32_t colorAttachmentCount = (uint32_t)framebuffer->GetColorAttachmentCount();
+			const uint32_t totalAttachmentCount = colorAttachmentCount + (framebuffer->HasDepthAttachment() ? 1 : 0);
+			CORE_ASSERT(clearValues.size() == totalAttachmentCount, "");
+
+			std::vector<VkClearAttachment> attachments(totalAttachmentCount);
+			std::vector<VkClearRect> clearRects(totalAttachmentCount);
+			for (uint32_t i = 0; i < colorAttachmentCount; i++)
+			{
+				attachments[i].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+				attachments[i].colorAttachment = i;
+				attachments[i].clearValue = clearValues[i];
+
+				clearRects[i].rect.offset = { (int32_t)0, (int32_t)0 };
+				clearRects[i].rect.extent = { width, height };
+				clearRects[i].baseArrayLayer = 0;
+				clearRects[i].layerCount = 1;
+			}
+
+			if (framebuffer->HasDepthAttachment())
+			{
+				attachments[colorAttachmentCount].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+				attachments[colorAttachmentCount].clearValue = clearValues[colorAttachmentCount];
+				clearRects[colorAttachmentCount].rect.offset = { (int32_t)0, (int32_t)0 };
+				clearRects[colorAttachmentCount].rect.extent = { width, height };
+				clearRects[colorAttachmentCount].baseArrayLayer = 0;
+				clearRects[colorAttachmentCount].layerCount = 1;
+			}
+
+			vkCmdClearAttachments(vulkanCmdBuffer, totalAttachmentCount, attachments.data(), totalAttachmentCount, clearRects.data());
+
+		}
+
+		VkViewport viewport = {};
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+		viewport.x = 0.f;
+		viewport.y = 0.f;
+		viewport.width = (float)width;
+		viewport.height = (float)height;
+		// Update dynamic viewport state
+		vkCmdSetViewport(vulkanCmdBuffer, 0, 1, &viewport);
+
+
+		// Update dynamic scissor state
+		VkRect2D scissor = {};
+		scissor.extent = { width, height };
+		scissor.offset = { 0, 0 };
+		vkCmdSetScissor(vulkanCmdBuffer, 0, 1, &scissor);
+#if OLD_RENDERER
 		Renderer::Submit([CommandBuffer, renderPass, explicitClear]()
 		{
 			Ref<Framebuffer> framebuffer = renderPass->GetSpecification().TargetFramebuffer;
 			uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+
 			VkCommandBuffer commandBuffer = CommandBuffer->GetCommandBuffer(frameIndex);
 			uint32_t width, height;
 			if (framebuffer->GetSpecification().SwapchainTarget)
@@ -695,11 +782,17 @@ namespace cerberus
 			vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 		});
+#endif
 
 	}
 
-	void Renderer::EndRenderPass(Ref<CommandBuffer> CommandBuffer)
+	void Renderer::EndRenderPass(CommandBuffer* commandBuffer)
 	{
+		// End Render Pass
+		vkCmdEndRenderPass(commandBuffer->GetCommandBuffer(Renderer::GetCurrentFrameIndex()));
+
+		s_Data->DrawCallCount = 0;
+#if OLD_RENDERER
 		Renderer::Submit([CommandBuffer]()
 		{
 			// End Render Pass
@@ -707,6 +800,7 @@ namespace cerberus
 
 			s_Data->DrawCallCount = 0;
 		});
+#endif
 	}
 
 	VkCommandBuffer Renderer::GetCommandBuffer(bool beginCommand, bool compute)
@@ -734,6 +828,14 @@ namespace cerberus
 			VK_CHECK_RESULT(vkBeginCommandBuffer(cmdBuffer, &cmdBufferBeginInfo));
 		}
 		return cmdBuffer;
+	}
+
+	CommandBuffer* Renderer::GetMainCommandBuffer(bool swapchain)
+	{
+		if(swapchain)
+			return s_Data->SwapchainCommandBuffer;
+		else
+			return s_Data->MainCommandBuffer;
 	}
 
 	VkCommandBuffer Renderer::CreateSecondaryCommandBuffer()
@@ -798,6 +900,7 @@ namespace cerberus
 
 	Ref<EnvironmentMap> Renderer::CreateEnvironmentMap(const std::string& filepath)
 	{
+#if 0
 		// Tiering settings
 		const uint32_t environmentMapResolution = 1024;
 		const uint32_t irradianceMapComputeSamples = 1024;
@@ -952,10 +1055,18 @@ namespace cerberus
 		environment->IrradianceMap = envIrradiance;
 		environment->DebugName = utils::GetFilename(filepath);
 		return environment;
+#endif
+		Ref<EnvironmentMap> environment = CreateRef<EnvironmentMap>();
+		environment->EquirectangularTex = s_Data->BlackTexture;
+		environment->RadianceMap = s_Data->BlackCubeTexture;
+		environment->IrradianceMap = s_Data->BlackCubeTexture;
+		environment->DebugName = utils::GetFilename(filepath);
+		return environment;
 	}
 
-	void Renderer::SetSceneEnvironment(SceneRenderer* sceneRenderer, const Ref<EnvironmentMap>& environment, const Ref<Image2D>& shadowImage)
+	void Renderer::SetSceneEnvironment(SceneRenderer* sceneRenderer, const Ref<EnvironmentMap>& environment, const Ref<Image>& shadowImage)
 	{
+#if OLD_RENDERER
 		Renderer::Submit([sceneRenderer, environment, shadowImage]()
 		{
 			Ref<Shader> pbrShader = Renderer::GetShaderLibrary().Get("PBR");
@@ -1006,6 +1117,7 @@ namespace cerberus
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			vkUpdateDescriptorSets(vulkanDevice, (uint32_t)writeDescriptors.size(), writeDescriptors.data(), 0, nullptr);
 		});
+#endif
 	}
 
 	uint32_t Renderer::GetCurrentFrameIndex()
@@ -1015,8 +1127,35 @@ namespace cerberus
 
 
 
-	void Renderer::RenderFullscreenQuad(Ref<CommandBuffer> CommandBuffer, Ref<Pipeline> pipeline, Ref<UniformBufferSet> uniformBufferSet, Ref<Material> material)
+	void Renderer::RenderFullscreenQuad(CommandBuffer* commandBuffer, Handle<GraphicsPipeline> hdPipeline, Handle<BindGroup> hdBindGroup)
 	{
+		uint32_t currentFrame = Renderer::GetCurrentFrameIndex();
+		VkCommandBuffer vulkanCommandBuffer = commandBuffer->GetCommandBuffer(currentFrame);
+
+		GraphicsPipeline* pipeline = ResourceManager::GetGraphicsPipeline(hdPipeline);
+
+		// Bind Pipeline to be used in render pass
+		vkCmdBindPipeline(vulkanCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->GetHandle());
+
+		
+		// Descriptor Sets
+		BindGroup* bindGroup = ResourceManager::GetBindGroup(hdBindGroup);
+		if (bindGroup)
+		{
+			bindGroup->Update(currentFrame);
+			VkPipelineLayout pipelineLayout = pipeline->GetVulkanPipelineLayout();
+			VkDescriptorSet descriptorSets = bindGroup->GetHandle(currentFrame);
+			vkCmdBindDescriptorSets(vulkanCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets, 0, nullptr);
+		}
+		// Bind Material push constant (Fragment)
+		/** /
+		Buffer materialPushConstantBuffer = material->GetUniformBufferStorage();
+		if (materialPushConstantBuffer.Size)
+			vkCmdPushConstants(vulkanCommandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, materialPushConstantBuffer.Size, materialPushConstantBuffer.Data);
+		/**/
+		vkCmdDraw(vulkanCommandBuffer, 3, 1, 0, 0);
+
+#if OLD_RENDERER
 		Renderer::Submit([CommandBuffer, uniformBufferSet, pipeline, material]() mutable
 		{
 			uint32_t currentFrame = Renderer::GetCurrentFrameIndex();
@@ -1040,12 +1179,15 @@ namespace cerberus
 			
 			vkCmdDraw(vulkanCommandBuffer, 3, 1, 0, 0);
 		});
+#endif
 	}
 
-	void Renderer::RenderMesh(Ref<CommandBuffer> CommandBuffer, Ref<UniformBufferSet> uniformBufferSet, Ref<Pipeline> pipeline, Ref<Mesh> mesh, Ref<MaterialTable> materialTable, glm::mat4& transform)
+	/** /
+	void Renderer::RenderMesh(Ref<CommandBuffer> CommandBuffer, Ref<UniformBufferSet> uniformBufferSet, Ref<GraphicsPipeline> pipeline, Ref<Mesh> mesh, Ref<MaterialTable> materialTable, glm::mat4& transform)
 	{
 		Renderer::Submit([CommandBuffer, uniformBufferSet, pipeline, mesh, materialTable, transform]() mutable
 		{
+#if OLD_RENDERER
 			Ref<MeshSource> meshSource = mesh->GetMeshSource();
 			uint32_t currentFrame = Renderer::GetCurrentFrameIndex();
 			VkCommandBuffer vulkanCommandBuffer = CommandBuffer->GetCommandBuffer(currentFrame);
@@ -1099,12 +1241,13 @@ namespace cerberus
 				vkCmdDrawIndexed(vulkanCommandBuffer, submesh.IndexCount, 1, submesh.BaseIndex, submesh.BaseVertex, 0);
 				s_Data->DrawCallCount++;
 			}
-				
+#endif
 		});
 	}
 
 	void Renderer::RenderMeshWithMaterial(Ref<CommandBuffer> CommandBuffer, Ref<UniformBufferSet> uniformBufferSet, Ref<Pipeline> pipeline, Ref<Mesh> mesh, glm::mat4& transform, Ref<Material> material, const Buffer& additionalUniforms)
 	{
+#if OLD_RENDERER
 		Buffer pushConstantBuffer;
 		pushConstantBuffer.Allocate(sizeof(glm::mat4) + additionalUniforms.Size);
 		if (additionalUniforms.Size)
@@ -1160,10 +1303,13 @@ namespace cerberus
 			}
 			pushConstantBuffer.Release();
 		});
-	}
 
+#endif
+	}
+	/**/
 	void Renderer::DispatchComputeShader(Ref<CommandBuffer> CommandBuffer, Ref<ComputePipeline> pipeline, Ref<UniformBufferSet> uniformBufferSet, Ref<Material> material, const glm::ivec3& workGroups, Buffer pushConstantBuffer)
 	{
+#if OLD_RENDERER
 		Renderer::Submit([CommandBuffer, uniformBufferSet, pipeline, workGroups, material, pushConstantBuffer]() mutable
 		{
 			uint32_t currentFrame = Renderer::GetCurrentFrameIndex();
@@ -1180,6 +1326,7 @@ namespace cerberus
 			pipeline->End();
 
 		});
+#endif
 	}
 
 	VkPhysicalDeviceLimits Renderer::GetDeviceLimits()

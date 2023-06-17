@@ -48,8 +48,10 @@ namespace cerberus
 		UI_RenderTittleBar();
 		UI_Viewport();
 		m_SceneRenderer->OnImGuiRender();
+#if OLD_RENDERER
 		m_EditorPanelManager->OnImGuiRender();
 		AssetEditorManager::OnImGuiRender();
+#endif
 	}
 
 	void EditorLayer::OnEvent(Event& event)
@@ -230,7 +232,6 @@ namespace cerberus
 
 			// Render viewport image
 			ui::Image(m_SceneRenderer->GetFinalPassImage(), viewportSize, { 0, 1 }, { 1, 0 });
-
 			// ImGuizmo
 			if (m_SelectedEntity && m_GizmoType != -1)
 			{

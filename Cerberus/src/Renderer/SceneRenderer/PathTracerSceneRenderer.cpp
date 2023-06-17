@@ -4,29 +4,26 @@
 #include "Asset/AssetManager.h"
 #include "Math/Matrix.h"
 #include "Renderer/ResourceManager.h"
+// TODO: Remove these to (only for test)
 #include "Renderer/ShaderCompiler.h"
+#include "Renderer/TextureAsset.h"
 namespace cerberus
 {
 
 	PathTracerSceneRenderer::PathTracerSceneRenderer(Ref<Scene> scene, const SceneRendererSpecification& spec)
 	{
-		if (m_Specification.SwapChainTarget)
-			m_CommandBuffer = CommandBuffer::CreateFromSwapchain();
-		else
-			m_CommandBuffer = CommandBuffer::Create(Renderer::GetRendererConfig().FramesInFlight, "SceneRenderer");
-
-
-		// Test
+		// Pipeline, RenderPass, Framebuffer, and BindGroup/BindGroupLayout creation
 		{
-			FramebufferSpecification preDepthFramebufferSpec;
-			preDepthFramebufferSpec.AttachmentsSpecification = { ImageFormat::RGBA };
-			preDepthFramebufferSpec.ClearColor = { 0.0f, 0.0f, 0.0f, 0.0f };
-			preDepthFramebufferSpec.DebugName = "RayTraceTest";
+			// Render Pass
+			RenderPassSpecification renderPassSpec;
+			renderPassSpec.DebugName = "RayTraceTest";
+			renderPassSpec.Attachments = { {.DebugName = "ColorAttachment", .Format = ImageFormat::RGBA,
+											.LoadOP = LOAD_OP::CLEAR, .StoreOP = STORE_OP::STORE,
+											.BlendEnabled = false, .IsRenderTarget = true } };
 
-			RenderPassSpecification preDepthRenderPassSpec;
-			preDepthRenderPassSpec.TargetFramebuffer = CreateRef<Framebuffer>(preDepthFramebufferSpec);
-			preDepthRenderPassSpec.DebugName = "RayTraceTest";
+			m_RenderPass = ResourceManager::CreateRenderPass(renderPassSpec);
 
+			// Pipeline
 			PipelineSpecification pipelineSpec;
 			pipelineSpec.DebugName = "RayTraceTest";
 			Ref<Shader> shader = Renderer::GetShaderLibrary().Get("RayTraceTest");
@@ -36,22 +33,79 @@ namespace cerberus
 			pipelineSpec.DepthTest = false;
 			pipelineSpec.DepthWrite = false;
 			// -- Render to the same target texture as the geometry pass
-			pipelineSpec.RenderPass = CreateRef<RenderPass>(preDepthRenderPassSpec);
-			m_Pipeline = CreateRef<Pipeline>(pipelineSpec);
-			m_Material = CreateRef<Material>(shader, "RayTraceTest");
+			pipelineSpec.RenderPass = m_RenderPass;
+			m_Pipeline = ResourceManager::CreateGraphicsPipeline(pipelineSpec);
 
-			BindGroupLayout::BindGroupLayoutInfo layoutInfo = ShaderReflection::ReflectLayoutInfo(shader, 3);
+			// BindGroup/BindGroupLayout
+			BindGroupLayout::BindGroupLayoutInfo layoutInfo = ShaderReflection::ReflectLayoutInfo(shader, 0);
 			m_RTBindGroupLayout = ResourceManager::CreateBindGroupLayout(layoutInfo);
+
 			BindGroupSpecification bindGroupSpec;
+			bindGroupSpec.BindGroupLayout = m_RTBindGroupLayout;
+			bindGroupSpec.Persistent = false;
+
+			m_RTBindGroup = ResourceManager::CreateBindGroup(bindGroupSpec);
+
+			// Framebuffer
+			FramebufferSpecification preDepthFramebufferSpec;
+			preDepthFramebufferSpec.DebugName = "RayTrace Framebuffer";
+			preDepthFramebufferSpec.RenderPass = m_RenderPass;
+			preDepthFramebufferSpec.Width = 1920;
+			preDepthFramebufferSpec.Height = 1080;
+
+			RenderTargetProperties rtProperties;
+			rtProperties.DebugName = "Color Target";
+			rtProperties.Format = ImageFormat::RGBA;
+			rtProperties.ShaderResource = true;
+			rtProperties.BaseMip = 0;
+			rtProperties.MipCount = 1;
+			rtProperties.BaseLayer = 0;
+			rtProperties.LayerCount = 1;
+			rtProperties.Resizable = true;
+			rtProperties.Height = 1080;
+			rtProperties.Width = 1920;
+
+			preDepthFramebufferSpec.RenderTargetsInfo = { rtProperties };
+
+			m_Framebuffer = ResourceManager::CreateFramebuffer(preDepthFramebufferSpec);
 		}
 
-		m_UniformBufferSet = CreateRef<UniformBufferSet>(Renderer::GetRendererConfig().FramesInFlight);
+		// Texture Test
+		{
+			TextureMetadata texMetadata;
+			texMetadata.FilePath = "Resources/Textures/Ronaldo.jpg";
+
+			m_TextureAsset = CreateScope<TextureAsset>(texMetadata);
+
+			TextureProperties texProp;
+			texProp.GenerateMips = true;
+			m_TextureRonaldo = ResourceManager::CreateTexture2D(m_TextureAsset->GetFormat(), m_TextureAsset->GetWidth(),
+				m_TextureAsset->GetHeight(), m_TextureAsset->GetWriteableBuffer().Data, texProp);
+
+			Texture2D* texture = ResourceManager::GetTexture2D(m_TextureRonaldo);
+
+			BindGroup* bindGroup = ResourceManager::GetBindGroup(m_RTBindGroup);
+			bindGroup->SetImageView(texture->GetImageView(), 0);
+		}
+
+
+
+		UniformBufferSetSpecification uboSetSpec;
+		uboSetSpec.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
+		uboSetSpec.Size = 100;
+		m_UniformBufferSet = CreateRef<UniformBufferSet>(uboSetSpec);
 
 		Renderer::ExecuteRenderQueue();
 	}
 
 	PathTracerSceneRenderer::~PathTracerSceneRenderer()
 	{
+		ResourceManager::DestroyTexture2D(m_TextureRonaldo);
+		ResourceManager::DestroyFramebuffer(m_Framebuffer);
+		ResourceManager::DestroyGraphicsPipeline(m_Pipeline);
+		ResourceManager::DestroyRenderPass(m_RenderPass);
+		ResourceManager::DestroyBindGroup(m_RTBindGroup);
+		ResourceManager::DestroyBindGroupLayout(m_RTBindGroupLayout);
 	}
 
 	void PathTracerSceneRenderer::BeginScene(const SceneRendererCamera& sceneRendererCamera)
@@ -60,6 +114,7 @@ namespace cerberus
 
 	void PathTracerSceneRenderer::EndScene()
 	{
+		/** /
 		m_CommandBuffer->Begin();
 		// Composite pass
 		Renderer::BeginRenderPass(m_CommandBuffer, m_Pipeline->GetSpecification().RenderPass, true);
@@ -69,6 +124,12 @@ namespace cerberus
 		Renderer::EndRenderPass(m_CommandBuffer);
 		m_CommandBuffer->End();
 		m_CommandBuffer->Submit();
+		/**/
+	}
+
+	void PathTracerSceneRenderer::FlushRenderPasses()
+	{
+
 	}
 
 	void PathTracerSceneRenderer::SubmitMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4 & transform)
@@ -77,6 +138,8 @@ namespace cerberus
 
 	void PathTracerSceneRenderer::SetViewportSize(uint32_t width, uint32_t height)
 	{
+		Framebuffer* framebuffer = ResourceManager::GetFramebuffer(m_Framebuffer);
+		framebuffer->Resize(width, height);
 	}
 
 	bool PathTracerSceneRenderer::RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform)
@@ -114,7 +177,7 @@ namespace cerberus
 		m_MeshRegister.ASRegisterInfo.UpdateTLAS = true;
 		for (uint32_t submeshIndex = 0; submeshIndex < submeshesProxy.size(); submeshIndex++)
 		{
-			Handle<MeshInstanceProxy> meshInstanceHandle = ResourceManager::CreateMeshInstanceProxy(meshProxyHandle, submeshIndex, materialTable->GetMaterial(submeshesProxy[submeshIndex].MaterialIndex));
+			Handle<MeshInstanceProxy> meshInstanceHandle = ResourceManager::CreateMeshInstanceProxy(meshProxyHandle, submeshIndex);
 			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
 			meshInstance->WorldTransform = transform * submeshesProxy[submeshIndex].Transform;
 
@@ -131,9 +194,7 @@ namespace cerberus
 		if (m_MeshRegister.ASRegisterInfo.BLASToBuild.size() > 0)
 		{
 			AccelerationStructureBuilder asBuilder;
-			asBuilder.BeginBLASBuild(
-				
-				VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+			asBuilder.BeginBLASBuild(VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
 			for (uint32_t i = 0; i < m_MeshRegister.ASRegisterInfo.BLASToBuild.size(); i++)
 			{
 				const auto& meshSourceProxy = m_MeshRegister.ASRegisterInfo.BLASToBuild[i];
@@ -160,6 +221,18 @@ namespace cerberus
 			asBuilder.EndTLASBuild(m_MeshRegister.ASRegisterInfo.TLAS);
 			m_MeshRegister.ASRegisterInfo.UpdateTLAS = false;
 		}
+		// Render Frame
+		ResourceManager::ResetDescriptorPool();
+		CommandBuffer* commnadBuffer = Renderer::GetMainCommandBuffer(m_Specification.SwapChainTarget);
+		commnadBuffer->RT_Begin();
+		{
+			Renderer::BeginRenderPass(commnadBuffer, m_RenderPass, m_Framebuffer);
+			Renderer::RenderFullscreenQuad(commnadBuffer, m_Pipeline, m_RTBindGroup);
+			Renderer::EndRenderPass(commnadBuffer);
+		}
+		commnadBuffer->RT_End();
+		commnadBuffer->RT_Submit();
+
 	}
 
 	bool PathTracerSceneRenderer::IsRegistered(const Ref<Mesh>& mesh)
@@ -196,9 +269,13 @@ namespace cerberus
 	{
 	}
 
-	Ref<Image2D> PathTracerSceneRenderer::GetFinalPassImage() const
+	Handle<ImageView> PathTracerSceneRenderer::GetFinalPassImage() const
 	{
-		return m_Pipeline->GetSpecification().RenderPass->GetSpecification().TargetFramebuffer->GetImage(0);;
+		Framebuffer* framebuffer = ResourceManager::GetFramebuffer(m_Framebuffer);
+		Handle<RenderTargetTexture> rtHandle = framebuffer->GetColorTarget(0);
+		RenderTargetTexture* renderTarget = ResourceManager::GetRenderTarget(rtHandle);
+		Handle<ImageView> imgViewHandle = renderTarget->GetImageView();
+		return imgViewHandle;
 	}
 }
 

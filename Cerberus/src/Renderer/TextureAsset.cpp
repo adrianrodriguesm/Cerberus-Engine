@@ -7,7 +7,8 @@ namespace cerberus
 		: m_Metadata(metadata)
 	{
 		int width, height, channels;
-		const auto& filePath = m_Metadata.FilePath.string().c_str();
+		std::string strFilePath = m_Metadata.FilePath.string();
+		const auto& filePath = strFilePath.c_str();
 		// Check if it is an HDR image
 		if (stbi_is_hdr(filePath))
 		{

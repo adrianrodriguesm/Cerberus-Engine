@@ -6,6 +6,7 @@
 #include "Scene/Entity.h"
 #include "Utils/FileSystem.h"
 #include "Asset/AssetImporter.h"
+#include "Renderer/TextureAsset.h"
 #include <fstream>
 namespace cerberus
 {
@@ -182,7 +183,7 @@ namespace cerberus
 				Ref<MaterialAsset> defaultMaterial = Renderer::GetDefaultPBRMaterial();
 				for (uint32_t i = 0; i < materialTable->GetMaterialCount(); i++)
 				{
-					Ref<MaterialAsset> material = materialTable->GetMaterial(i);
+					Ref<MaterialAsset> material = AssetManager::GetAsset<MaterialAsset>(materialTable->GetMaterial(i));
 					AssetHandle handle = (material != defaultMaterial) ? material->Handle : (AssetHandle)0;
 					out << YAML::Key << i << YAML::Value << handle;
 
@@ -283,9 +284,12 @@ namespace cerberus
 							uint32_t index = materialEntry.first.as<uint32_t>();
 							AssetHandle materialAssetHandle = materialEntry.second.as<AssetHandle>();
 							if (materialAssetHandle && AssetManager::IsAssetHandleValid(materialAssetHandle))
-								mc.MaterialTable->SetMaterial(index, AssetManager::GetAsset<MaterialAsset>(materialAssetHandle));
+								mc.MaterialTable->SetMaterial(index, materialAssetHandle);
+							// OLD_RENDERER
+							/** /
 							else
 								mc.MaterialTable->SetMaterial(index, defaultPBRMaterial);
+							/**/
 						}
 					}
 
@@ -347,25 +351,33 @@ namespace cerberus
 			{
 				Ref<Texture2D> albedoMap = material->GetAlbedoMap();
 				bool hasAlbedoMap = albedoMap ? (albedoMap != Renderer::GetWhiteTexture()) : false;
-				AssetHandle albedoMapHandle = hasAlbedoMap ? albedoMap->Handle : AssetHandle(0);
+				// OLD_RENDERER
+				// AssetHandle albedoMapHandle = hasAlbedoMap ? albedoMap->Handle : AssetHandle(0);
+				AssetHandle albedoMapHandle = AssetHandle();
 				out << YAML::Key << "AlbedoMapHandle" << YAML::Value << (uint64_t)albedoMapHandle;
 			}
 			{
 				Ref<Texture2D> normalMap = material->GetNormalMap();
 				bool hasNormalMap = normalMap ? (normalMap != Renderer::GetWhiteTexture()) : false;
-				AssetHandle normalMapHandle = hasNormalMap ? normalMap->Handle : AssetHandle(0);
+				// OLD_RENDERER
+				//AssetHandle normalMapHandle = hasNormalMap ? normalMap->Handle : AssetHandle(0);
+				AssetHandle normalMapHandle = AssetHandle();
 				out << YAML::Key << "NormalMapHandle" << YAML::Value << (uint64_t)normalMapHandle;
 			}
 			{
 				Ref<Texture2D> metalnessMap = material->GetMetalnessMap();
 				bool hasMetalnessMap = metalnessMap ? (metalnessMap != Renderer::GetWhiteTexture()) : false;
-				AssetHandle metalnessMapHandle = hasMetalnessMap ? metalnessMap->Handle : AssetHandle(0);
+				// OLD_RENDERER
+				//AssetHandle metalnessMapHandle = hasMetalnessMap ? metalnessMap->Handle : AssetHandle(0);
+				AssetHandle metalnessMapHandle =  AssetHandle();
 				out << YAML::Key << "MetalnessMapHandle" << YAML::Value << (uint64_t)metalnessMapHandle;
 			}
 			{
 				Ref<Texture2D> roughnessMap = material->GetRoughnessMap();
 				bool hasRoughnessMap = roughnessMap ? (roughnessMap != Renderer::GetWhiteTexture()) : false;
-				AssetHandle roughnessMapHandle = hasRoughnessMap ? roughnessMap->Handle : AssetHandle(0);
+				// OLD_RENDERER
+				//AssetHandle roughnessMapHandle = hasRoughnessMap ? roughnessMap->Handle : AssetHandle(0);
+				AssetHandle roughnessMapHandle = AssetHandle();
 				out << YAML::Key << "RoughnessMapHandle" << YAML::Value << (uint64_t)roughnessMapHandle;
 			}
 
@@ -379,6 +391,7 @@ namespace cerberus
 
 	bool MaterialSerializer::TryToLoadData(const AssetMetadata& metadata, Ref<Asset>& asset)
 	{
+#if OLD_RENDERER
 		const auto& filepath = metadata.FilePath.string();
 		YAML::Node data = YAML::LoadFile(filepath);
 		if (!data["Material"])
@@ -422,6 +435,9 @@ namespace cerberus
 		material->Handle = metadata.Handle;
 		asset = material;
 		return true;
+#else
+		return false;
+#endif
 	}
 
 	void TextureSerializer::Serialize(const AssetMetadata& metadata, const Ref<Asset>& asset)
@@ -477,12 +493,17 @@ namespace cerberus
 
 	bool TextureSerializer::TryToLoadData(const AssetMetadata& metadata, Ref<Asset>& asset)
 	{
+#if OLD_RENDERER
 		TextureProperties textureProp = LoadTextureImportSettings(metadata.FilePath);
-		Ref<Texture2D> texture = CreateRef<Texture2D>(metadata.FilePath.string(), textureProp);
+
+		Ref<TextureAsset> texture = CreateRef<TextureAsset>(metadata.FilePath.string(), textureProp);
 
 		texture->Handle = metadata.Handle;
 		asset = texture;
 
 		return texture->Loaded();
+#else
+		return false;
+#endif
 	}
 }

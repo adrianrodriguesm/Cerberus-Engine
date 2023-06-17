@@ -12,7 +12,7 @@ namespace cerberus
 {
 	namespace utils
 	{
-
+		
 		static const char* GetCacheDirectory()
 		{
 			// TODO: make sure the assets directory is valid
@@ -106,6 +106,7 @@ namespace cerberus
 
 	}
 
+	static bool s_PrintShaders = false;
 	static std::unordered_map<uint32_t, std::unordered_map<uint32_t, Shader::UniformBuffer*>> s_UniformBuffers; // set -> binding point -> buffer
 	//static std::unordered_map<uint32_t, std::unordered_map<uint32_t, VulkanShader::StorageBuffer*>> s_StorageBuffers; // set -> binding point -> buffer
 
@@ -178,12 +179,16 @@ namespace cerberus
 			std::string source = utils::ReadShaderFromFile(instance->m_AssetPath);
 
 			instance->m_ShaderSource = instance->PreProcess(source);
-			for (auto [flag, shader] : instance->m_ShaderSource)
+			if (s_PrintShaders)
 			{
-				NV_CORE_TRACE("----------");
-				NV_CORE_TRACE(shader);
-				NV_CORE_TRACE("----------");
+				for (auto [flag, shader] : instance->m_ShaderSource)
+				{
+					NV_CORE_TRACE("----------");
+					NV_CORE_TRACE(shader);
+					NV_CORE_TRACE("----------");
+				}
 			}
+
 			//std::unordered_map<VkShaderStageFlagBits, std::vector<uint32_t>> shaderData;
 			instance->CompileOrGetVulkanBinary(instance->m_ShaderByteCodeData, forceCompile);
 			instance->LoadAndCreateShaders(instance->m_ShaderByteCodeData);

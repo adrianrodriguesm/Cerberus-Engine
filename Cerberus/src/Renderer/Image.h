@@ -1,9 +1,17 @@
 #pragma once
 #include "Core/Buffer.h"
 #include "Renderer/ResourceAllocator.h"
+#include "Renderer/VulkanUtility.h"
+#include "Core/Handle.h"
 namespace cerberus
 {
-	enum class ImageUsage
+	enum ImageFlags : uint8_t
+	{
+		NONE = 0,
+		CUBE_COMPATIBLE = BIT(1),
+		SAMPLE_COMPATIBLE = BIT(2)
+	};
+	enum class ImageUsage : uint8_t
 	{
 		None = 0,
 		Sampler,
@@ -11,7 +19,7 @@ namespace cerberus
 		Storage
 	};
 
-	enum class ImageFormat
+	enum class ImageFormat : uint8_t
 	{
 		None = 0,
 		RED32F,
@@ -36,10 +44,12 @@ namespace cerberus
 	{
 		ImageFormat Format = ImageFormat::RGBA;
 		ImageUsage Usage = ImageUsage::Sampler;
+
 		uint32_t Width = 1;
 		uint32_t Height = 1;
 		uint32_t Mips = 1;
 		uint32_t Layers = 1;
+		uint32_t Flags;
 		std::string DebugName;
 	};
 
@@ -47,7 +57,7 @@ namespace cerberus
 	{
 	public:
 		Image(const ImageSpecification& specification);
-		~Image() {}
+		~Image();
 
 		void Invalidate();
 		void Release();
@@ -62,10 +72,19 @@ namespace cerberus
 		
 		const VkImageLayout GetImageLayout() const { return m_CurrentImgLayout; }
 
+		void InsertImageMemoryBarrier(VkCommandBuffer cmdbuffer,
+			VkAccessFlags srcAccessMask,
+			VkAccessFlags dstAccessMask,
+			VkImageLayout newImageLayout,
+			VkPipelineStageFlags srcStageMask,
+			VkPipelineStageFlags dstStageMask,
+			VkImageSubresourceRange subresourceRange);
+
 		void SetLayout(VkCommandBuffer cmd, VkImageLayout newImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask);
 		void SetLayout(VkImageLayout newImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask);
-
+		void SetImageLayout(const utils::ImageLayoutSpecification& imgLayoutSpec);
 		VkImage GetHandle() const { return m_Image; }
+		uint64_t GetHash() const { return (uint64_t)(void*)m_Image; }
 
 		static inline uint32_t GetImageFormatBPP(ImageFormat format)
 		{
@@ -104,10 +123,13 @@ namespace cerberus
 			return false;
 		}
 	private:
+		bool HasFlags(ImageFlags flags) const { return (m_Specification.Flags & flags) == flags; }
+		bool HasAnyFlags(ImageFlags flags) const { return (m_Specification.Flags & flags) != 0; }
+	private:
 		ImageSpecification m_Specification;
 		VkImage m_Image;
 		VmaAllocation m_MemoryAlloc = nullptr;
-		VkImageLayout m_CurrentImgLayout;
+		VkImageLayout m_CurrentImgLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	};
 
 	enum class SamplerWrap
@@ -129,7 +151,15 @@ namespace cerberus
 		SamplerWrap SamplerWrap = SamplerWrap::Repeat;
 		SamplerFilter SamplerFilter = SamplerFilter::Linear;
 		bool Anisotropy = false;
-		float MaxLOD, MinLOD;
+		bool ShaderResource = true;
+		// Each LOD represent a mip level
+		float MaxLOD /* max mip level */, MinLOD = 0;
+	};
+
+	enum class ImageViewType : uint8_t
+	{
+		Image2D,
+		ImageCube
 	};
 
 	struct ImageViewProperties
@@ -137,7 +167,8 @@ namespace cerberus
 		Handle<Image> Image;
 		uint32_t BaseMip, MipCount;
 		uint32_t BaseLayer, LayerCount;
-		SamplerSpecification* SamplerSpec;
+		ImageViewType ViewType = ImageViewType::Image2D;
+		SamplerSpecification SamplerSpec;
 	};
 
 	class ImageView final
@@ -150,17 +181,19 @@ namespace cerberus
 		void Invalidate();
 		void UpdateDescriptor();
 
+		ImageViewProperties& GetProperties() { return m_Properties; }
 		const VkDescriptorImageInfo& GetImageDescriptorInfo() { return m_DescriptorImageInfo; }
 		uint64_t GetHash() const { return (uint64_t)m_ImageView; }
+
+		Handle<Image> GetImageHandle() const { return m_Properties.Image; }
 
 		VkImageView GetHandle() const { return m_ImageView; }
 
 	private:
-		Handle<Image> m_Image;
 		ImageViewProperties m_Properties;
 
-		VkImageView m_ImageView;
-		VkSampler m_Sampler;
+		VkImageView m_ImageView = VK_NULL_HANDLE;
+		VkSampler m_Sampler = VK_NULL_HANDLE;
 		VkDescriptorImageInfo m_DescriptorImageInfo = {};
 	};
 

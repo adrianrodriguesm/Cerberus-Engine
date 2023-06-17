@@ -1,10 +1,12 @@
 #pragma once
 #include "Renderer/Shader.h"
+#include "Renderer/TextureAsset.h"
 #include "Renderer/Texture.h"
 #include "Asset/Asset.h"
 
 namespace cerberus
 {
+	/**/
 	class Material
 	{
 	public:
@@ -32,7 +34,7 @@ namespace cerberus
 
 		void Set(const std::string& name, const Ref<TextureCube>& texture);
 		void Set(const std::string& name, const Ref<Texture2D>& texture);
-		void Set(const std::string& name, const Ref<Image2D>& image);
+		void Set(const std::string& name, const Ref<Image>& image);
 		//void Set(const std::string& name, const Ref<Texture2D>& texture, uint32_t arrayIndex);
 
 		template <typename T>
@@ -106,7 +108,7 @@ namespace cerberus
 			PendingDescriptorType Type = PendingDescriptorType::None;
 			VkWriteDescriptorSet WriteDescriptorSet;
 			Ref<Texture> Texture;
-			Ref<Image2D> Image;
+			Ref<Image> Image;
 		};
 	private:
 		void AllocateStorage();
@@ -118,7 +120,7 @@ namespace cerberus
 		// TODO: Change name
 		Buffer m_UniformBufferStorage;
 		std::vector<Ref<Texture>> m_Textures;
-		std::vector<Ref<Image2D>> m_Images;
+		std::vector<Ref<Image>> m_Images;
 		std::unordered_map<uint32_t, std::shared_ptr<PendingDescriptor>> m_ResidentDescriptors;
 		std::vector<VkDescriptorSet> m_DescriptorSets;
 		std::vector<std::vector<VkWriteDescriptorSet>> m_WriteDescriptors;
@@ -177,7 +179,7 @@ namespace cerberus
 		Ref<Material> m_Material;
 
 	};
-
+	/**/
 	class MaterialTable
 	{
 	public:
@@ -186,23 +188,23 @@ namespace cerberus
 		~MaterialTable();
 
 		bool HasMaterial(uint32_t materialIndex) const { return m_Materials.find(materialIndex) != m_Materials.end(); }
-		void SetMaterial(uint32_t index, Ref<MaterialAsset> material);
+		void SetMaterial(uint32_t index, AssetHandle material);
 		void ClearMaterial(uint32_t index);
 
-		Ref<MaterialAsset> GetMaterial(uint32_t materialIndex) const
+		AssetHandle GetMaterial(uint32_t materialIndex) const
 		{
 			CORE_ASSERT(HasMaterial(materialIndex), "Material index does not exits!");
 			return m_Materials.at(materialIndex);
 		}
-		std::map<uint32_t, Ref<MaterialAsset>>& GetMaterials() { return m_Materials; }
-		const std::map<uint32_t, Ref<MaterialAsset>>& GetMaterials() const { return m_Materials; }
+		std::map<uint32_t, AssetHandle>& GetMaterials() { return m_Materials; }
+		const std::map<uint32_t, AssetHandle>& GetMaterials() const { return m_Materials; }
 
 		uint32_t GetMaterialCount() const { return m_MaterialCount; }
 		void SetMaterialCount(uint32_t materialCount);
 
 		void Clear();
 	private:
-		std::map<uint32_t, Ref<MaterialAsset>> m_Materials;
+		std::map<uint32_t, AssetHandle> m_Materials;
 		uint32_t m_MaterialCount;
 
 	};

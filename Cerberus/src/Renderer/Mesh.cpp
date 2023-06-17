@@ -185,6 +185,9 @@ namespace cerberus
 				}
 				else
 				{
+					if (materialIndex >= m_MaterialsAsset.size())
+						m_MaterialsAsset.resize(materialIndex + 1);
+
 					m_MaterialsAsset[materialIndex] = Renderer::GetDefaultPBRMaterial();
 				}
 			}
@@ -229,6 +232,7 @@ namespace cerberus
 						textureProperties.SRGB = true;
 						textureProperties.GenerateMips = true;
 						AssetHandle albedoAssetHandle = AssetManager::GetMetadata(parentPath).Handle;
+#if OLD_RENDERER
 						Ref<Texture2D> texture = AssetManager::OverrideAsset<Texture2D>(albedoAssetHandle, texturePath, textureProperties);
 						if (texture->Loaded())
 						{
@@ -239,6 +243,7 @@ namespace cerberus
 						{
 							NV_CORE_ERROR("Could not load albedo texture: {0}", texturePath);
 						}
+#endif
 					}
 					else
 					{
@@ -264,6 +269,7 @@ namespace cerberus
 						textureProperties.SRGB = false;
 						textureProperties.GenerateMips = true;
 						AssetHandle albedoAssetHandle = AssetManager::GetMetadata(parentPath).Handle;
+#if OLD_RENDERER
 						Ref<Texture2D> texture = AssetManager::OverrideAsset<Texture2D>(albedoAssetHandle, texturePath, textureProperties);
 						if (texture->Loaded())
 						{
@@ -275,7 +281,7 @@ namespace cerberus
 						{
 							NV_CORE_ERROR("Could not load normal texture: {0}", texturePath);
 						}
-
+#endif
 					}
 					else
 					{
@@ -298,6 +304,7 @@ namespace cerberus
 						textureProperties.SRGB = false;
 						textureProperties.GenerateMips = true;
 						AssetHandle albedoAssetHandle = AssetManager::GetMetadata(parentPath).Handle;
+#if OLD_RENDERER
 						Ref<Texture2D> texture = AssetManager::OverrideAsset<Texture2D>(albedoAssetHandle, texturePath, textureProperties);
 						if (texture->Loaded())
 						{
@@ -308,6 +315,7 @@ namespace cerberus
 						{
 							NV_CORE_ERROR("Could not load Roughness texture: {0}", texturePath);
 						}
+#endif
 					}
 					else
 					{
@@ -345,6 +353,7 @@ namespace cerberus
 								textureProperties.SRGB = false;
 								textureProperties.GenerateMips = true;
 								AssetHandle albedoAssetHandle = AssetManager::GetMetadata(parentPath).Handle;
+#if OLD_RENDERER
 								Ref<Texture2D> texture = AssetManager::OverrideAsset<Texture2D>(albedoAssetHandle, texturePath, textureProperties);
 								if (texture->Loaded())
 								{
@@ -355,6 +364,7 @@ namespace cerberus
 								{
 									NV_CORE_ERROR("Could not load Metallic texture: {0}", texturePath);
 								}
+#endif
 								break;
 							}
 						}
@@ -388,7 +398,7 @@ namespace cerberus
 		m_Materials = CreateRef<MaterialTable>(meshMaterials.size());
 
 		for (uint32_t i = 0; i < meshMaterials.size(); i++)
-			m_Materials->SetMaterial(i, meshMaterials[i]);
+			m_Materials->SetMaterial(i, meshMaterials[i]->Handle);
 	}
 
 	Mesh::Mesh(const Ref<MeshSource>& meshSource, const Ref<MaterialTable>& materialTable)

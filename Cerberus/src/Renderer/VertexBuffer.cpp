@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "VertexBuffer.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/ResourceManager.h"
 
 namespace cerberus
 {
@@ -72,7 +73,7 @@ namespace cerberus
 	{
 		VmaAllocation memoryAllocation = m_MemoryAllocation;
 		VkBuffer vertexBuffer = m_VertexBuffer;
-		Renderer::SubmitResourceFree([memoryAllocation, vertexBuffer]()
+		ResourceManager::SubmitResourceFree([memoryAllocation, vertexBuffer]()
 		{
 			ResourceAllocator allocator("VertexBuffer");
 			allocator.DestroyBuffer(vertexBuffer, memoryAllocation);

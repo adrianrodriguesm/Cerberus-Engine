@@ -7,6 +7,7 @@
 #include "Renderer/Camera.h"
 #include "Renderer/ComputePipeline.h"
 #include "Renderer/Shadow.h"
+#include "Renderer/Image.h"
 namespace cerberus
 {
 	struct SceneRendererSpecification
@@ -45,7 +46,7 @@ namespace cerberus
 		
 		virtual void OnImGuiRender() = 0;
 
-		virtual Ref<Image2D> GetFinalPassImage() const = 0;
+		virtual Handle<ImageView> GetFinalPassImage() const = 0;
 
 
 		

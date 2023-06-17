@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "IndexBuffer.h"
+#include "Renderer/ResourceManager.h"
 #include "Renderer/Renderer.h"
 
 namespace cerberus
@@ -68,7 +69,7 @@ namespace cerberus
 	{
 		VkBuffer indexBuffer = m_IndexBuffer;
 		VmaAllocation memoryAllocation = m_MemoryAllocation;
-		Renderer::SubmitResourceFree([indexBuffer, memoryAllocation]() 
+		ResourceManager::SubmitResourceFree([indexBuffer, memoryAllocation]()
 		{
 			ResourceAllocator allocator("IndexBuffer");
 			allocator.DestroyBuffer(indexBuffer, memoryAllocation);

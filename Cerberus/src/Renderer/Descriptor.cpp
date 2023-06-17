@@ -30,12 +30,7 @@ namespace cerberus
 
 	DescriptorAllocator::~DescriptorAllocator()
 	{
-		VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-
-		for (VkDescriptorPool descriptoPool : m_DescriptorPools)
-			vkDestroyDescriptorPool(device, descriptoPool, nullptr);
-
-		m_DescriptorPools.clear();
+		Release();
 	}
 
 	void DescriptorAllocator::Release()

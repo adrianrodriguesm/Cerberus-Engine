@@ -91,7 +91,7 @@ namespace cerberus
 			for (uint32_t i = 0; i < 4; i++)
 			{
 				// Defining which layer (cascade of the shadow map) is going to be attach to each pipeline
-				shadowFramebufferSpec.ExistingImageLayers.clear();
+				 .ExistingImageLayers.clear();
 				shadowFramebufferSpec.ExistingImageLayers.emplace_back(i);
 
 				RenderPassSpecification shadowMapRenderPassSpec;

@@ -14,6 +14,7 @@ namespace cerberus
 	ContentBrowserPanel::ContentBrowserPanel()
 	{
 		s_Instance = this;
+#if OLD_RENDERER
 		TextureProperties texProp;
 		texProp.SamplerWrap = SamplerWrap::Clamp;
 		m_DirectoryIcon = CreateRef<Texture2D>("Resources/Editor/Folder.png", texProp);
@@ -35,6 +36,7 @@ namespace cerberus
 		AssetHandle baseDirectoryHandle = ProcessDirectory(s_AssetDirectory, nullptr);
 		m_BaseDirectory = m_Directories[baseDirectoryHandle];
 		ChangeDirectory(m_BaseDirectory);
+#endif
 	}
 
 	ContentBrowserPanel::~ContentBrowserPanel()
@@ -46,10 +48,12 @@ namespace cerberus
 		m_CurrentItemList.Clear();
 		m_IconMap.clear();
 		m_Directories.clear();
+#if OLD_RENDERER
 		m_DirectoryIcon->GetImage()->Release();
 		m_FileIcon->GetImage()->Release();
 		m_BackButtonIcon->GetImage()->Release();
 		m_RefreshButtonIcon->GetImage()->Release();
+#endif
 	}
 
 	void ContentBrowserPanel::OnImGuiRender(bool& isOpen)

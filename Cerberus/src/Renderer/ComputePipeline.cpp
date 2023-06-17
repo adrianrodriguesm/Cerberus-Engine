@@ -131,7 +131,8 @@ namespace cerberus
 
 	void ComputePipeline::ReleaseComputeFence()
 	{
-		s_ComputeFence->Release();
+		if(s_ComputeFence)
+			s_ComputeFence->Release();
 	}
 
 	void ComputePipeline::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ, VkDescriptorSet descriptorSet, uint32_t firstSet)

@@ -4,6 +4,8 @@
 #include "Renderer/AccelerationStructure.h"
 #include "Renderer/Backend/MeshProxy.h"
 #include "Renderer/Backend/BindGroup.h"
+#include "Renderer/Pipeline.h"
+#include "Renderer/Framebuffer.h"
 #include <span>
 namespace cerberus
 {
@@ -30,19 +32,27 @@ namespace cerberus
 
 		virtual void OnImGuiRender() override;
 
-		virtual Ref<Image2D> GetFinalPassImage() const override;
+		virtual Handle<ImageView> GetFinalPassImage() const override;
+
+	private:
+		void FlushRenderPasses();
 	private:
 		SceneRendererSpecification m_Specification;
-		Ref<CommandBuffer> m_CommandBuffer;
+		CommandBuffer* m_CommandBuffer;
 
 		Ref<Scene> m_Scene;
 		
-		Ref<Image2D> m_FinalPassImage;
+		Handle<ImageView> m_FinalPassImage;
 
-		Ref<Pipeline> m_Pipeline;
-		Ref<Material> m_Material;
+		Handle<Framebuffer> m_Framebuffer;
+		Handle<RenderPass> m_RenderPass;
+		Handle<GraphicsPipeline> m_Pipeline;
 
 		Ref<UniformBufferSet> m_UniformBufferSet;
+
+		// Texture test
+		Scope<TextureAsset> m_TextureAsset;
+		Handle<Texture2D> m_TextureRonaldo;
 
 		struct MeshRegister
 		{

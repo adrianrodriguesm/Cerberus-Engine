@@ -8,6 +8,7 @@ namespace cerberus
         static std::vector<const char*> s_ValidationLayers;
 #ifdef _DEBUG
         static const bool s_EnableValidationLayers = true;
+        static const bool s_FullInfo = false;
 #else
         static const bool s_EnableValidationLayers = true;
 #endif

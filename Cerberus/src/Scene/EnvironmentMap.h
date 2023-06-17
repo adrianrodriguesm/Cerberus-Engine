@@ -5,6 +5,7 @@ namespace cerberus
 {
 	struct EnvironmentMap : public Asset
 	{
+		// TODO: Changed to TextureAssets
 		Ref<Texture2D> EquirectangularTex;
 		Ref<TextureCube> RadianceMap;
 		Ref<TextureCube> IrradianceMap;

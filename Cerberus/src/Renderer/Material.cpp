@@ -14,7 +14,6 @@ namespace cerberus
 	static const std::string s_MetalnessMapUniform = "u_MetallicTex";
 	static const std::string s_RoughnessMapUniform = "u_RoughnessTex";
 
-
 	Material::Material(const Ref<Shader>& shader, const std::string& name, bool persistent)
 		: m_Shader(shader), m_Name(name), m_WriteDescriptors(Renderer::GetRendererConfig().FramesInFlight),
 		m_DescriptorSets(Renderer::GetRendererConfig().FramesInFlight), m_Persistent(persistent)
@@ -127,8 +126,10 @@ namespace cerberus
 	{
 		Set<glm::mat4>(name, value);
 	}
-	void Material::Set(const std::string& name, const Ref<Image2D>& image)
+
+	void Material::Set(const std::string& name, const Ref<Image>& image)
 	{
+#if OLD_RENDERER
 		const ShaderResourceDeclaration* resource = FindResourceDeclaration(name);
 		CORE_ASSERT(resource, "Resource does not exist!");
 
@@ -147,9 +148,11 @@ namespace cerberus
 		m_ResidentDescriptors[binding] = std::make_shared<PendingDescriptor>(PendingDescriptor{ PendingDescriptorType::Image2D, *writeDescriptorSet, nullptr, image });
 		//image->UpdateDescriptor();
 		m_ResidentDescriptors[binding]->WriteDescriptorSet.pImageInfo = &image->GetVulkanDescriptorInfo();
+#endif
 	}
 	void Material::Set(const std::string& name, const Ref<Texture2D>& texture)
 	{
+#if OLD_RENDERER
 		const ShaderResourceDeclaration* resource = FindResourceDeclaration(name);
 		CORE_ASSERT(resource, "Resource does not exist!");
 
@@ -167,10 +170,12 @@ namespace cerberus
 		CORE_ASSERT(writeDescriptorSet, "Descriptor set not found!");
 		m_ResidentDescriptors[binding] = std::make_shared<PendingDescriptor>(PendingDescriptor{ PendingDescriptorType::Texture2D, *writeDescriptorSet,  std::static_pointer_cast<Texture>(texture) });
 		m_ResidentDescriptors[binding]->WriteDescriptorSet.pImageInfo = &texture->GetVulkanDescriptorInfo();
+#endif
 	}
 
 	void Material::Set(const std::string& name, const Ref<TextureCube>& texture)
 	{
+#if OLD_RENDERER
 		const ShaderResourceDeclaration* resource = FindResourceDeclaration(name);
 		CORE_ASSERT(resource, "Resource does not exist!");
 
@@ -188,8 +193,8 @@ namespace cerberus
 		CORE_ASSERT(writeDescriptorSet, "Descriptor set not found!");
 		m_ResidentDescriptors[binding] = std::make_shared<PendingDescriptor>(PendingDescriptor{ PendingDescriptorType::TextureCube, *writeDescriptorSet,  std::static_pointer_cast<Texture>(texture) });
 		m_ResidentDescriptors[binding]->WriteDescriptorSet.pImageInfo = &texture->GetVulkanDescriptorInfo();
+#endif
 	}
-
 	void Material::AllocateStorage()
 	{
 		const auto& shaderBuffers = m_Shader->GetShaderBuffers();
@@ -444,6 +449,7 @@ namespace cerberus
 	{
 		m_Material->Set(s_RoughnessMapUniform, Renderer::GetWhiteTexture());
 	}
+
 	///////////////////////////////////////////////////////////////
 	///// MaterialTable
 	///////////////////////////////////////////////////////////////
@@ -465,7 +471,7 @@ namespace cerberus
 		m_Materials.clear();
 	}
 
-	void MaterialTable::SetMaterial(uint32_t index, Ref<MaterialAsset> material)
+	void MaterialTable::SetMaterial(uint32_t index, AssetHandle material)
 	{
 		m_Materials[index] = material;
 		if (index >= m_MaterialCount)

@@ -7,7 +7,9 @@
 #include "Renderer/Pipeline.h"
 #include "Renderer/Mesh.h"
 #include "Renderer/UniformBufferSet.h"
+#include "Renderer/Framebuffer.h"
 #include "Renderer/SceneRenderer/SceneRenderer.h"
+#include "Renderer/Backend/BindGroup.h"
 namespace cerberus
 {
 	struct RendererConfig
@@ -78,9 +80,9 @@ namespace cerberus
 		// ImGui
 		static void InitImGui();
 		static void ShutdownImGui();
-		static void RenderImGui(Ref<CommandBuffer> CommandBuffer = nullptr);
-		static void BeginImGui(Ref<CommandBuffer> CommandBuffer);
-		static void EndImGui(Ref<CommandBuffer> CommandBuffer);
+		static void RenderImGui();
+		static void BeginImGui(CommandBuffer* commandBuffer);
+		static void EndImGui(CommandBuffer* commandBuffer);
 		static void SetImGuiColorTheme();
 		// Renderer Queue
 		static void ExecuteRenderQueue();
@@ -88,25 +90,29 @@ namespace cerberus
 		static void ReleaseAllResources();
 		// Actual Rendering
 		// -- Render Passes
-		static void BeginRenderPass(Ref<CommandBuffer> CommandBuffer, Ref<RenderPass> renderPass, bool explicitClear = false);
-		static void EndRenderPass(Ref<CommandBuffer> CommandBuffer);
+		static void BeginRenderPass(CommandBuffer* CommandBuffer, Handle<RenderPass> renderPass, Handle<Framebuffer> framebuffer, bool explicitClear = false);
+		static void EndRenderPass(CommandBuffer* CommandBuffer);
 		// -- Descriptor's
 		static void UpdateMaterialForRendering(Ref<Material> material, Ref<UniformBufferSet> uniformBufferSet);
 		static VkDescriptorSet AllocateDescriptorSet(VkDescriptorSetLayout& layout, bool persistent = false);
 		// -- Render Geometry
-		static void RenderFullscreenQuad(Ref<CommandBuffer> CommandBuffer, Ref<Pipeline> pipeline, Ref<UniformBufferSet> uniformBufferSet, Ref<Material> material);
+		static void RenderFullscreenQuad(CommandBuffer* commandBuffer, Handle<GraphicsPipeline> pipeline, Handle<BindGroup> material = {});
+		/** /
 		static void RenderMesh(Ref<CommandBuffer> CommandBuffer, Ref<UniformBufferSet> uniformBufferSet, Ref<Pipeline> pipeline, Ref<Mesh> mesh, Ref<MaterialTable> materialTable, glm::mat4& transform);
 		static void RenderMeshWithMaterial(Ref<CommandBuffer> CommandBuffer, Ref<UniformBufferSet> uniformBufferSet, Ref<Pipeline> pipeline, Ref<Mesh> mesh, glm::mat4& transform, Ref<Material> material, const Buffer& aditionalUniform = {});
+		/**/
 		// -- Dispatch Compute Shader
 		static void DispatchComputeShader(Ref<CommandBuffer> CommandBuffer, Ref<ComputePipeline> pipeline, Ref<UniformBufferSet> uniformBufferSet, Ref<Material> material, const glm::ivec3& workGroups, Buffer additionalUniforms = {});
 		// Command Buffers
 		static void FlushCommandBuffer(VkCommandBuffer commandBuffer, bool compute = false, bool waitToCompute = false, bool detroyCommandBuffer = true);
 		static VkCommandBuffer GetCommandBuffer(bool beginCommand = false, bool compute = false);
 		static VkCommandBuffer CreateSecondaryCommandBuffer();
+		// TODO: sort this out
+		static CommandBuffer* GetMainCommandBuffer(bool swapchain = false);
 		// -- Environment Map
 		// Return a pair with <FilteredMap, IrradianceMap>
 		static Ref<EnvironmentMap> CreateEnvironmentMap(const std::string& filepath);
-		static void SetSceneEnvironment(SceneRenderer* sceneRenderer, const Ref<EnvironmentMap>& environment, const Ref<Image2D>& shadowImage);
+		static void SetSceneEnvironment(SceneRenderer* sceneRenderer, const Ref<EnvironmentMap>& environment, const Ref<Image>& shadowImage);
 		// Getter's
 		static uint32_t GetCurrentFrameIndex();
 		static RendererConfig& GetRendererConfig();

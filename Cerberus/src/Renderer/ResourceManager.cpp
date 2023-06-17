@@ -7,20 +7,24 @@ namespace cerberus
 {
 	struct ResourceManagerData
 	{
-		// TODO: Weak ref intead!?
 		Pool<GPUBuffer> GPUBuffers;
 		Pool<AccelerationStructure> AccelerationStructures;
 		Pool<MeshSourceProxy> MeshSourceProxy;
 		Pool<MeshInstanceProxy> MeshInstanceProxy;
 		Pool<BindGroupLayout> BindGroupLayouts;
-		Pool<BindGroup> BindGroup;
+		Pool<BindGroup> BindGroups;
 		Pool<Image> Images;
 		Pool<ImageView> ImageViews;
 		Pool<Texture2D> Textures2D;
+		Pool<RenderTargetTexture> RenderTargets;
+		Pool<RenderPass> RenderPasses;
+		Pool<Framebuffer> Framebuffers;
+		Pool<GraphicsPipeline> GraphicsPipelines;
 
 		DescriptorAllocator* PersistentDescriptorAllocator;
+		DescriptorAllocator* DescriptorAllocator;
 
-		std::unordered_map<Handle<Image>, std::vector<Handle<ImageView>>> ImageRegister;
+		std::array<RenderQueue*, 3> ResourceFreeQueue;
 	};
 
 	static ResourceManagerData* s_RMData;
@@ -35,18 +39,41 @@ namespace cerberus
 		DescriptorAllocatorSpecification descriptorAllocatorSpec;
 		descriptorAllocatorSpec.NumberOfFrames = GetRendererConfig().FramesInFlight;
 		descriptorAllocatorSpec.MaxSets = 1000;
-		descriptorAllocatorSpec.IsPersistent = true;
+		descriptorAllocatorSpec.Flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 		s_RMData->PersistentDescriptorAllocator = new DescriptorAllocator(descriptorAllocatorSpec);
+		descriptorAllocatorSpec.IsPersistent = false;
+		s_RMData->DescriptorAllocator = new DescriptorAllocator(descriptorAllocatorSpec);
+
+
+		for (uint32_t i = 0; i < 3; i++)
+		{
+			s_RMData->ResourceFreeQueue[i] = new RenderQueue();
+		}
 	}
 	void ResourceManager::Shutdown()
 	{
-		s_RMData->GPUBuffers.Clear();
 		s_RMData->AccelerationStructures.Clear();
-		s_RMData->MeshSourceProxy.Clear();
 		s_RMData->MeshInstanceProxy.Clear();
+		s_RMData->MeshSourceProxy.Clear();
+		s_RMData->Textures2D.Clear();
+		s_RMData->RenderTargets.Clear();
+		s_RMData->GPUBuffers.Clear();
+		s_RMData->Images.Clear();
+		s_RMData->ImageViews.Clear();
 		s_RMData->BindGroupLayouts.Clear();
+		s_RMData->BindGroups.Clear();
+		s_RMData->RenderPasses.Clear();
+		s_RMData->Framebuffers.Clear();
+		s_RMData->GraphicsPipelines.Clear();
 
 		delete s_RMData->PersistentDescriptorAllocator;
+		delete s_RMData->DescriptorAllocator;
+
+		for (uint32_t i = 0; i < 3; i++)
+		{
+			FreeAllSubmittedResources(i);
+			delete s_RMData->ResourceFreeQueue[i];
+		}
 
 		delete s_RMData;
 	}
@@ -56,13 +83,15 @@ namespace cerberus
 		return s_RMData->AccelerationStructures.Emplace(asSpecification);
 	}
 
-	AccelerationStructure* ResourceManager::GetAccelerationStructure(const Handle<AccelerationStructure>& asHandle)
+	AccelerationStructure* ResourceManager::GetAccelerationStructure(const Handle<AccelerationStructure> asHandle)
 	{
 		return s_RMData->AccelerationStructures.Get(asHandle);
 	}
-	void ResourceManager::DestroyAccelerationStructure(Handle<AccelerationStructure>& asHandle)
+	void ResourceManager::DestroyAccelerationStructure(const Handle<AccelerationStructure> handle)
 	{
-		s_RMData->AccelerationStructures.Remove(asHandle);
+
+		s_RMData->AccelerationStructures.Remove(handle);
+
 	}
 
 	Handle<GPUBuffer> ResourceManager::CreateBuffer(const GPUBufferSpecification& gpuBufferSpec)
@@ -70,12 +99,12 @@ namespace cerberus
 		return s_RMData->GPUBuffers.Emplace(gpuBufferSpec);
 	}
 
-	void ResourceManager::DestroyBuffer(const Handle<GPUBuffer>& bufferHandle)
+	void ResourceManager::DestroyBuffer(const Handle<GPUBuffer> handle)
 	{
-		s_RMData->GPUBuffers.Remove(bufferHandle);
+		s_RMData->GPUBuffers.Remove(handle);
 	}
 
-	GPUBuffer* ResourceManager::GetBuffer(const Handle<GPUBuffer>& buffer)
+	GPUBuffer* ResourceManager::GetBuffer(const Handle<GPUBuffer> buffer)
 	{
 		return s_RMData->GPUBuffers.Get(buffer);
 	}
@@ -85,25 +114,24 @@ namespace cerberus
 		return s_RMData->MeshSourceProxy.Emplace(vertexData, vertexSize, indexData, indexSize, submeshes);
 	}
 
-	void ResourceManager::DestroyMeshSourceProxy(Handle<MeshSourceProxy>& meshSourceProxyHandle)
+	void ResourceManager::DestroyMeshSourceProxy(const Handle<MeshSourceProxy> handle)
 	{
-		return s_RMData->MeshSourceProxy.Remove(meshSourceProxyHandle);
-
+		s_RMData->MeshSourceProxy.Remove(handle);
 	}
-	MeshSourceProxy* ResourceManager::GetMeshSourceProxy(const Handle<MeshSourceProxy>& meshSourceProxyHandle)
+	MeshSourceProxy* ResourceManager::GetMeshSourceProxy(const Handle<MeshSourceProxy> meshSourceProxyHandle)
 	{
 		return s_RMData->MeshSourceProxy.Get(meshSourceProxyHandle);
 	}
 
-	Handle<MeshInstanceProxy> ResourceManager::CreateMeshInstanceProxy(Handle<MeshSourceProxy> meshSource, uint32_t submeshIndex, Ref<MaterialAsset> material)
+	Handle<MeshInstanceProxy> ResourceManager::CreateMeshInstanceProxy(const Handle<MeshSourceProxy> meshSource, uint32_t submeshIndex)
 	{
-		return s_RMData->MeshInstanceProxy.Emplace(meshSource, submeshIndex, material, math::MatFactory::CreateIdentityMat4());
+		return s_RMData->MeshInstanceProxy.Emplace(meshSource, submeshIndex, math::MatFactory::CreateIdentityMat4());
 	}
-	void ResourceManager::DestroyMeshInstanceProxy(Handle<MeshInstanceProxy>& meshInstanceHandle)
+	void ResourceManager::DestroyMeshInstanceProxy(const Handle<MeshInstanceProxy> handle)
 	{
-		s_RMData->MeshInstanceProxy.Remove(meshInstanceHandle);
+		s_RMData->MeshInstanceProxy.Remove(handle);
 	}
-	MeshInstanceProxy* ResourceManager::GetMeshInstanceProxy(const Handle<MeshInstanceProxy>& meshInstanceHandle)
+	MeshInstanceProxy* ResourceManager::GetMeshInstanceProxy(const Handle<MeshInstanceProxy> meshInstanceHandle)
 	{
 		return s_RMData->MeshInstanceProxy.Get(meshInstanceHandle);
 	}
@@ -113,14 +141,29 @@ namespace cerberus
 		return s_RMData->BindGroupLayouts.Emplace(info);
 	}
 
-	BindGroupLayout* ResourceManager::GetBindGroupLayout(const Handle<BindGroupLayout>& handle)
+	BindGroupLayout* ResourceManager::GetBindGroupLayout(const Handle<BindGroupLayout> handle)
 	{
 		return s_RMData->BindGroupLayouts.Get(handle);
 	}
 
-	void ResourceManager::DestroyBindGroupLayout(Handle<BindGroupLayout>& handle)
+	void ResourceManager::DestroyBindGroupLayout(const Handle<BindGroupLayout> handle)
 	{
 		s_RMData->BindGroupLayouts.Remove(handle);
+	}
+
+	Handle<BindGroup> ResourceManager::CreateBindGroup(const BindGroupSpecification& spec)
+	{
+		return s_RMData->BindGroups.Emplace(spec);
+	}
+
+	void ResourceManager::DestroyBindGroup(const Handle<BindGroup> handle)
+	{
+		s_RMData->BindGroups.Remove(handle);
+	}
+
+	BindGroup* ResourceManager::GetBindGroup(const Handle<BindGroup> handle)
+	{
+		return s_RMData->BindGroups.Get(handle);
 	}
 
 	const RendererConfiguration& ResourceManager::GetRendererConfig()
@@ -134,16 +177,131 @@ namespace cerberus
 		return GetRendererConfig().FramesInFlight;
 	}
 
-	VkDescriptorSet ResourceManager::AllocateDescriptorSet(Handle<BindGroupLayout> handle)
+	VkDescriptorSet ResourceManager::AllocateDescriptorSet(Handle<BindGroupLayout> handle, bool persistent /* = false */)
 	{
 		BindGroupLayout* bindGroupLayout = ResourceManager::GetBindGroupLayout(handle);
 		if (!bindGroupLayout)
 			return nullptr;
 
 		VkDescriptorSetLayout vkLayout = bindGroupLayout->GetVulkanDescriptorSetLayout();
-		VkDescriptorSet descriptorSet = s_RMData->PersistentDescriptorAllocator->Allocate(vkLayout);
+
+		VkDescriptorSet descriptorSet = persistent ? s_RMData->PersistentDescriptorAllocator->Allocate(vkLayout) : 
+													 s_RMData->DescriptorAllocator->Allocate(vkLayout);
 
 		return descriptorSet;
+	}
+
+	Handle<Texture2D> ResourceManager::CreateTexture2D(ImageFormat format, const uint32_t width, const uint32_t height, const void* data, TextureProperties properties)
+	{
+		return s_RMData->Textures2D.Emplace(format, width, height, data, properties);
+	}
+	void ResourceManager::DestroyTexture2D(Handle<Texture2D> handle)
+	{
+		s_RMData->Textures2D.Remove(handle);
+	}
+	Texture2D* ResourceManager::GetTexture2D(const Handle<Texture2D> handle)
+	{
+		return s_RMData->Textures2D.Get(handle);
+	}
+
+	Handle<RenderTargetTexture> ResourceManager::CreateRenderTarget(const RenderTargetProperties& prop)
+	{
+		return s_RMData->RenderTargets.Emplace(prop);
+	}
+	void ResourceManager::DestroyRenderTarget(const Handle<RenderTargetTexture> handle)
+	{
+		s_RMData->RenderTargets.Remove(handle);
+	}
+	RenderTargetTexture* ResourceManager::GetRenderTarget(const Handle<RenderTargetTexture> handle) 
+	{
+		return s_RMData->RenderTargets.Get(handle);
+	}
+
+	Handle<Image> ResourceManager::CreateImage(const ImageSpecification& specification)
+	{
+		return s_RMData->Images.Emplace(specification);
+	}
+	void ResourceManager::DestroyImage(const Handle<Image> handle)
+	{
+		s_RMData->Images.Remove(handle);
+	}
+	Image* ResourceManager::GetImage(const Handle<Image> handle)
+	{
+		return s_RMData->Images.Get(handle);
+	}
+
+	Handle<ImageView> ResourceManager::CreateImageView(const ImageViewProperties& imgViewProp)
+	{
+		return s_RMData->ImageViews.Emplace(imgViewProp);
+	}
+	void ResourceManager::DestroyImageView(const Handle<ImageView> handle)
+	{
+		s_RMData->ImageViews.Remove(handle);
+	}
+	ImageView* ResourceManager::GetImageView(const Handle<ImageView> handle)
+	{
+		return s_RMData->ImageViews.Get(handle);
+	}
+
+	Handle<RenderPass> ResourceManager::CreateRenderPass(const RenderPassSpecification& renderSpec)
+	{
+		return s_RMData->RenderPasses.Emplace(renderSpec);
+	}
+	
+	void ResourceManager::DestroyRenderPass(const Handle<RenderPass> handle)
+	{
+		s_RMData->RenderPasses.Remove(handle);
+	}
+	
+	RenderPass* ResourceManager::GetRenderPass(const Handle<RenderPass> handle)
+	{
+		return s_RMData->RenderPasses.Get(handle);
+	}
+
+	RenderQueue& ResourceManager::GetResourceQueue(const uint32_t frameIndex)
+	{
+		return *(s_RMData->ResourceFreeQueue[frameIndex]);
+	}
+
+	void ResourceManager::FreeAllSubmittedResources(const uint32_t frameIndex)
+	{
+		s_RMData->ResourceFreeQueue[frameIndex]->Execute();
+	}
+
+
+	Handle<Framebuffer> ResourceManager::CreateFramebuffer(const FramebufferSpecification& framebufferSpec)
+	{
+		return s_RMData->Framebuffers.Emplace(framebufferSpec);
+	}
+
+	void ResourceManager::DestroyFramebuffer(const Handle<Framebuffer> handle)
+	{
+		s_RMData->Framebuffers.Remove(handle);
+	}
+
+	Framebuffer* ResourceManager::GetFramebuffer(const Handle<Framebuffer> handle)
+	{
+		return s_RMData->Framebuffers.Get(handle);
+	}
+
+	Handle<GraphicsPipeline> ResourceManager::CreateGraphicsPipeline(const PipelineSpecification& pipelineSpec)
+	{
+		return s_RMData->GraphicsPipelines.Emplace(pipelineSpec);
+	}
+
+	void ResourceManager::DestroyGraphicsPipeline(const Handle<GraphicsPipeline> handle)
+	{
+		s_RMData->GraphicsPipelines.Remove(handle);
+	}
+
+	GraphicsPipeline* ResourceManager::GetGraphicsPipeline(const Handle<GraphicsPipeline> handle)
+	{
+		return s_RMData->GraphicsPipelines.Get(handle);
+	}
+
+	void ResourceManager::ResetDescriptorPool()
+	{
+		s_RMData->DescriptorAllocator->ResetPool();
 	}
 }
 
