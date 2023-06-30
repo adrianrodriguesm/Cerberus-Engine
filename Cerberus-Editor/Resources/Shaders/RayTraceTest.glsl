@@ -27,11 +27,17 @@ struct OutputBlock
 };
 
 layout (location = 0) in OutputBlock Input;
+
+layout(set = 0, std140, binding = 2) uniform RendererData
+{
+	uniform vec4 u_Color;
+};
+
 layout(set = 0, binding = 0) uniform sampler2D u_FullscreenTex;
 
 
 
 void main()
 {
-	o_FragmentColor = texture(u_FullscreenTex, vec2(Input.TexCoord.x, 1 - Input.TexCoord.y));
+	o_FragmentColor = texture(u_FullscreenTex, vec2(Input.TexCoord.x, 1 - Input.TexCoord.y)) * u_Color;
 }

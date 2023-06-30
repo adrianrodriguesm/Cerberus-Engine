@@ -38,6 +38,9 @@ namespace cerberus
 		void FlushRenderPasses();
 	private:
 		SceneRendererSpecification m_Specification;
+
+		glm::ivec2 m_ViewportResolution;
+
 		CommandBuffer* m_CommandBuffer;
 
 		Ref<Scene> m_Scene;

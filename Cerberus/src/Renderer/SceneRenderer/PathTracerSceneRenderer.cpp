@@ -9,7 +9,13 @@
 #include "Renderer/TextureAsset.h"
 namespace cerberus
 {
-
+	/** /
+	* Bind groups / DescriptorSets
+	* Set 0 = Fully static data (e.g Enviroment Maps)
+	* Set 1 = Per Frame data (e.g shadow map)
+	* Set 2 = Per render pass data (e.g to be determine)
+	* Set 3 = Per draw data (e.g. materials)
+	/**/
 	PathTracerSceneRenderer::PathTracerSceneRenderer(Ref<Scene> scene, const SceneRendererSpecification& spec)
 	{
 		// Pipeline, RenderPass, Framebuffer, and BindGroup/BindGroupLayout creation
@@ -70,8 +76,9 @@ namespace cerberus
 			m_Framebuffer = ResourceManager::CreateFramebuffer(preDepthFramebufferSpec);
 		}
 
-		// Texture Test
+		// Bing group Test
 		{
+			// Texture
 			TextureMetadata texMetadata;
 			texMetadata.FilePath = "Resources/Textures/Ronaldo.jpg";
 
@@ -84,16 +91,36 @@ namespace cerberus
 
 			Texture2D* texture = ResourceManager::GetTexture2D(m_TextureRonaldo);
 
+			// UBO
+			UniformBufferSetSpecification uboSetSpec;
+			uboSetSpec.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
+			uboSetSpec.Size = 100;
+			uboSetSpec.BindingPoint = 2;
+			m_UniformBufferSet = CreateRef<UniformBufferSet>(uboSetSpec);
+
+			uint32_t framesInFlights = ResourceManager::GetFramesInFlight();
+
+			struct RendererData
+			{
+				glm::vec4 Color = glm::vec4(1.f, 1.f, 1.f, 1.f);
+			};
+
+			RendererData data;
+			data.Color = glm::vec4(1.f, 0.f, 0.f, 1.f);
+
+			for (uint32_t frameIndex = 0; frameIndex < framesInFlights; frameIndex++)
+			{
+				Ref<UniformBuffer> ubo = m_UniformBufferSet->Get(frameIndex);
+				ubo->SetData(&data, sizeof(RendererData), 0);
+			}
+
+			// Apply to bind group
 			BindGroup* bindGroup = ResourceManager::GetBindGroup(m_RTBindGroup);
 			bindGroup->SetImageView(texture->GetImageView(), 0);
+			bindGroup->SetUniformBuffer(m_UniformBufferSet, 2);
 		}
 
 
-
-		UniformBufferSetSpecification uboSetSpec;
-		uboSetSpec.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
-		uboSetSpec.Size = 100;
-		m_UniformBufferSet = CreateRef<UniformBufferSet>(uboSetSpec);
 
 		Renderer::ExecuteRenderQueue();
 	}
@@ -138,8 +165,14 @@ namespace cerberus
 
 	void PathTracerSceneRenderer::SetViewportSize(uint32_t width, uint32_t height)
 	{
-		Framebuffer* framebuffer = ResourceManager::GetFramebuffer(m_Framebuffer);
-		framebuffer->Resize(width, height);
+		if (m_ViewportResolution.x != width || m_ViewportResolution.y != height)
+		{
+			m_ViewportResolution.x = width;
+			m_ViewportResolution.y = height;
+
+			Framebuffer* framebuffer = ResourceManager::GetFramebuffer(m_Framebuffer);
+			framebuffer->Resize(width, height);
+		}
 	}
 
 	bool PathTracerSceneRenderer::RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform)
@@ -189,7 +222,7 @@ namespace cerberus
 
 	void PathTracerSceneRenderer::Render(const SceneRendererCamera& sceneRendererCamera)
 	{
-		Renderer::ExecuteRenderQueue();
+		//Renderer::ExecuteRenderQueue();
 		// Build Bottom Level Acceleration Structure if needed
 		if (m_MeshRegister.ASRegisterInfo.BLASToBuild.size() > 0)
 		{

@@ -85,7 +85,10 @@ namespace cerberus
 			}
 		}
 		sceneRenderer->EndScene();
-		sceneRenderer->Render(sceneRendererCamera);
+		Renderer::Submit([sceneRenderer, sceneRendererCamera]() mutable
+		{
+			sceneRenderer->Render(sceneRendererCamera);
+		});
 	}
 
 	Entity Scene::CreateEntity(const std::string& tagName)

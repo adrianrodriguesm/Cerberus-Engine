@@ -72,10 +72,11 @@ namespace cerberus
 			m_TimeStep = timer.ElapsedAndReset();
 			Renderer::BeginFrame();
 			{
+				Renderer::RenderImGui();
+				
 				for (Layer* layer : m_LayerStack)
 					layer->OnUpdate(m_TimeStep);
 
-				Renderer::RenderImGui();
 			}
 			Renderer::EndFrame();
 			

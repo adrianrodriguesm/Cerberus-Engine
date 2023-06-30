@@ -141,8 +141,6 @@ namespace cerberus
 
 	bool EditorLayer::OnWindowResize(WindowResizeEvent& event)
 	{
-		m_SceneRenderer->SetViewportSize(event.GetWidth(), event.GetHeight());
-		m_Camera.SetViewportSize((float)event.GetWidth(), (float)event.GetHeight());
 		return false;
 	}
 

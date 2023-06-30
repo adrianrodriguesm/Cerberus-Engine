@@ -61,6 +61,22 @@ namespace cerberus
 	}
 	void UniformBuffer::Invalidate()
 	{
+		auto vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+
+		GPUBufferSpecification spec;
+		spec.Usage = GPUBufferUsage::UniformBufferUsage;
+		spec.Size = m_Size;
+		spec.MemoryUsage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+		spec.DebugName = "UniformBuffer";
+
+		m_UniformBuffer = ResourceManager::CreateBuffer(spec);
+		GPUBuffer* buffer = ResourceManager::GetBuffer(m_UniformBuffer);
+		// Buffer info and data offset info
+		m_BufferDescriptorInfo = {};
+		m_BufferDescriptorInfo.buffer = buffer->Buffer;				// Buffer to get data from
+		m_BufferDescriptorInfo.offset = 0;							// Position of start of data
+		m_BufferDescriptorInfo.range = m_AligmentData;				// Size of data
+#if OLD_RENDERER
 		//Release();
 		UniformBuffer* instance = this;
 		Renderer::Submit([instance]() mutable
@@ -81,5 +97,6 @@ namespace cerberus
 			instance->m_BufferDescriptorInfo.offset = 0;							// Position of start of data
 			instance->m_BufferDescriptorInfo.range = instance->m_AligmentData;		// Size of data
 		});
+#endif
 	}
 }
