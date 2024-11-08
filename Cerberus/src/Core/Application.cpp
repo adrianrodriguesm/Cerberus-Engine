@@ -3,6 +3,7 @@
 #include "Core/Timer.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/ResourceManager.h"
+#include "Renderer/RenderQueueManager.h"
 #include "Asset/AssetManager.h"
 
 #include <imgui/imgui.h>
@@ -25,12 +26,10 @@ namespace cerberus
 		m_Window->SetEventCallback(BIND_EVENT_FN(Application::OnEvent));
 		Log::Init();
 		m_Window->Init();
-		 ResourceManager::Init();
+		RenderQueueManager::Init();
+		ResourceManager::Init();
 		Renderer::Init();
 		AssetManager::Init();
-
-		
-
 	}
 	Application::~Application()
 	{
@@ -39,8 +38,10 @@ namespace cerberus
 			layer->OnDetach();
 			delete layer;
 		}
-		Renderer::Shutdown();
+
 		ResourceManager::Shutdown();
+		Renderer::Shutdown();
+		RenderQueueManager::ShutDown();
 		AssetManager::Shutdown();
 		m_Window->Shutdown();
 		
@@ -59,7 +60,7 @@ namespace cerberus
 
 	void Application::Run()
 	{
-		Renderer::ExecuteRenderQueue();
+		RenderQueueManager::ExecuteRenderQueue();
 		Timer timer;
 		
 		while (m_Running)
@@ -83,7 +84,7 @@ namespace cerberus
 			auto swapChain = m_Window->GetSwapchain();
 			swapChain->UpdateNextImageToRender();
 			{
-				Renderer::ExecuteRenderQueue();
+				RenderQueueManager::ExecuteRenderQueue();
 			}
 			swapChain->Present();
 		}

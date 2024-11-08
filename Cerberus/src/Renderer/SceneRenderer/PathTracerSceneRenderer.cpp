@@ -4,6 +4,7 @@
 #include "Asset/AssetManager.h"
 #include "Math/Matrix.h"
 #include "Renderer/ResourceManager.h"
+#include "Renderer/RenderQueueManager.h"
 // TODO: Remove these to (only for test)
 #include "Renderer/ShaderCompiler.h"
 #include "Renderer/TextureAsset.h"
@@ -25,6 +26,9 @@ namespace cerberus
 			renderPassSpec.DebugName = "RayTraceTest";
 			renderPassSpec.Attachments = { {.DebugName = "ColorAttachment", .Format = ImageFormat::RGBA,
 											.LoadOP = LOAD_OP::CLEAR, .StoreOP = STORE_OP::STORE,
+											.BlendEnabled = false, .IsRenderTarget = true }, 
+											{.DebugName = "DepthAttachment", .Format = ImageFormat::DEPTH24STENCIL8,
+											.LoadOP = LOAD_OP::CLEAR, .StoreOP = STORE_OP::STORE,
 											.BlendEnabled = false, .IsRenderTarget = true } };
 
 			m_RenderPass = ResourceManager::CreateRenderPass(renderPassSpec);
@@ -34,23 +38,35 @@ namespace cerberus
 			pipelineSpec.DebugName = "RayTraceTest";
 			Ref<Shader> shader = Renderer::GetShaderLibrary().Get("RayTraceTest");
 			pipelineSpec.Shader = shader;
-			pipelineSpec.Layout = {};
+			pipelineSpec.Layout = { { ShaderDataType::Float3, "a_Position"	},
+									{ ShaderDataType::Float3, "a_Normal"	},
+									{ ShaderDataType::Float3, "a_Tangent"	},
+									{ ShaderDataType::Float3, "a_Binormal"	},
+									{ ShaderDataType::Float2, "a_TexCoord"	}, };
 			pipelineSpec.CullMode = CullMode::Back;
-			pipelineSpec.DepthTest = false;
-			pipelineSpec.DepthWrite = false;
+			pipelineSpec.DepthOperator = DepthCompareOperator::LessOrEqual;
 			// -- Render to the same target texture as the geometry pass
 			pipelineSpec.RenderPass = m_RenderPass;
 			m_Pipeline = ResourceManager::CreateGraphicsPipeline(pipelineSpec);
 
 			// BindGroup/BindGroupLayout
-			BindGroupLayout::BindGroupLayoutInfo layoutInfo = ShaderReflection::ReflectLayoutInfo(shader, 0);
-			m_RTBindGroupLayout = ResourceManager::CreateBindGroupLayout(layoutInfo);
+			BindGroupLayout::BindGroupLayoutInfo layoutInfo0 = ShaderReflection::ReflectLayoutInfo(shader, 0);
+			m_BindGroup0Layout = ResourceManager::CreateBindGroupLayout(layoutInfo0);
 
-			BindGroupSpecification bindGroupSpec;
-			bindGroupSpec.BindGroupLayout = m_RTBindGroupLayout;
-			bindGroupSpec.Persistent = false;
 
-			m_RTBindGroup = ResourceManager::CreateBindGroup(bindGroupSpec);
+			BindGroupSpecification bindGroup0Spec;
+			bindGroup0Spec.BindGroupLayout = m_BindGroup0Layout;
+			bindGroup0Spec.Persistent = false;
+			m_BindGroup0 = ResourceManager::CreateBindGroup(bindGroup0Spec);
+
+			// BindGroup/BindGroupLayout
+			BindGroupLayout::BindGroupLayoutInfo layoutInfo1 = ShaderReflection::ReflectLayoutInfo(shader, 1);
+			m_BindGroup1Layout = ResourceManager::CreateBindGroupLayout(layoutInfo1);
+
+			BindGroupSpecification bindGroup1Spec;
+			bindGroup1Spec.BindGroupLayout = m_BindGroup1Layout;
+			bindGroup1Spec.Persistent = false;
+			m_BindGroup1 = ResourceManager::CreateBindGroup(bindGroup1Spec);
 
 			// Framebuffer
 			FramebufferSpecification preDepthFramebufferSpec;
@@ -59,19 +75,31 @@ namespace cerberus
 			preDepthFramebufferSpec.Width = 1920;
 			preDepthFramebufferSpec.Height = 1080;
 
-			RenderTargetProperties rtProperties;
-			rtProperties.DebugName = "Color Target";
-			rtProperties.Format = ImageFormat::RGBA;
-			rtProperties.ShaderResource = true;
-			rtProperties.BaseMip = 0;
-			rtProperties.MipCount = 1;
-			rtProperties.BaseLayer = 0;
-			rtProperties.LayerCount = 1;
-			rtProperties.Resizable = true;
-			rtProperties.Height = 1080;
-			rtProperties.Width = 1920;
+			RenderTargetProperties rtPropertiesColor;
+			rtPropertiesColor.DebugName = "Color Target";
+			rtPropertiesColor.Format = ImageFormat::RGBA;
+			rtPropertiesColor.ShaderResource = true;
+			rtPropertiesColor.BaseMip = 0;
+			rtPropertiesColor.MipCount = 1;
+			rtPropertiesColor.BaseLayer = 0;
+			rtPropertiesColor.LayerCount = 1;
+			rtPropertiesColor.Resizable = true;
+			rtPropertiesColor.Height = 1080;
+			rtPropertiesColor.Width = 1920;
 
-			preDepthFramebufferSpec.RenderTargetsInfo = { rtProperties };
+			RenderTargetProperties rtPropertiesDepth;
+			rtPropertiesDepth.DebugName = "Depth Target";
+			rtPropertiesDepth.Format = ImageFormat::DEPTH24STENCIL8;
+			rtPropertiesDepth.ShaderResource = true;
+			rtPropertiesDepth.BaseMip = 0;
+			rtPropertiesDepth.MipCount = 1;
+			rtPropertiesDepth.BaseLayer = 0;
+			rtPropertiesDepth.LayerCount = 1;
+			rtPropertiesDepth.Resizable = true;
+			rtPropertiesDepth.Height = 1080;
+			rtPropertiesDepth.Width = 1920;
+
+			preDepthFramebufferSpec.RenderTargetsInfo = { rtPropertiesColor, rtPropertiesDepth };
 
 			m_Framebuffer = ResourceManager::CreateFramebuffer(preDepthFramebufferSpec);
 		}
@@ -115,14 +143,23 @@ namespace cerberus
 			}
 
 			// Apply to bind group
-			BindGroup* bindGroup = ResourceManager::GetBindGroup(m_RTBindGroup);
-			bindGroup->SetImageView(texture->GetImageView(), 0);
-			bindGroup->SetUniformBuffer(m_UniformBufferSet, 2);
+			BindGroup* bindGroup0 = ResourceManager::GetBindGroup(m_BindGroup0);
+			bindGroup0->SetImageView(texture->GetImageView(), 0);
+			bindGroup0->SetUniformBuffer(m_UniformBufferSet, 2);
+
+			// UBO
+			UniformBufferSetSpecification uboSetCamSpec;
+			uboSetCamSpec.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
+			uboSetCamSpec.Size = sizeof(CameraUB);
+			uboSetCamSpec.BindingPoint = 0;
+			m_UniformBufferSetCamera = CreateRef<UniformBufferSet>(uboSetCamSpec);
+
+			// Apply to bind group
+			BindGroup* bindGroup1 = ResourceManager::GetBindGroup(m_BindGroup1);
+			bindGroup1->SetUniformBuffer(m_UniformBufferSetCamera, 0);
 		}
 
-
-
-		Renderer::ExecuteRenderQueue();
+		RenderQueueManager::ExecuteRenderQueue();
 	}
 
 	PathTracerSceneRenderer::~PathTracerSceneRenderer()
@@ -131,8 +168,10 @@ namespace cerberus
 		ResourceManager::DestroyFramebuffer(m_Framebuffer);
 		ResourceManager::DestroyGraphicsPipeline(m_Pipeline);
 		ResourceManager::DestroyRenderPass(m_RenderPass);
-		ResourceManager::DestroyBindGroup(m_RTBindGroup);
-		ResourceManager::DestroyBindGroupLayout(m_RTBindGroupLayout);
+		ResourceManager::DestroyBindGroup(m_BindGroup0);
+		ResourceManager::DestroyBindGroupLayout(m_BindGroup0Layout);
+		ResourceManager::DestroyBindGroup(m_BindGroup1);
+		ResourceManager::DestroyBindGroupLayout(m_BindGroup1Layout);
 	}
 
 	void PathTracerSceneRenderer::BeginScene(const SceneRendererCamera& sceneRendererCamera)
@@ -141,22 +180,66 @@ namespace cerberus
 
 	void PathTracerSceneRenderer::EndScene()
 	{
-		/** /
-		m_CommandBuffer->Begin();
-		// Composite pass
-		Renderer::BeginRenderPass(m_CommandBuffer, m_Pipeline->GetSpecification().RenderPass, true);
+
+	}
+
+	void PathTracerSceneRenderer::UpdateUBOData()
+	{
+		uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 		{
-			Renderer::RenderFullscreenQuad(m_CommandBuffer, m_Pipeline, m_UniformBufferSet, m_Material);
+			CameraUB cameraUBO;
+			cameraUBO.Projection = m_SceneData.SceneRendererCamera.Camera.GetProjection();
+			cameraUBO.View = m_SceneData.SceneRendererCamera.ViewMatrix;
+			cameraUBO.ViewProjection = cameraUBO.Projection * cameraUBO.View;
+			cameraUBO.InverseView = glm::inverse(cameraUBO.View);
+			cameraUBO.InverseProjection = glm::inverse(cameraUBO.Projection);
+			glm::mat4 inverseViewProjection = cameraUBO.InverseView * cameraUBO.InverseProjection;
+			cameraUBO.InverseViewReverseProjection = cameraUBO.InverseView * glm::inverse(m_SceneData.SceneRendererCamera.Camera.GetReverseProjection());
+			Ref<UniformBuffer> ubo = m_UniformBufferSetCamera->Get(frameIndex);
+			ubo->SetData(&cameraUBO, sizeof(CameraUB), 0);
 		}
-		Renderer::EndRenderPass(m_CommandBuffer);
-		m_CommandBuffer->End();
-		m_CommandBuffer->Submit();
-		/**/
+
+		// Apply to bind group
+		BindGroup* bindGroup1 = ResourceManager::GetBindGroup(m_BindGroup1);
+		bindGroup1->Update(frameIndex);
+
+		// TODO: This shouldn't be necessary (at least every frame) for set 0
+		BindGroup* bindGroup0 = ResourceManager::GetBindGroup(m_BindGroup0);
+		bindGroup0->Update(frameIndex);
+
 	}
 
 	void PathTracerSceneRenderer::FlushRenderPasses()
 	{
+		// Render Frame
+		ResourceManager::ResetDescriptorPool();
+		UpdateUBOData();
+		CommandBuffer* commnadBuffer = Renderer::GetMainCommandBuffer(m_Specification.SwapChainTarget);
+		commnadBuffer->RT_Begin();
+		{
+			DrawArea drawArea;
+			drawArea.GraphicsPipeline = m_Pipeline;
+			drawArea.Framebuffer = m_Framebuffer;
+			drawArea.BindGroup0 = m_BindGroup0;
+			drawArea.BindGroup1 = m_BindGroup1;
+			drawArea.DrawCount = m_MeshRegister.MeshInstanceCount;
+			Renderer::BeginRenderPass(commnadBuffer, m_RenderPass, drawArea);
 
+			for (auto& [meshSourceHandle, submeshMap] : m_MeshRegister.MeshInstanceMap)
+			{
+				MeshSourceProxy* meshSource = ResourceManager::GetMeshSourceProxy(meshSourceHandle);
+				Handle<GPUBuffer> hVertexBuffer = meshSource->VertexBuffer->GetGPUBuffer();
+				Handle<GPUBuffer> hIndexBuffer = meshSource->IndexBuffer->GetGPUBuffer();
+				Renderer::SetActiveVertexAndIndexBuffer(commnadBuffer, hVertexBuffer, hIndexBuffer);
+				for (auto& [submeshIndex, meshIntanceList] : submeshMap)
+				{
+					Renderer::RenderMeshInstances(commnadBuffer, drawArea, meshIntanceList);
+				}
+			}
+			Renderer::EndRenderPass(commnadBuffer);
+		}
+		commnadBuffer->RT_End();
+		commnadBuffer->RT_Submit();
 	}
 
 	void PathTracerSceneRenderer::SubmitMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4 & transform)
@@ -195,12 +278,24 @@ namespace cerberus
 			// Added to the register
 			m_MeshRegister.MeshSourceRegistered[meshSourceAssetHandle] = meshProxyHandle;
 			m_MeshRegister.ASRegisterInfo.BLASToBuild.push_back(meshProxyHandle);
+			m_MeshRegister.InstancePerMeshSourceRegistered[meshSourceAssetHandle] = {};
+			MeshSourceProxy* meshSourceProxy = ResourceManager::GetMeshSourceProxy(meshProxyHandle);
+
+			std::unordered_map<uint32_t, std::vector<Handle<MeshInstanceProxy>>> submeshesInstances;
+			submeshesInstances.reserve(meshSourceProxy->Submeshes.size());
+			for (uint32_t i = 0; i < meshSourceProxy->Submeshes.size(); i++)
+			{
+				submeshesInstances[i] = std::vector<Handle<MeshInstanceProxy>>();
+			}
+
+			m_MeshRegister.MeshInstanceMap[meshProxyHandle] = submeshesInstances;
 		}
 		else
 		{
 			meshProxyHandle = m_MeshRegister.MeshSourceRegistered[meshSourceAssetHandle];
 		}
 
+		m_MeshRegister.InstancePerMeshSourceRegistered[meshSourceAssetHandle].push_back(mesh->Handle);
 		// Create the actual mesh instances
 		MeshSourceProxy* meshSourceProxy = ResourceManager::GetMeshSourceProxy(meshProxyHandle);
 		const auto& submeshesProxy = meshSourceProxy->Submeshes;
@@ -215,6 +310,9 @@ namespace cerberus
 			meshInstance->WorldTransform = transform * submeshesProxy[submeshIndex].Transform;
 
 			meshInstanceProxies.push_back(meshInstanceHandle);
+
+			m_MeshRegister.MeshInstanceMap[meshProxyHandle][submeshIndex].push_back(meshInstanceHandle);
+			m_MeshRegister.MeshInstanceCount++;
 		}
 		
 		return true;
@@ -222,8 +320,10 @@ namespace cerberus
 
 	void PathTracerSceneRenderer::Render(const SceneRendererCamera& sceneRendererCamera)
 	{
+		m_SceneData.SceneRendererCamera = sceneRendererCamera;
 		//Renderer::ExecuteRenderQueue();
 		// Build Bottom Level Acceleration Structure if needed
+#if 1
 		if (m_MeshRegister.ASRegisterInfo.BLASToBuild.size() > 0)
 		{
 			AccelerationStructureBuilder asBuilder;
@@ -245,7 +345,6 @@ namespace cerberus
 			{
 				for (uint32_t i = 0; i < meshesInstances.size(); i++)
 				{
-
 					const auto& meshInstance = meshesInstances[i];
 					asBuilder.SubmitMeshInstance(meshInstance);
 				}
@@ -254,18 +353,8 @@ namespace cerberus
 			asBuilder.EndTLASBuild(m_MeshRegister.ASRegisterInfo.TLAS);
 			m_MeshRegister.ASRegisterInfo.UpdateTLAS = false;
 		}
-		// Render Frame
-		ResourceManager::ResetDescriptorPool();
-		CommandBuffer* commnadBuffer = Renderer::GetMainCommandBuffer(m_Specification.SwapChainTarget);
-		commnadBuffer->RT_Begin();
-		{
-			Renderer::BeginRenderPass(commnadBuffer, m_RenderPass, m_Framebuffer);
-			Renderer::RenderFullscreenQuad(commnadBuffer, m_Pipeline, m_RTBindGroup);
-			Renderer::EndRenderPass(commnadBuffer);
-		}
-		commnadBuffer->RT_End();
-		commnadBuffer->RT_Submit();
-
+#endif
+		FlushRenderPasses();
 	}
 
 	bool PathTracerSceneRenderer::IsRegistered(const Ref<Mesh>& mesh)
@@ -278,6 +367,56 @@ namespace cerberus
 
 	bool PathTracerSceneRenderer::UnregisterMesh(const Ref<Mesh>& mesh)
 	{
+		bool unregistered = false;
+		// Update TLAS
+		m_MeshRegister.ASRegisterInfo.UpdateTLAS = true;
+		// Destroy Mesh Instance
+		if (m_MeshRegister.MeshInstanceRegistered.find(mesh->Handle) != m_MeshRegister.MeshInstanceRegistered.end())
+		{
+			std::vector<Handle<MeshInstanceProxy>> hInstanceProxyList = m_MeshRegister.MeshInstanceRegistered[mesh->Handle];
+			m_MeshRegister.MeshInstanceRegistered.erase(mesh->Handle);
+			Ref<MeshSource> meshSourceAsset = mesh->GetMeshSource();
+
+			auto& vec = m_MeshRegister.InstancePerMeshSourceRegistered[meshSourceAsset->Handle];
+			vec.erase(std::remove(vec.begin(), vec.end(), mesh->Handle), vec.end());
+
+			Handle<MeshSourceProxy> hMeshSource = m_MeshRegister.MeshSourceRegistered[meshSourceAsset->Handle];
+			for (Handle<MeshInstanceProxy> hMeshInstance : hInstanceProxyList)
+			{
+				MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(hMeshInstance);
+				std::vector<Handle<MeshInstanceProxy>>& hMeshInstancePerSubmeshIndex = m_MeshRegister.MeshInstanceMap[hMeshSource][meshInstance->SubmeshIndex];
+				for (uint32_t index = 0; index < hMeshInstancePerSubmeshIndex.size(); index++)
+				{
+					Handle<MeshInstanceProxy> hCurrMeshInstance = hMeshInstancePerSubmeshIndex[index];
+					if (hMeshInstance == hCurrMeshInstance)
+					{
+						hMeshInstancePerSubmeshIndex.erase(hMeshInstancePerSubmeshIndex.begin() + index);
+						m_MeshRegister.MeshInstanceCount--;
+						break;
+					}
+				}
+
+
+				ResourceManager::DestroyMeshInstanceProxy(hMeshInstance);
+			}
+
+			// Destory mesh source proxy
+			if (m_MeshRegister.InstancePerMeshSourceRegistered[meshSourceAsset->Handle].size() == 0)
+			{
+				m_MeshRegister.MeshInstanceMap.erase(hMeshSource);
+				m_MeshRegister.InstancePerMeshSourceRegistered.erase(meshSourceAsset->Handle);
+				m_MeshRegister.MeshSourceRegistered.erase(meshSourceAsset->Handle);
+				
+				ResourceManager::DestroyMeshSourceProxy(hMeshSource);
+			}
+
+		}
+		else
+		{
+			return false;
+		}
+		
+
 		return true;
 	}
 	void PathTracerSceneRenderer::UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform)

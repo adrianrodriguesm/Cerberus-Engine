@@ -1,6 +1,8 @@
 #pragma once
 #include "Renderer/ResourceAllocator.h"
 #include "Core/Buffer.h"
+#include "Core/Handle.h"
+#include "Renderer/GPUBuffer.h"
 namespace cerberus
 {
 	class IndexBuffer
@@ -9,16 +11,15 @@ namespace cerberus
 		IndexBuffer(const void* data, const uint32_t size);
 		~IndexBuffer();
 
-		uint32_t GetCount() const { return m_Size / sizeof(uint32_t); }
+		uint32_t GetCount() { return m_LocalData.Size / sizeof(uint32_t); }
 
-		uint32_t GetSize() const { return m_Size; }
+		void Invalidate();
 
-		VkBuffer GetVulkanBuffer() { return m_IndexBuffer; }
+		Handle<GPUBuffer> GetGPUBuffer() const { return m_IndexBuffer; }
+		VkBuffer GetHandle() const;
 	private:
-		VkBuffer m_IndexBuffer;
-		uint32_t m_Size;
+		Handle<GPUBuffer> m_IndexBuffer;
 		Buffer m_LocalData;
-		VmaAllocation m_MemoryAllocation;
 	};
 }
 

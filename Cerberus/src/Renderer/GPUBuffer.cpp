@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "GPUBuffer.h"
 #include "Renderer/ResourceManager.h"
+#include "Renderer/RenderQueueManager.h"
 namespace cerberus
 {
 	namespace utils
@@ -53,13 +54,12 @@ namespace cerberus
 			return;
 		}
 
-		ResourceManager::SubmitResourceFree([name = DebugName, buffer = Buffer, allocation = Allocation]()
+		RenderQueueManager::SubmitResourceFree([name = DebugName, buffer = Buffer, allocation = Allocation]()
 		{
 			ResourceAllocator allocator(name);
 			allocator.DestroyBuffer(buffer, allocation);
 		});
 		
 		Buffer = nullptr;
-
 	}
 }

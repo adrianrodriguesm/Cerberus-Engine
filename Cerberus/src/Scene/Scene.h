@@ -62,6 +62,8 @@ namespace cerberus
 		LightEnvironment m_LightEnvironment;
 		std::vector<Entity> m_DirtyTransform;
 
+		std::vector<AssetHandle> m_MeshToRemoved;
+
 		friend class Entity;
 		friend class ForwardSceneRenderer;
 		friend class SceneSerializer;

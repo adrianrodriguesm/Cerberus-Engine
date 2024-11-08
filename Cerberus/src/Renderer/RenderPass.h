@@ -2,6 +2,17 @@
 #include "Renderer/Image.h"
 namespace cerberus
 {
+
+	namespace utils
+	{
+		inline bool IsDepthFormat(ImageFormat format)
+		{
+			if (format == ImageFormat::DEPTH24STENCIL8 || format == ImageFormat::DEPTH32F)
+				return true;
+
+			return false;
+		}
+	}
 	enum class BlendMode : uint8_t
 	{
 		None = 0,

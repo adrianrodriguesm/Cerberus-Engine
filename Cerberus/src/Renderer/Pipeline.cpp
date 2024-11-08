@@ -2,6 +2,7 @@
 #include "Pipeline.h"
 #include "Core/Window.h"
 #include "Renderer/ResourceManager.h"
+#include "Renderer/RenderQueueManager.h"
 namespace cerberus
 {
 	namespace utils
@@ -77,7 +78,7 @@ namespace cerberus
 		VkPipeline pipeline = m_Pipeline;
 		VkPipelineLayout pipelineLayout = m_PipelineLayout;
 		VkPipelineCache pipelineCache = m_PipelineCache;
-		ResourceManager::SubmitResourceFree([pipeline, pipelineLayout, pipelineCache]() mutable
+		RenderQueueManager::SubmitResourceFree([pipeline, pipelineLayout, pipelineCache]() mutable
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 
@@ -91,7 +92,7 @@ namespace cerberus
 	{
 		if (m_Pipeline)
 		{
-			ResourceManager::SubmitResourceFree([this]() mutable
+			RenderQueueManager::SubmitResourceFree([this]() mutable
 			{
 				VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 				vkDestroyPipeline(vulkanDevice, m_Pipeline, nullptr);
@@ -198,44 +199,50 @@ namespace cerberus
 		RenderPass* renderPass = ResourceManager::GetRenderPass(m_Specification.RenderPass);
 		// Blend Attachment State (How blending is handled)
 		const auto& renderTargetInfo = renderPass->GetSpecification().Attachments;
-		std::vector<VkPipelineColorBlendAttachmentState> blendAttachmentStates(renderTargetInfo.size());
+		std::vector<VkPipelineColorBlendAttachmentState> blendAttachmentStates;
+		blendAttachmentStates.reserve(renderTargetInfo.size());
 		// Only use one attachment
 		if (renderPass->GetSpecification().Blend)
 		{
 			for (size_t i = 0; i < renderTargetInfo.size(); i++)
 			{
+				
 				const auto& renderTarget = renderTargetInfo[i];
+				if (utils::IsDepthFormat(renderTarget.Format))
+					continue;
+
+				VkPipelineColorBlendAttachmentState& blendState = blendAttachmentStates.emplace_back();
 				BlendMode blendMode = renderTarget.BlendMode;
-				blendAttachmentStates[i].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT		// Colors to apply blending to (in this case apply to all the colors)
+				blendState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT		// Colors to apply blending to (in this case apply to all the colors)
 					| VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-				blendAttachmentStates[i].blendEnable = renderTarget.BlendEnabled ? VK_TRUE : VK_FALSE;
+				blendState.blendEnable = renderTarget.BlendEnabled ? VK_TRUE : VK_FALSE;
 				// Choose the src and dst blend factor
 				switch (blendMode)
 				{
 				case BlendMode::OneZero:
-					blendAttachmentStates[i].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-					blendAttachmentStates[i].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+					blendState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+					blendState.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
 					break;
 				case BlendMode::SrcAlphaOneMinusSrcAlpha:
 					// Blending uses equation: (srcColorBlendFactor * new color) colorBlendOp (dstColorBlendFactor * old color)
-					blendAttachmentStates[i].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-					blendAttachmentStates[i].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+					blendState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+					blendState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 					break;
 				case BlendMode::Zero_SrcColor:
-					blendAttachmentStates[i].srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-					blendAttachmentStates[i].dstColorBlendFactor = VK_BLEND_FACTOR_SRC_COLOR;
+					blendState.srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+					blendState.dstColorBlendFactor = VK_BLEND_FACTOR_SRC_COLOR;
 					break;
 				default:
 					CORE_ASSERT(false, "Blend mode not implemented!");
 					break;
 				}
-				blendAttachmentStates[i].colorBlendOp = VK_BLEND_OP_ADD;
+				blendState.colorBlendOp = VK_BLEND_OP_ADD;
 				// Summarised: (VK_BLEND_FACTOR_SRC_ALPHA * new color) + (VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA * old color)
 				//			   (new color alpha * new color) + ((1 - new color alpha) * old color)	
 				//			   (srcBlendFactor * new color) + (dstBlendFactor * old color)	
-				blendAttachmentStates[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-				blendAttachmentStates[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-				blendAttachmentStates[i].alphaBlendOp = VK_BLEND_OP_ADD;
+				blendState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+				blendState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+				blendState.alphaBlendOp = VK_BLEND_OP_ADD;
 				// Summarised: (1 * new alpha) + (0 * old alpha) = new alpha
 			}
 		}
@@ -270,7 +277,7 @@ namespace cerberus
 		depthStencilState.depthTestEnable = m_Specification.DepthTest ? VK_TRUE : VK_FALSE;
 		// Enable writing to depth buffer (to replace old values)
 		depthStencilState.depthWriteEnable = m_Specification.DepthWrite ? VK_TRUE : VK_FALSE;
-		// Comparison operation that allows an overwirte (is in front)
+		// Comparison operation that allows an overwrite (is in front)
 		depthStencilState.depthCompareOp = utils::GetVulkanCompareOperator(m_Specification.DepthOperator); 
 		depthStencilState.depthBoundsTestEnable = VK_FALSE;			    // Depth Bounds Test: Does the depth value exist between two bounds	
 		depthStencilState.back.failOp = VK_STENCIL_OP_KEEP;
@@ -297,15 +304,15 @@ namespace cerberus
 		pipelineCreateInfo.renderPass = renderPass->GetHandle();								// Render pass description the pipeline is compatible with
 		pipelineCreateInfo.subpass = 0;															// Subpass of render pass to use with pipeline
 
-		// Pipeline Derivatives : Can create multiple pipelines that derive from one another for optimisation
+		// Pipeline Derivatives : Can create multiple pipelines that derive from one another for optimization
 		pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;	// Existing pipeline to derive from...
 		pipelineCreateInfo.basePipelineIndex = -1;				// or index of pipeline being created to derive from (in case creating multiple at once)
 
-		/**/
+		
 		VkPipelineCacheCreateInfo pipelineCacheCreateInfo = {};
 		pipelineCacheCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
 		VK_CHECK_RESULT(vkCreatePipelineCache(vulkanDevice, &pipelineCacheCreateInfo, nullptr, &m_PipelineCache));
-		/**/
+		
 		// Create Graphics Pipeline
 		VK_CHECK_RESULT(vkCreateGraphicsPipelines(vulkanDevice, m_PipelineCache, 1, &pipelineCreateInfo, nullptr, &m_Pipeline));
 		

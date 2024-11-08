@@ -81,7 +81,8 @@ namespace cerberus
 	/** /
 	// 0 -> Global Perisistent data (env map)
 	// 1 -> Global dynamic data (once per frame) (e.g shadow map, camera)
-	// 2 -> material data (once per draw)
+	// 2 -> Global dynamic data per render pass (once per frame)
+	// 3 -> material data (once per draw)
 	ShaderDescriptorSetData descData = Shader->GetShaderDescriptotSetData(3);
 	// this function then creates or gets the layout a build the  BindGroup
 	Handle<BindGroup> BindGroup = ResourceManager::CreateBindGroup(material, descData);

@@ -3,6 +3,7 @@
 #include "Renderer/SceneRenderer/SceneRenderer.h"
 #include "Scene/Entity.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/RenderQueueManager.h"
 #include "Asset/AssetManager.h"
 namespace cerberus
 {
@@ -16,6 +17,14 @@ namespace cerberus
 
 	void Scene::OnUpdate(Ref<SceneRenderer> sceneRenderer, const SceneRendererCamera& sceneRendererCamera, Timestep ts)
 	{
+		if (m_MeshToRemoved.size() > 0)
+		{
+			for (const auto assetHandle : m_MeshToRemoved)
+			{
+				Ref<Mesh> mesh = AssetManager::GetAsset<Mesh>(assetHandle);
+				sceneRenderer->UnregisterMesh(mesh);
+			}
+		}
 		m_LightEnvironment = {};
 		// Enviornment
 		{
@@ -85,7 +94,7 @@ namespace cerberus
 			}
 		}
 		sceneRenderer->EndScene();
-		Renderer::Submit([sceneRenderer, sceneRendererCamera]() mutable
+		RenderQueueManager::Submit([sceneRenderer, sceneRendererCamera]() mutable
 		{
 			sceneRenderer->Render(sceneRendererCamera);
 		});
@@ -106,6 +115,11 @@ namespace cerberus
 
 	void Scene::DestroyEntity(Entity entity)
 	{
+		if (entity.HasComponent<MeshComponent>())
+		{
+			auto& component = entity.GetComponent<MeshComponent>();
+			m_MeshToRemoved.push_back(component.MeshHandle);
+		}
 		m_Registry.destroy(entity);
 	}
 

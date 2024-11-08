@@ -981,6 +981,7 @@ namespace cerberus
 			spec.Layers = m_Properties.LayerCount;
 			spec.Usage = ImageUsage::Attachment;
 			spec.Mips = m_Properties.MipCount;
+			spec.Flags = m_Properties.ShaderResource ? SAMPLE_COMPATIBLE : 0;
 
 			m_Image = imgHandle = ResourceManager::CreateImage(spec);
 			img = ResourceManager::GetImage(imgHandle);
@@ -1002,17 +1003,20 @@ namespace cerberus
 		viewProp.MipCount = m_Properties.MipCount;
 		viewProp.ViewType = m_Properties.ViewType;
 
-		if (m_Properties.ShaderResource)
+		SamplerSpecification SamplerSpec;
+		// TODO - SORT the resource stuff
+		SamplerSpec.ShaderResource = true;
+		if (true || m_Properties.ShaderResource)
 		{
-			SamplerSpecification SamplerSpec;
 			SamplerSpec.SamplerWrap = SamplerWrap::Clamp;
 			SamplerSpec.SamplerFilter = SamplerFilter::Linear;
 			SamplerSpec.Anisotropy = false;
 			SamplerSpec.MinLOD = 0.f;
 			SamplerSpec.MaxLOD = m_Properties.MipCount;
-			SamplerSpec.ShaderResource = true;
-			viewProp.SamplerSpec = SamplerSpec;
+			SamplerSpec.ShaderResource = m_Properties.ShaderResource;
+			
 		}
+		viewProp.SamplerSpec = SamplerSpec;
 		
 		m_ImageView = ResourceManager::CreateImageView(viewProp);
 		ImageView* imgView = ResourceManager::GetImageView(m_ImageView);

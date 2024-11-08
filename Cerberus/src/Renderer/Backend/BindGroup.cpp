@@ -2,6 +2,7 @@
 #include "BindGroup.h"
 #include "Renderer/ResourceManager.h"
 #include "Renderer/RendererContext.h"
+#include "Renderer/RenderQueueManager.h"
 namespace cerberus
 {
 	bool BindGroupLayout::BindGroupLayoutInfo::operator==(const BindGroupLayoutInfo& other) const
@@ -133,7 +134,7 @@ namespace cerberus
 
     BindGroupLayout::~BindGroupLayout()
     {
-		ResourceManager::SubmitResourceFree([descriptorLayout = m_DescriptorSetLayout]()
+		RenderQueueManager::SubmitResourceFree([descriptorLayout = m_DescriptorSetLayout]()
 		{
 			VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			vkDestroyDescriptorSetLayout(device, descriptorLayout, nullptr);

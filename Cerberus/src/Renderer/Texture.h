@@ -124,7 +124,7 @@ namespace cerberus
 	{
 	public:
 		RenderTargetTexture(const RenderTargetProperties& rtProp);
-		~RenderTargetTexture();
+		virtual ~RenderTargetTexture();
 
 		void Release();
 		void Resize(uint32_t width, uint32_t height);

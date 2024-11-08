@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "CommandBuffer.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/RenderQueueManager.h"
 #include "Core/Window.h"
 
 namespace cerberus
@@ -19,7 +20,7 @@ namespace cerberus
 		else
 		{
 			CommandBuffer* instance = this;
-			Renderer::Submit([instance]()
+			RenderQueueManager::Submit([instance]()
 			{
 				uint32_t framesInFlight = Renderer::GetRendererConfig().FramesInFlight;
 				instance->Invalidate(framesInFlight);
@@ -30,7 +31,7 @@ namespace cerberus
 		: m_DebugName(debugName)
 	{
 		CommandBuffer* instance = this;
-		Renderer::Submit([instance, count]() mutable
+		RenderQueueManager::Submit([instance, count]() mutable
 		{
 			if (count == 0)
 				count = Renderer::GetRendererConfig().FramesInFlight;
@@ -42,7 +43,7 @@ namespace cerberus
 		if (m_OwnedBySwapchain)
 			return;
 
-		Renderer::SubmitResourceFree([commandPool = m_CommandPool, waitFences = m_WaitFences, timestampQueryPools = m_TimestampQueryPools, pipelineQueryPool = m_PipelineStatisticsQueryPools]()
+		RenderQueueManager::SubmitResourceFree([commandPool = m_CommandPool, waitFences = m_WaitFences, timestampQueryPools = m_TimestampQueryPools, pipelineQueryPool = m_PipelineStatisticsQueryPools]()
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 
@@ -68,10 +69,10 @@ namespace cerberus
 
 	void CommandBuffer::Begin()
 	{
-		// Reset Timestamp of the next avaliable query
+		// Reset Timestamp of the next available query
 		m_TimestampNextAvailableQuery = 2;
 		CommandBuffer* instance = this;
-		Renderer::Submit([instance]()
+		RenderQueueManager::Submit([instance]()
 		{
 			uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 			VkCommandBuffer commandBuffer = instance->m_CommandBuffers[frameIndex];
@@ -98,7 +99,7 @@ namespace cerberus
 	void CommandBuffer::End()
 	{
 		CommandBuffer* instance = this;
-		Renderer::Submit([instance]()
+		RenderQueueManager::Submit([instance]()
 		{
 			uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 			VkCommandBuffer commandBuffer = instance->m_CommandBuffers[frameIndex];
@@ -114,7 +115,7 @@ namespace cerberus
 			return;
 
 		CommandBuffer* instance = this;
-		Renderer::Submit([instance]() mutable
+		RenderQueueManager::Submit([instance]() mutable
 		{
 			Ref<Device> device = RendererContext::GetCurrentDevice();
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
@@ -158,7 +159,7 @@ namespace cerberus
 		uint32_t queryIndex = m_TimestampNextAvailableQuery;
 		m_TimestampNextAvailableQuery += 2;
 		CommandBuffer* instance = this;
-		Renderer::Submit([instance, queryIndex]()
+		RenderQueueManager::Submit([instance, queryIndex]()
 		{
 			uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 			VkCommandBuffer commandBuffer = instance->m_CommandBuffers[frameIndex];
@@ -169,7 +170,7 @@ namespace cerberus
 	void CommandBuffer::EndTimestampQuery(uint32_t queryID)
 	{
 		CommandBuffer* instance = this;
-		Renderer::Submit([instance, queryID]()
+		RenderQueueManager::Submit([instance, queryID]()
 		{
 			uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 			VkCommandBuffer commandBuffer = instance->m_CommandBuffers[frameIndex];

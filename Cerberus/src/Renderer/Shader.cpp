@@ -3,6 +3,7 @@
 
 #include "Renderer/RendererContext.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/RenderQueueManager.h"
 #include <spirv_cross/spirv_glsl.hpp>
 #include <shaderc/shaderc.hpp>
 
@@ -144,7 +145,7 @@ namespace cerberus
 	{
 		std::vector<VkPipelineShaderStageCreateInfo>pipelineStage = m_PipelineShaderStageCreateInfos;
 		std::vector<VkDescriptorSetLayout> descriptorSetLayout = m_DescriptorSetLayouts;
-		Renderer::SubmitResourceFree([pipelineStage, descriptorSetLayout]() mutable
+		RenderQueueManager::SubmitResourceFree([pipelineStage, descriptorSetLayout]() mutable
 		{
 			auto vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 
@@ -161,7 +162,7 @@ namespace cerberus
 	void Shader::Reload(bool forceCompile)
 	{
 		Shader* instance = this;
-		Renderer::Submit([instance, forceCompile]() mutable
+		RenderQueueManager::Submit([instance, forceCompile]() mutable
 		{
 			// Clear old shader
 			instance->m_ShaderDescriptorSets.clear();

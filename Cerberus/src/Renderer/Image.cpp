@@ -2,6 +2,7 @@
 #include "Image.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/ResourceManager.h"
+#include "Renderer/RenderQueueManager.h"
 namespace cerberus
 {
 	namespace utils
@@ -70,7 +71,7 @@ namespace cerberus
 		if (!m_Image || !m_MemoryAlloc)
 			return;
 
-		ResourceManager::SubmitResourceFree([image = m_Image, memoryAlloc = m_MemoryAlloc]()
+		RenderQueueManager::SubmitResourceFree([image = m_Image, memoryAlloc = m_MemoryAlloc]()
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			ResourceAllocator allocator("VulkanImage2D");
@@ -92,10 +93,10 @@ namespace cerberus
 
 		// Define the usage type of the image
 		// TODO: this (probably) shouldn't be implied
-		VkImageUsageFlags usage;
+		VkImageUsageFlags usage = 0;
 		if (HasFlags(SAMPLE_COMPATIBLE))
 		{
-			usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+			usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
 		}
 		if (m_Specification.Usage == ImageUsage::Attachment)
 		{
@@ -141,7 +142,7 @@ namespace cerberus
 		if (!m_Image || !m_MemoryAlloc)
 			return;
 
-		ResourceManager::SubmitResourceFree([image = m_Image, allocation = m_MemoryAlloc]() mutable
+		RenderQueueManager::SubmitResourceFree([image = m_Image, allocation = m_MemoryAlloc]() mutable
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			ResourceAllocator allocator("VulkanImage2D");
@@ -293,7 +294,7 @@ namespace cerberus
 		if (!m_ImageView)
 			return;
 
-		ResourceManager::SubmitResourceFree([imageView = m_ImageView, sampler = m_Sampler]()
+		RenderQueueManager::SubmitResourceFree([imageView = m_ImageView, sampler = m_Sampler]()
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			NV_CORE_WARN("Image2D::Release ImageView = {0}", (const void*)imageView);
@@ -330,7 +331,7 @@ namespace cerberus
 		if (!m_ImageView)
 			return;
 
-		ResourceManager::SubmitResourceFree([imageView = m_ImageView, sampler = m_Sampler]() mutable
+		RenderQueueManager::SubmitResourceFree([imageView = m_ImageView, sampler = m_Sampler]() mutable
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			NV_CORE_WARN("Image2D::Release ImageView = {0}", (const void*)imageView);

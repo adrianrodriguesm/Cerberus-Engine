@@ -61,6 +61,7 @@ namespace cerberus
 		}
 	};
 
+	// Is basically a submesh instance
 	struct MeshInstanceProxy
 	{
 		Handle<MeshSourceProxy> MeshSource;

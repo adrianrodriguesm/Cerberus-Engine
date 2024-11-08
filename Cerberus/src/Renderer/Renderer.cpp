@@ -9,6 +9,7 @@
 #include "ImGui/ImGuizmo.h"
 #include "ImGui/ImGuiColors.h"
 #include "Renderer/ResourceManager.h"
+#include "Renderer/RenderQueueManager.h"
 
 #include "imgui.h"
 #ifndef IMGUI_IMPL_API
@@ -60,16 +61,11 @@ namespace cerberus
 	};
 
 	static RendererData* s_Data;
-	static RenderQueue* s_CommandQueue = nullptr;
-	static std::array<RenderQueue*, 3> s_ResourceFreeQueue;
 
 	static std::vector<VkCommandBuffer> s_ImGuiCommandBuffers;
 	void Renderer::Init()
 	{
 		s_Data = new RendererData();
-		s_CommandQueue = new RenderQueue();
-		for (auto& renderQueue : s_ResourceFreeQueue)
-			renderQueue = new RenderQueue();
 
 		auto vulkanDevice = RendererContext::GetCurrentDevice();
 		
@@ -124,9 +120,7 @@ namespace cerberus
 		s_Data->ShaderLibrary->Load("Resources/Shaders/BRDF.glsl", false);
 		s_Data->ShaderLibrary->Load("Resources/Shaders/Skybox.glsl", false);
 		s_Data->ShaderLibrary->Load("Resources/Shaders/PreDepth.glsl", false);
-		s_Data->ShaderLibrary->Load("Resources/Shaders/ShadowMap.glsl", false)
-			;
-			;
+		s_Data->ShaderLibrary->Load("Resources/Shaders/ShadowMap.glsl", false);
 		s_Data->ShaderLibrary->Load("Resources/Shaders/RayTraceTest.glsl", true);
 
 
@@ -145,7 +139,7 @@ namespace cerberus
 		s_Data->MainCommandBuffer = new CommandBuffer(ResourceManager::GetFramesInFlight(), "Main Command Buffer");
 		s_Data->SwapchainCommandBuffer = new CommandBuffer(true, "Swapchain");
 		// Compile Shader and Create default textures
-		Renderer::ExecuteRenderQueue();
+		RenderQueueManager::ExecuteRenderQueue();
 		Renderer::InitImGui();
 
 		s_Data->DefaultMaterial = CreateRef<MaterialAsset>();
@@ -165,15 +159,13 @@ namespace cerberus
 		s_Data->EmptyEnvironment = nullptr;
 #endif	
 		ComputePipeline::ReleaseComputeFence();
-		Renderer::ExecuteRenderQueue();
+		RenderQueueManager::ExecuteRenderQueue();
 		
 		auto vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 		// Wait until no actions being run on the device before destroyed
 		vkDeviceWaitIdle(vulkanDevice);
 
-		// Release All Queues
-		Renderer::ReleaseAllResources();
-		Renderer::ExecuteRenderQueue();
+		RenderQueueManager::ExecuteRenderQueue();
 
 		Renderer::ShutdownImGui();
 		const auto& stats = ResourceAllocator::GetStats();
@@ -192,16 +184,15 @@ namespace cerberus
 
 		s_Data->RendererDescriptorSetCache.clear();
 
-		delete s_CommandQueue;
-		for (auto renderQueue : s_ResourceFreeQueue)
-			delete renderQueue;
+		// Release All Queues
+		//RenderQueueManager::FreeAllSubmittedResources();
 
 		delete s_Data;
 	}
 
 	void Renderer::BeginFrame()
 	{
-		Renderer::Submit([]()
+		RenderQueueManager::Submit([]()
 		{
 			s_Data->DescriptorAllocator->ResetPool();
 			s_Data->DrawCallCount = 0;
@@ -310,7 +301,7 @@ namespace cerberus
 
 	void Renderer::RenderImGui()
 	{
-		Renderer::Submit([]() mutable
+		RenderQueueManager::Submit([]() mutable
 		{
 			BeginImGui(s_Data->MainCommandBuffer);
 
@@ -522,23 +513,6 @@ namespace cerberus
 		style.IndentSpacing = 11.0f;
 	}
 
-	void Renderer::ExecuteRenderQueue()
-	{
-		s_CommandQueue->Execute();
-	}
-
-	void Renderer::ReleaseResourceFromQueue(uint32_t index)
-	{
-		CORE_ASSERT(index < 3, "Invalid frame index!");
-		GetRenderResourceReleaseQueue(index).Execute();
-	}
-
-	void Renderer::ReleaseAllResources()
-	{
-		for (auto& releaseQueue : s_ResourceFreeQueue)
-			releaseQueue->Execute();
-	}
-
 	ShaderLibrary& Renderer::GetShaderLibrary()
 	{
 		return *s_Data->ShaderLibrary.get();
@@ -613,11 +587,11 @@ namespace cerberus
 		return Application::Get().GetWindow()->GetRendererContext();
 	}
 
-	void Renderer::BeginRenderPass(CommandBuffer* commandBuffer, Handle<RenderPass> hdRenderPass, Handle<Framebuffer> hdFramebuffer, bool explicitClear)
+	void Renderer::BeginRenderPass(CommandBuffer* commandBuffer, Handle<RenderPass> hdRenderPass, const DrawArea& drawArea)
 	{
 		uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 		
-		Framebuffer* framebuffer = ResourceManager::GetFramebuffer(hdFramebuffer);
+		Framebuffer* framebuffer = ResourceManager::GetFramebuffer(drawArea.Framebuffer);
 		RenderPass* renderPass = ResourceManager::GetRenderPass(hdRenderPass);
 
 		VkCommandBuffer vulkanCmdBuffer = commandBuffer->GetCommandBuffer(frameIndex);
@@ -642,7 +616,7 @@ namespace cerberus
 		vkCmdBeginRenderPass(vulkanCmdBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 
-		if (explicitClear)
+		if (drawArea.ExplicitClear)
 		{
 			const uint32_t colorAttachmentCount = (uint32_t)framebuffer->GetColorAttachmentCount();
 			const uint32_t totalAttachmentCount = colorAttachmentCount + (framebuffer->HasDepthAttachment() ? 1 : 0);
@@ -692,6 +666,27 @@ namespace cerberus
 		scissor.extent = { width, height };
 		scissor.offset = { 0, 0 };
 		vkCmdSetScissor(vulkanCmdBuffer, 0, 1, &scissor);
+
+
+		// Bind Descriptor Sets
+		GraphicsPipeline* pipeline = ResourceManager::GetGraphicsPipeline(drawArea.GraphicsPipeline);
+		CORE_ASSERT(pipeline, "Null graphics pipeline");
+		// Bind Pipeline to be used in render pass
+		vkCmdBindPipeline(vulkanCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->GetHandle());
+
+		VkPipelineLayout pipelineLayout = pipeline->GetVulkanPipelineLayout();
+		BindGroup* bindGroup0 = ResourceManager::GetBindGroup(drawArea.BindGroup0);
+		BindGroup* bindGroup1 = ResourceManager::GetBindGroup(drawArea.BindGroup1);
+		std::array<VkDescriptorSet, 2> descriptorSets =
+		{
+			bindGroup0->GetHandle(frameIndex),
+			bindGroup1->GetHandle(frameIndex)
+
+		};
+
+		// Bind the descriptor set
+		vkCmdBindDescriptorSets(vulkanCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout,
+			0, (uint32_t)descriptorSets.size(), descriptorSets.data(), 0, nullptr);
 #if OLD_RENDERER
 		Renderer::Submit([CommandBuffer, renderPass, explicitClear]()
 		{
@@ -801,6 +796,26 @@ namespace cerberus
 			s_Data->DrawCallCount = 0;
 		});
 #endif
+	}
+
+	void Renderer::SetActiveVertexAndIndexBuffer(CommandBuffer* commandBuffer, const Handle<GPUBuffer> hVertexBuffer, const Handle<GPUBuffer> hInderBuffer)
+	{
+		uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+		VkCommandBuffer vulkanCmdBuffer = commandBuffer->GetCommandBuffer(frameIndex);
+
+		// Index Buffer
+		GPUBuffer* indexBuffer = ResourceManager::GetBuffer(hInderBuffer);
+		CORE_ASSERT(indexBuffer, "Null GPU index buffer");
+		// VK_INDEX_TYPE_UINT32 : The type of data that index buffer stores
+		// Bind index buffer
+		vkCmdBindIndexBuffer(vulkanCmdBuffer, indexBuffer->Buffer, 0, VK_INDEX_TYPE_UINT32);
+		
+		// Vertex Buffer
+		GPUBuffer* vertexBuffer = ResourceManager::GetBuffer(hVertexBuffer);
+		CORE_ASSERT(vertexBuffer, "Null GPU vertex buffer");
+		VkDeviceSize offsets[1] = { 0 };
+		// Bind vertex buffer
+		vkCmdBindVertexBuffers(vulkanCmdBuffer, 0, 1, &vertexBuffer->Buffer, offsets);
 	}
 
 	VkCommandBuffer Renderer::GetCommandBuffer(bool beginCommand, bool compute)
@@ -1182,6 +1197,138 @@ namespace cerberus
 #endif
 	}
 
+	void Renderer::RenderRenderPass(CommandBuffer* commandBuffer, const DrawArea& drawArea, std::vector<uint32_t> drawStream)
+	{
+		uint32_t currentFrame = Renderer::GetCurrentFrameIndex();
+		VkCommandBuffer vulkanCommandBuffer = commandBuffer->GetCommandBuffer(currentFrame);
+
+		GraphicsPipeline* pipeline = ResourceManager::GetGraphicsPipeline(drawArea.GraphicsPipeline);
+		CORE_ASSERT(pipeline, "Null graphics pipeline");
+		// Bind Pipeline to be used in render pass
+		vkCmdBindPipeline(vulkanCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->GetHandle());
+
+		uint32_t* stream = drawStream.data();
+		DrawCallInfo drawCallInfo;
+		for (uint32_t index = 0; index < drawArea.DrawCount; index++)
+		{
+			uint16_t dirtyFlags = (uint16_t)*stream;
+			uint32_t dirtyCount = utils::GetCountOfBits(dirtyFlags);
+
+			stream += sizeof(uint32_t);
+			if (dirtyFlags & DrawStreamFlags::VERTEX_BUFFER)
+			{
+				drawCallInfo.VertexBuffer = *(Handle<GPUBuffer>*)&stream;
+				stream += sizeof(uint32_t);
+
+				GPUBuffer* vertexBuffer = ResourceManager::GetBuffer(drawCallInfo.VertexBuffer);
+				CORE_ASSERT(vertexBuffer, "Null GPU vertex buffer");
+				VkDeviceSize offsets[1] = { 0 };
+				// Bind vertex buffer
+				vkCmdBindVertexBuffers(vulkanCommandBuffer, 0, 1, &vertexBuffer->Buffer, offsets);
+			}
+			if (dirtyFlags & DrawStreamFlags::INDEX_BUFFER)
+			{
+				drawCallInfo.IndexBuffer = *(Handle<GPUBuffer>*)&stream;
+				stream += sizeof(uint32_t);
+
+				GPUBuffer* indexBuffer = ResourceManager::GetBuffer(drawCallInfo.IndexBuffer);
+				CORE_ASSERT(indexBuffer, "Null GPU index buffer");
+				VkDeviceSize offsets[1] = { 0 };
+				// VK_INDEX_TYPE_UINT32 : The type of data that index buffer stores
+				// Bind index buffer
+				vkCmdBindIndexBuffer(vulkanCommandBuffer, indexBuffer->Buffer, 0, VK_INDEX_TYPE_UINT32);
+			}
+
+
+			if (dirtyFlags & DrawStreamFlags::VERTEX_OFFSET)
+			{
+				drawCallInfo.VertexOffset = *stream;
+				stream += sizeof(uint32_t);
+			}
+			if (dirtyFlags & DrawStreamFlags::INDEX_OFFSET)
+			{
+				drawCallInfo.IndexOffset = *stream;
+				stream += sizeof(uint32_t);
+			}
+			
+			if (dirtyFlags & DrawStreamFlags::INDEX_COUNT) 
+			{
+				drawCallInfo.IndexCount = *stream;
+				stream += sizeof(uint32_t);
+			}
+
+			// Draw call
+			vkCmdDrawIndexed(vulkanCommandBuffer, drawCallInfo.IndexCount, 1, drawCallInfo.IndexOffset, drawCallInfo.VertexOffset, 0);
+			s_Data->DrawCallCount++;
+
+		}
+
+	}
+
+	void Renderer::RenderMeshInstances(CommandBuffer* commandBuffer, const DrawArea& drawArea, std::vector<Handle<MeshInstanceProxy>> drawStream)
+	{
+		uint32_t currentFrame = Renderer::GetCurrentFrameIndex();
+		VkCommandBuffer vulkanCommandBuffer = commandBuffer->GetCommandBuffer(currentFrame);
+#if 0
+		GraphicsPipeline* pipeline = ResourceManager::GetGraphicsPipeline(drawArea.GraphicsPipeline);
+		CORE_ASSERT(pipeline, "Null graphics pipeline");
+		// Bind Pipeline to be used in render pass
+		vkCmdBindPipeline(vulkanCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->GetHandle());
+
+
+		CORE_ASSERT(drawStream.size(), "Empty draw stream");
+		MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(drawStream[0]);
+		MeshSourceProxy* meshSource = ResourceManager::GetMeshSourceProxy(meshInstance->MeshSource);
+
+		VkDeviceSize offsets[1] = { 0 };
+		VkBuffer vertexBuffer = meshSource->VertexBuffer->GetHandle();
+		// Bind vertex buffer
+		vkCmdBindVertexBuffers(vulkanCommandBuffer, 0, 1, &vertexBuffer, offsets);
+
+
+		VkBuffer indexBuffer = meshSource->IndexBuffer->GetHandle();
+		// Bind vertex buffer
+		vkCmdBindIndexBuffer(vulkanCommandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+		// Bind Descriptor Sets
+		VkPipelineLayout pipelineLayout = pipeline->GetVulkanPipelineLayout();
+		BindGroup* bindGroup0 = ResourceManager::GetBindGroup(drawArea.BindGroup0);
+		BindGroup* bindGroup1 = ResourceManager::GetBindGroup(drawArea.BindGroup1);
+		std::array<VkDescriptorSet, 2> descriptorSets =
+		{
+			bindGroup0->GetHandle(currentFrame),
+			bindGroup1->GetHandle(currentFrame)
+
+		};
+
+		// Bind the descriptor set
+		vkCmdBindDescriptorSets(vulkanCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout,
+			0, (uint32_t)descriptorSets.size(), descriptorSets.data(), 0, nullptr);
+		
+		CORE_ASSERT(drawStream.size(), "Empty draw stream");
+#endif	
+		MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(drawStream[0]);
+		MeshSourceProxy* meshSource = ResourceManager::GetMeshSourceProxy(meshInstance->MeshSource);
+		SubmeshSourceProxy submeshSource = meshSource->Submeshes[meshInstance->SubmeshIndex];
+
+		GraphicsPipeline* pipeline = ResourceManager::GetGraphicsPipeline(drawArea.GraphicsPipeline);
+		VkPipelineLayout pipelineLayout = pipeline->GetVulkanPipelineLayout();
+
+		for (uint32_t index = 0; index < drawStream.size(); index++)
+		{
+			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(drawStream[index]);
+			// Bind Transform push constant (Vertex)
+			glm::mat4 worldTransform = meshInstance->WorldTransform;
+			vkCmdPushConstants(vulkanCommandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &worldTransform);
+
+			// Draw call
+			vkCmdDrawIndexed(vulkanCommandBuffer, submeshSource.IndexCount, 1, submeshSource.BaseIndex, submeshSource.BaseVertex, 0);
+			s_Data->DrawCallCount++;
+
+		}
+
+	}
+
 	/** /
 	void Renderer::RenderMesh(Ref<CommandBuffer> CommandBuffer, Ref<UniformBufferSet> uniformBufferSet, Ref<GraphicsPipeline> pipeline, Ref<Mesh> mesh, Ref<MaterialTable> materialTable, glm::mat4& transform)
 	{
@@ -1339,11 +1486,6 @@ namespace cerberus
 		return s_Data->WhiteTexture;
 	}
 
-	RenderQueue& Renderer::GetRenderResourceReleaseQueue(uint32_t index)
-	{
-		return *s_ResourceFreeQueue[index];
-	}
-
 	Ref<MaterialAsset> Renderer::GetDefaultPBRMaterial()
 	{
 		return s_Data->DefaultMaterial;
@@ -1358,11 +1500,4 @@ namespace cerberus
 	{
 		return s_Data->DescriptorLayoutCache->CreateDescriptorLayout(info);
 	}
-
-	RenderQueue& Renderer::GetRenderCommandQueue()
-	{
-		return *s_CommandQueue;
-	}
-
-	
 }

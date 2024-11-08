@@ -142,10 +142,11 @@ namespace cerberus
 		MeshSourceProxy* meshProxy = ResourceManager::GetMeshSourceProxy(mesh);
 		// Convert Mesh geometry to VkGeometryKHR
 		// BLAS builder requires raw device addresses.
-		VkBuffer vertexBuffer = meshProxy->VertexBuffer->GetVulkanBuffer();
-		VkDeviceAddress vertexAddress = utils::GetBufferDeviceAddress(vertexBuffer);
 
-		VkBuffer indexBuffer = meshProxy->IndexBuffer->GetVulkanBuffer();
+		VkBuffer vkVertexBuffer = meshProxy->VertexBuffer->GetHandle();
+		VkDeviceAddress vertexAddress = utils::GetBufferDeviceAddress(vkVertexBuffer);
+
+		VkBuffer indexBuffer = meshProxy->IndexBuffer->GetHandle();
 		VkDeviceAddress indexAddress = utils::GetBufferDeviceAddress(indexBuffer);
 
 		//uint32_t maxPrimitiveCount = mesh->GetMeshSource()->GetIndexBuffer()->GetCount() / 3;
@@ -155,7 +156,9 @@ namespace cerberus
 		triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;  // vec3 vertex position data.
 		triangles.vertexData.deviceAddress = vertexAddress;
 		triangles.vertexStride = vertexBufferStride;
-		triangles.maxVertex = meshProxy->VertexBuffer->GetSize() / vertexBufferStride;
+		GPUBuffer* vertexBuffer = ResourceManager::GetBuffer(meshProxy->VertexBuffer->GetGPUBuffer());
+		CORE_ASSERT(vertexBuffer, "Invalid vertex buffer");
+		triangles.maxVertex = vertexBuffer->Size / vertexBufferStride;
 		// Describe index data (32-bit unsigned int)
 		triangles.indexType = VK_INDEX_TYPE_UINT32;
 		triangles.indexData.deviceAddress = indexAddress;

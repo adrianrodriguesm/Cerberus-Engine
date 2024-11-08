@@ -4,6 +4,8 @@
 #include "Renderer/RendererContext.h"
 #include "Core/Application.h"
 #include "Renderer/ResourceManager.h"
+#include "Renderer/RenderQueueManager.h"
+
 namespace cerberus
 {
 	namespace utils
@@ -23,14 +25,6 @@ namespace cerberus
 			}
 			CORE_ASSERT(false, "Image format does not exits!");
 			return VK_FORMAT_UNDEFINED;
-		}
-
-		inline bool IsDepthFormat(ImageFormat format)
-		{
-			if (format == ImageFormat::DEPTH24STENCIL8 || format == ImageFormat::DEPTH32F)
-				return true;
-
-			return false;
 		}
 
 	}
@@ -60,7 +54,7 @@ namespace cerberus
 		ResourceManager::DestroyRenderTarget(m_DepthRenderTargets);
 		// Framebuffer
 		VkFramebuffer framebuffer = m_Framebuffer;
-		ResourceManager::SubmitResourceFree([framebuffer]()
+		RenderQueueManager::SubmitResourceFree([framebuffer]()
 		{
 			VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			vkDestroyFramebuffer(device, framebuffer, nullptr);
@@ -88,7 +82,7 @@ namespace cerberus
 		if (m_Framebuffer)
 		{
 			VkFramebuffer framebuffer = m_Framebuffer;
-			ResourceManager::SubmitResourceFree([framebuffer]()
+			RenderQueueManager::SubmitResourceFree([framebuffer]()
 			{
 				VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 				vkDestroyFramebuffer(device, framebuffer, nullptr);

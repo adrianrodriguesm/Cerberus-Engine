@@ -49,7 +49,7 @@ namespace cerberus
 		uint32_t Height = 1;
 		uint32_t Mips = 1;
 		uint32_t Layers = 1;
-		uint32_t Flags;
+		uint32_t Flags = 0;
 		std::string DebugName;
 	};
 

@@ -50,6 +50,7 @@ namespace cerberus
 		static void DestroyBindGroupLayout(const Handle<BindGroupLayout> handle);
 		static BindGroupLayout* GetBindGroupLayout(const Handle<BindGroupLayout> handle);
 
+
 		static Handle<BindGroup> CreateBindGroup(const BindGroupSpecification& spec);
 		static void DestroyBindGroup(const Handle<BindGroup> handle);
 		static BindGroup* GetBindGroup(const Handle<BindGroup> handle);
@@ -92,30 +93,5 @@ namespace cerberus
 		static uint32_t GetFramesInFlight();
 
 		static void ResetDescriptorPool();
-
-		static void FreeAllSubmittedResources(const uint32_t frameIndex);
-
-		template<typename FuncT>
-		static void SubmitResourceFree(FuncT&& func)
-		{
-			auto renderCommand = [](void* ptr)
-			{
-				auto pFunction = (FuncT*)ptr;
-				// Execute Function
-				(*pFunction)();
-
-				// NOTE: Instead of destroying we could try and enforce all items to be trivally destructible
-				// however some items like uniforms which contain std::strings still exist for now
-				// static_assert(std::is_trivially_destructible_v<FuncT>, "FuncT must be trivially destructible");
-				pFunction->~FuncT();
-			};
-
-			uint32_t index = Window::GetCurrentSwapchain()->GetCurrentBufferIndex();
-			auto functionMemoryAllocation = GetResourceQueue(index).Allocate(renderCommand, sizeof(func));
-			// Construct function (emplace new)
-			new (functionMemoryAllocation) FuncT(std::forward<FuncT>(func));
-		}
-	private:
-		static RenderQueue& GetResourceQueue(const uint32_t frameIndex);
 	};
 }

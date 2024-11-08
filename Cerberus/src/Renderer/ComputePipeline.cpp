@@ -3,6 +3,7 @@
 #include "Renderer/Renderer.h"
 #include "Core/Timer.h"
 #include "Renderer/Fence.h"
+#include "Renderer/RenderQueueManager.h"
 namespace cerberus
 {
 	static Ref<Fence> s_ComputeFence;
@@ -11,7 +12,7 @@ namespace cerberus
 		: m_Shader(computeShader)
 	{
 		ComputePipeline* instance = this;
-		Renderer::Submit([instance]()
+		RenderQueueManager::Submit([instance]()
 		{
 			if (!s_ComputeFence)
 			{
@@ -27,7 +28,7 @@ namespace cerberus
 		if (!m_ComputePipeline)
 			return;
 
-		Renderer::SubmitResourceFree([computePipeline = m_ComputePipeline, pipelineLayout = m_ComputePipelineLayout, pipelineCache = m_PipelineCache]()
+		RenderQueueManager::SubmitResourceFree([computePipeline = m_ComputePipeline, pipelineLayout = m_ComputePipelineLayout, pipelineCache = m_PipelineCache]()
 		{
 			VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			vkDestroyPipelineLayout(device, pipelineLayout, nullptr);

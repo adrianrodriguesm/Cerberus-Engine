@@ -23,8 +23,6 @@ namespace cerberus
 
 		DescriptorAllocator* PersistentDescriptorAllocator;
 		DescriptorAllocator* DescriptorAllocator;
-
-		std::array<RenderQueue*, 3> ResourceFreeQueue;
 	};
 
 	static ResourceManagerData* s_RMData;
@@ -43,12 +41,6 @@ namespace cerberus
 		s_RMData->PersistentDescriptorAllocator = new DescriptorAllocator(descriptorAllocatorSpec);
 		descriptorAllocatorSpec.IsPersistent = false;
 		s_RMData->DescriptorAllocator = new DescriptorAllocator(descriptorAllocatorSpec);
-
-
-		for (uint32_t i = 0; i < 3; i++)
-		{
-			s_RMData->ResourceFreeQueue[i] = new RenderQueue();
-		}
 	}
 	void ResourceManager::Shutdown()
 	{
@@ -68,12 +60,6 @@ namespace cerberus
 
 		delete s_RMData->PersistentDescriptorAllocator;
 		delete s_RMData->DescriptorAllocator;
-
-		for (uint32_t i = 0; i < 3; i++)
-		{
-			FreeAllSubmittedResources(i);
-			delete s_RMData->ResourceFreeQueue[i];
-		}
 
 		delete s_RMData;
 	}
@@ -256,16 +242,6 @@ namespace cerberus
 	RenderPass* ResourceManager::GetRenderPass(const Handle<RenderPass> handle)
 	{
 		return s_RMData->RenderPasses.Get(handle);
-	}
-
-	RenderQueue& ResourceManager::GetResourceQueue(const uint32_t frameIndex)
-	{
-		return *(s_RMData->ResourceFreeQueue[frameIndex]);
-	}
-
-	void ResourceManager::FreeAllSubmittedResources(const uint32_t frameIndex)
-	{
-		s_RMData->ResourceFreeQueue[frameIndex]->Execute();
 	}
 
 

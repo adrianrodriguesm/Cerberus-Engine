@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "RenderPass.h"
 #include "Renderer/RendererContext.h"
+#include "Renderer/RenderQueueManager.h"
 #include "Renderer/ResourceManager.h"
 namespace cerberus
 {
@@ -54,16 +55,6 @@ namespace cerberus
 			return VK_ATTACHMENT_STORE_OP_NONE;
 		}
 
-
-
-		inline bool IsDepthFormat(ImageFormat format)
-		{
-			if (format == ImageFormat::DEPTH24STENCIL8 || format == ImageFormat::DEPTH32F)
-				return true;
-
-			return false;
-		}
-
 	}
 
 	RenderPass::RenderPass(const RenderPassSpecification& spec)
@@ -73,7 +64,7 @@ namespace cerberus
 	}
 	RenderPass::~RenderPass()
 	{
-		ResourceManager::SubmitResourceFree([renderPass = m_RenderPass]()
+		RenderQueueManager::SubmitResourceFree([renderPass = m_RenderPass]()
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			vkDestroyRenderPass(vulkanDevice, renderPass, nullptr);

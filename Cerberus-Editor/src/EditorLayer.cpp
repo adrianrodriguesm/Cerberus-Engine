@@ -33,7 +33,7 @@ namespace cerberus
 		m_EditorPanelManager = CreateRef<EditorPanelManager>();
 		m_EditorPanelManager->AddPanel("ScenePropertiesPanel", { true, scenePropertiesPanel });
 		m_EditorPanelManager->AddPanel("SceneHierarchyPanel", { true, sceneHierarchyPanel });
-		m_EditorPanelManager->AddPanel("ContentBrowserPanel", { true, contentBrowserPanel });
+		//m_EditorPanelManager->AddPanel("ContentBrowserPanel", { true, contentBrowserPanel });
 	}
 
 	void EditorLayer::OnDetach()
@@ -48,8 +48,8 @@ namespace cerberus
 		UI_RenderTittleBar();
 		UI_Viewport();
 		m_SceneRenderer->OnImGuiRender();
-#if OLD_RENDERER
 		m_EditorPanelManager->OnImGuiRender();
+#if OLD_RENDERER
 		AssetEditorManager::OnImGuiRender();
 #endif
 	}

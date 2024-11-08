@@ -1,6 +1,8 @@
 #pragma once
 #include "Renderer/ResourceAllocator.h"
 #include "Core/Buffer.h"
+#include "Core/Handle.h"
+#include "Renderer/GPUBuffer.h"
 namespace cerberus
 {
 	/////////////////////////////////////////////////////////////////////// ShaderDataType
@@ -109,16 +111,17 @@ namespace cerberus
 		VertexBuffer(uint32_t size);
 		virtual ~VertexBuffer();
 
-		inline VkBuffer GetVulkanBuffer() const { return m_VertexBuffer; }
-		inline uint32_t GetSize() const { return m_Size; }
+		Handle<GPUBuffer> GetGPUBuffer() const { return m_VertexBuffer; }
+		VkBuffer GetHandle() const;
+
 		const VertexBufferLayout& GetLayout() const { return m_VertexBufferLayout; }
 		void SetVertexBufferLayout(const VertexBufferLayout& layout) { m_VertexBufferLayout = layout; }
 
+		void Invalidate();
+
 	private:
-		VkBuffer m_VertexBuffer;
-		uint32_t m_Size;
+		Handle<GPUBuffer> m_VertexBuffer;
 		Buffer m_LocalData;
-		VmaAllocation m_MemoryAllocation;
 		VertexBufferLayout m_VertexBufferLayout;
 
 	};
