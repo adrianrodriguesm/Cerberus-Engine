@@ -242,6 +242,7 @@ namespace cerberus
 			rtImgView->UpdateDescriptor();
 
 			// Bind the storage image to the RT bind group at binding point 16
+			// (matches `layout(rgba32f, set=0, binding=16) writeonly uniform image2D image` in Raytrace.rgen)
 			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
 			rtBindGroup->SetImageView(m_RT_OutputImageView, 16);
 		}
