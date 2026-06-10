@@ -63,8 +63,6 @@ namespace cerberus
 
 	void AccelerationStructureBuilder::SubmitMeshInstance(const Handle<MeshInstanceProxy>& meshInstanceHandle)
 	{
-		static uint32_t meshInstanceIndex = 0; // TODO: sort this out
-		
 		MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
 		MeshSourceProxy* meshSourceProxy = ResourceManager::GetMeshSourceProxy(meshInstance->MeshSource);
 		SubmeshSourceProxy& submeshProxy = meshSourceProxy->Submeshes[meshInstance->SubmeshIndex];
@@ -74,14 +72,13 @@ namespace cerberus
 
 		VkAccelerationStructureInstanceKHR intance{};
 		intance.transform = transformKRH;											// Position of the instance
-		intance.instanceCustomIndex = meshInstanceIndex;							// gl_InstanceCustomIndexEXT
+		intance.instanceCustomIndex = static_cast<uint32_t>(m_TLASInstances.size());	// gl_InstanceCustomIndexEXT
 		intance.accelerationStructureReference = blas->GetDeviceAddress();
 		intance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
 		intance.mask = 0xFF;       //  Only be hit if rayMask & instance.mask != 0
 		intance.instanceShaderBindingTableRecordOffset = 0;  // We will use the same hit group for all objects
 
 		m_TLASInstances.emplace_back(intance);
-		meshInstanceIndex++;
 	}
 
 	void AccelerationStructureBuilder::EndTLASBuild(Handle<AccelerationStructure>& outTLAS)

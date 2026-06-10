@@ -1,5 +1,7 @@
 #pragma once
 #include <stack>
+#include <new>
+#include <utility>
 #include "Core/Handle.h"
 namespace cerberus
 {
@@ -92,6 +94,10 @@ namespace cerberus
 		{
 			if (handle.IsValid())
 			{
+				if (handle.m_Index >= m_Capacity)
+					return nullptr;
+				if (m_Generations[handle.m_Index] != handle.m_ID)
+					return nullptr;
 				return &m_Data[handle.m_Index];
 			}
 			return nullptr;
@@ -101,6 +107,12 @@ namespace cerberus
 		{
 			if (handle.IsValid())
 			{
+				if (handle.m_Index >= m_Capacity)
+					return;
+				if (m_Generations[handle.m_Index] != handle.m_ID)
+					return;
+				if (m_FreeIndexes.HasElement(handle.m_Index))
+					return;
 				m_FreeIndexes.push(handle.m_Index);
 				m_Data[handle.m_Index].~T();
 				//handle.Invalidate();
@@ -126,12 +138,15 @@ namespace cerberus
 					newGenerations[i] = UUID_16();
 			}
 
-			std::memmove(newData, m_Data, m_Size * sizeof(T));
-			std::memmove(newGenerations, m_Generations, m_Size * sizeof(uint16_t));
-			/** /
 			for (size_t i = 0; i < m_Size; i++)
-				m_Data[i].~T();
-			/**/
+			{
+				newGenerations[i] = m_Generations[i];
+				if (!m_FreeIndexes.HasElement(i))
+				{
+					new (&newData[i]) T(std::move(m_Data[i]));
+					m_Data[i].~T();
+				}
+			}
 			::operator delete(m_Data, m_Capacity * sizeof(T));
 			delete [] m_Generations;
 			 
