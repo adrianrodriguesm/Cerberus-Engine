@@ -109,7 +109,7 @@ namespace cerberus
 			layoutBinding.descriptorCount = 1;
 			layoutBinding.stageFlags = imageStorage.ShaderStage;
 			layoutBinding.pImmutableSamplers = nullptr;
-			layoutBinding.binding = layoutBinding.binding;
+			layoutBinding.binding = imageStorage.BindingPoint;
 		}
 		// Fill VkWriteDescriptorSet
 		for (const auto& layoutBinding : layoutBindings)
