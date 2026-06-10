@@ -125,24 +125,19 @@ namespace cerberus
 		{
 			T* newData = (T*)::operator new (newCapacity * sizeof(T));
 			uint16_t* newGenerations = new uint16_t[newCapacity];
+			for (size_t i = 0; i < newCapacity; i++)
+				newGenerations[i] = UUID_16();
 
 			if (newCapacity < m_Size)
 			{
 				m_Size = newCapacity;
 			}
-			else
-			{
-				// Create the generations ids
-				size_t offset = newCapacity - m_Size;
-				for (size_t i = m_Size; i < newCapacity; i++)
-					newGenerations[i] = UUID_16();
-			}
 
 			for (size_t i = 0; i < m_Size; i++)
 			{
-				newGenerations[i] = m_Generations[i];
 				if (!m_FreeIndexes.HasElement(i))
 				{
+					newGenerations[i] = m_Generations[i];
 					new (&newData[i]) T(std::move(m_Data[i]));
 					m_Data[i].~T();
 				}

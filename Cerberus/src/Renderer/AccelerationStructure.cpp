@@ -70,15 +70,15 @@ namespace cerberus
 		AccelerationStructure* blas = ResourceManager::GetAccelerationStructure(submeshProxy.BLAS);
 		VkTransformMatrixKHR transformKRH = utils::TransformFromGLMToKHRMatrix(meshInstance->WorldTransform);
 
-		VkAccelerationStructureInstanceKHR intance{};
-		intance.transform = transformKRH;											// Position of the instance
-		intance.instanceCustomIndex = static_cast<uint32_t>(m_TLASInstances.size());	// gl_InstanceCustomIndexEXT
-		intance.accelerationStructureReference = blas->GetDeviceAddress();
-		intance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-		intance.mask = 0xFF;       //  Only be hit if rayMask & instance.mask != 0
-		intance.instanceShaderBindingTableRecordOffset = 0;  // We will use the same hit group for all objects
+		VkAccelerationStructureInstanceKHR instance{};
+		instance.transform = transformKRH;											// Position of the instance
+		instance.instanceCustomIndex = static_cast<uint32_t>(m_TLASInstances.size());	// gl_InstanceCustomIndexEXT
+		instance.accelerationStructureReference = blas->GetDeviceAddress();
+		instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+		instance.mask = 0xFF;       //  Only be hit if rayMask & instance.mask != 0
+		instance.instanceShaderBindingTableRecordOffset = 0;  // We will use the same hit group for all objects
 
-		m_TLASInstances.emplace_back(intance);
+		m_TLASInstances.emplace_back(instance);
 	}
 
 	void AccelerationStructureBuilder::EndTLASBuild(Handle<AccelerationStructure>& outTLAS)
