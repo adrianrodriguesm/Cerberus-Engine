@@ -5,6 +5,8 @@
 #include "Math/Matrix.h"
 #include "Renderer/ResourceManager.h"
 #include "Renderer/RenderQueueManager.h"
+#include "Renderer/RendererContext.h"
+#include "Renderer/VulkanExtensions.h"
 // TODO: Remove these to (only for test)
 #include "Renderer/ShaderCompiler.h"
 #include "Renderer/TextureAsset.h"
@@ -81,25 +83,25 @@ namespace cerberus
 			bindGroup1Spec.Persistent = false;
 			m_BindGroup1 = ResourceManager::CreateBindGroup(bindGroup1Spec);
 
-			// SET 2
-			// Ray Tracing
-			BindGroupLayout::BindGroupLayoutInfo layoutInfoRT = ShaderReflection::ReflectLayoutInfo(shader, 2);
-			m_RT_BindGroupLayout = ResourceManager::CreateBindGroupLayout(layoutInfoRT);
+			// SET 2 – RT output image + bind group reflected from the Raytrace shader (set 0)
+			{
+				Ref<Shader> rtShader = Renderer::GetShaderLibrary().Get("Raytrace");
 
-			BindGroupSpecification bindGroupRTSpec;
-			bindGroupRTSpec.BindGroupLayout = m_RT_BindGroupLayout;
-			bindGroupRTSpec.Persistent = false;
-			m_RT_BindGroup = ResourceManager::CreateBindGroup(bindGroupRTSpec);
+				BindGroupLayout::BindGroupLayoutInfo layoutInfoRT = ShaderReflection::ReflectLayoutInfo(rtShader, 0);
+				m_RT_BindGroupLayout = ResourceManager::CreateBindGroupLayout(layoutInfoRT);
 
+				BindGroupSpecification bindGroupRTSpec;
+				bindGroupRTSpec.BindGroupLayout = m_RT_BindGroupLayout;
+				bindGroupRTSpec.Persistent = false;
+				m_RT_BindGroup = ResourceManager::CreateBindGroup(bindGroupRTSpec);
+			}
 
-			// Pipeline
+			// RT Pipeline
 			PipelineSpecification rt_pipelineSpec;
 			rt_pipelineSpec.DebugName = "RayTrace";
-			rt_pipelineSpec.Shader = Renderer::GetShaderLibrary().Get("Raytracer");
+			rt_pipelineSpec.Shader = Renderer::GetShaderLibrary().Get("Raytrace");
 			rt_pipelineSpec.CullMode = CullMode::Back;
 			rt_pipelineSpec.DepthOperator = DepthCompareOperator::LessOrEqual;
-			// -- Render to the same target texture as the geometry pass
-			rt_pipelineSpec.RenderPass = m_RenderPass;
 			m_RT_Pipeline = ResourceManager::CreateRayTracingPipeline(rt_pipelineSpec);
 
 			ShaderBindingTableSpecification sbtSpec;
@@ -202,6 +204,48 @@ namespace cerberus
 		}
 
 		RenderQueueManager::ExecuteRenderQueue();
+
+		// Create the RT output image (storage image, RGBA32F, SAMPLE_COMPATIBLE for ImGui display)
+		{
+			ImageSpecification imgSpec;
+			imgSpec.DebugName = "RT Output";
+			imgSpec.Width = (uint32_t)m_ViewportResolution.x;
+			imgSpec.Height = (uint32_t)m_ViewportResolution.y;
+			imgSpec.Format = ImageFormat::RGBA32F;
+			imgSpec.Usage = ImageUsage::Storage;
+			imgSpec.Flags = SAMPLE_COMPATIBLE;
+			imgSpec.Mips = 1;
+			imgSpec.Layers = 1;
+			m_RT_OutputImage = ResourceManager::CreateImage(imgSpec);
+			Image* rtImg = ResourceManager::GetImage(m_RT_OutputImage);
+			rtImg->Invalidate();
+			rtImg->SetLayout(VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
+
+			ImageViewProperties viewProp;
+			viewProp.Image = m_RT_OutputImage;
+			viewProp.BaseMip = 0;
+			viewProp.MipCount = 1;
+			viewProp.BaseLayer = 0;
+			viewProp.LayerCount = 1;
+			viewProp.ViewType = ImageViewType::Image2D;
+			SamplerSpecification samplerSpec;
+			samplerSpec.SamplerWrap = SamplerWrap::Clamp;
+			samplerSpec.SamplerFilter = SamplerFilter::Linear;
+			samplerSpec.Anisotropy = false;
+			samplerSpec.MinLOD = 0.f;
+			samplerSpec.MaxLOD = 1.f;
+			samplerSpec.ShaderResource = true;
+			viewProp.SamplerSpec = samplerSpec;
+			m_RT_OutputImageView = ResourceManager::CreateImageView(viewProp);
+			ImageView* rtImgView = ResourceManager::GetImageView(m_RT_OutputImageView);
+			rtImgView->Invalidate();
+			rtImgView->UpdateDescriptor();
+
+			// Bind the storage image to the RT bind group at binding point 16
+			// (matches `layout(rgba32f, set=0, binding=16) writeonly uniform image2D image` in Raytrace.rgen)
+			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
+			rtBindGroup->SetImageView(m_RT_OutputImageView, 16);
+		}
 	}
 
 	PathTracerSceneRenderer::~PathTracerSceneRenderer()
@@ -219,6 +263,10 @@ namespace cerberus
 		ResourceManager::DestroyBindGroupLayout(m_BindGroup1Layout);
 		ResourceManager::DestroyBindGroup(m_RT_BindGroup);
 		ResourceManager::DestroyBindGroupLayout(m_RT_BindGroupLayout);
+		if (m_RT_OutputImageView.IsValid())
+			ResourceManager::DestroyImageView(m_RT_OutputImageView);
+		if (m_RT_OutputImage.IsValid())
+			ResourceManager::DestroyImage(m_RT_OutputImage);
 	}
 
 	void PathTracerSceneRenderer::BeginScene(const SceneRendererCamera& sceneRendererCamera)
@@ -254,6 +302,9 @@ namespace cerberus
 		BindGroup* bindGroup0 = ResourceManager::GetBindGroup(m_BindGroup0);
 		bindGroup0->Update(frameIndex);
 
+		BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
+		rtBindGroup->Update(frameIndex);
+
 	}
 
 	void PathTracerSceneRenderer::FlushRenderPasses()
@@ -261,6 +312,7 @@ namespace cerberus
 		// Render Frame
 		ResourceManager::ResetDescriptorPool();
 		UpdateUBOData();
+		uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 		CommandBuffer* commnadBuffer = Renderer::GetMainCommandBuffer(m_Specification.SwapChainTarget);
 		commnadBuffer->RT_Begin();
 		{
@@ -284,6 +336,46 @@ namespace cerberus
 			}
 			Renderer::EndRenderPass(commnadBuffer);
 		}
+
+		// Ray tracing dispatch
+		{
+			VkCommandBuffer cmd = commnadBuffer->GetCommandBuffer(frameIndex);
+			RayTracingPipeline* rtPipeline = ResourceManager::GetRayTracingPipeline(m_RT_Pipeline);
+			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
+
+			const auto& rtProps = RendererContext::GetCurrentDevice()->GetRayTracingProperties();
+			const uint32_t handleSize = rtProps.shaderGroupHandleSize;
+
+			GPUBuffer* sbtBuffer = ResourceManager::GetBuffer(m_ShaderBindingTable->GetGPUBuffer());
+			VkDeviceAddress sbtBase = sbtBuffer->GetDeviceAddress();
+
+			VkStridedDeviceAddressRegionKHR raygenRegion{};
+			raygenRegion.deviceAddress = sbtBase;
+			raygenRegion.stride = handleSize;
+			raygenRegion.size = handleSize;
+
+			VkStridedDeviceAddressRegionKHR missRegion{};
+			missRegion.deviceAddress = sbtBase + handleSize;
+			missRegion.stride = handleSize;
+			missRegion.size = handleSize;
+
+			VkStridedDeviceAddressRegionKHR hitRegion{};
+			hitRegion.deviceAddress = sbtBase + 2 * handleSize;
+			hitRegion.stride = handleSize;
+			hitRegion.size = handleSize;
+
+			VkStridedDeviceAddressRegionKHR callableRegion{};
+
+			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, rtPipeline->GetHandle());
+
+			VkDescriptorSet rtDescriptorSet = rtBindGroup->GetHandle(frameIndex);
+			vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+				rtPipeline->GetVulkanPipelineLayout(), 0, 1, &rtDescriptorSet, 0, nullptr);
+
+			ext::vkCmdTraceRaysKHR(cmd, &raygenRegion, &missRegion, &hitRegion, &callableRegion,
+				(uint32_t)m_ViewportResolution.x, (uint32_t)m_ViewportResolution.y, 1);
+		}
+
 		commnadBuffer->RT_End();
 		commnadBuffer->RT_Submit();
 	}
@@ -490,10 +582,6 @@ namespace cerberus
 
 	Handle<ImageView> PathTracerSceneRenderer::GetFinalPassImage() const
 	{
-		Framebuffer* framebuffer = ResourceManager::GetFramebuffer(m_Framebuffer);
-		Handle<RenderTargetTexture> rtHandle = framebuffer->GetColorTarget(0);
-		RenderTargetTexture* renderTarget = ResourceManager::GetRenderTarget(rtHandle);
-		Handle<ImageView> imgViewHandle = renderTarget->GetImageView();
-		return imgViewHandle;
+		return m_RT_OutputImageView;
 	}
 }

@@ -129,6 +129,9 @@ namespace cerberus
 
 		Handle<RayTracingPipeline> m_RT_Pipeline;
 
+		Handle<Image> m_RT_OutputImage;
+		Handle<ImageView> m_RT_OutputImageView;
+
 		Scope<ShaderBindingTable> m_ShaderBindingTable;
 
 

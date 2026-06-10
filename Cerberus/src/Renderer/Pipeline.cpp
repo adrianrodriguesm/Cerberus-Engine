@@ -383,9 +383,27 @@ namespace cerberus
 
 		std::vector<VkPipelineShaderStageCreateInfo> pipelineShaderStageInfo = m_Specification.Shader->GetPipelineShaderModules();
 
+		// Find stage indices by matching the stage flag so the order of iteration
+		// over the shader's unordered_map doesn't matter.
+		m_RayGenIndex = VK_SHADER_UNUSED_KHR;
+		m_MissHitIndex = VK_SHADER_UNUSED_KHR;
+		m_TriangleHitIndex = VK_SHADER_UNUSED_KHR;
+		for (uint32_t i = 0; i < (uint32_t)pipelineShaderStageInfo.size(); i++)
+		{
+			switch (pipelineShaderStageInfo[i].stage)
+			{
+			case VK_SHADER_STAGE_RAYGEN_BIT_KHR:      m_RayGenIndex      = i; break;
+			case VK_SHADER_STAGE_MISS_BIT_KHR:         m_MissHitIndex     = i; break;
+			case VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR:  m_TriangleHitIndex = i; break;
+			default: break;
+			}
+		}
+		CORE_ASSERT(m_RayGenIndex != VK_SHADER_UNUSED_KHR, "RT shader missing raygen stage!");
+		CORE_ASSERT(m_MissHitIndex != VK_SHADER_UNUSED_KHR, "RT shader missing miss stage!");
+		CORE_ASSERT(m_TriangleHitIndex != VK_SHADER_UNUSED_KHR, "RT shader missing closest-hit stage!");
+
 		// TODO: MOVE this to Shader Land and abstracted
 		// Shader groups
-		m_RayGenIndex = 0;
 		VkRayTracingShaderGroupCreateInfoKHR rayGenGroupInfo = {};
 		rayGenGroupInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		rayGenGroupInfo.pNext = nullptr;
@@ -395,7 +413,6 @@ namespace cerberus
 		rayGenGroupInfo.anyHitShader = VK_SHADER_UNUSED_KHR;
 		rayGenGroupInfo.intersectionShader = VK_SHADER_UNUSED_KHR;
 
-		m_MissHitIndex = 1;
 		VkRayTracingShaderGroupCreateInfoKHR missGroupInfo = {};
 		missGroupInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		missGroupInfo.pNext = nullptr;
@@ -405,13 +422,12 @@ namespace cerberus
 		missGroupInfo.anyHitShader = VK_SHADER_UNUSED_KHR;
 		missGroupInfo.intersectionShader = VK_SHADER_UNUSED_KHR;
 
-		m_TriangleHitIndex = 2;
 		VkRayTracingShaderGroupCreateInfoKHR triangleHitGroupInfo = {};
 		triangleHitGroupInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 		triangleHitGroupInfo.pNext = nullptr;
 		triangleHitGroupInfo.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
 		triangleHitGroupInfo.generalShader = VK_SHADER_UNUSED_KHR;
-		triangleHitGroupInfo.closestHitShader = 2;
+		triangleHitGroupInfo.closestHitShader = m_TriangleHitIndex;
 		triangleHitGroupInfo.anyHitShader = VK_SHADER_UNUSED_KHR;
 		triangleHitGroupInfo.intersectionShader = VK_SHADER_UNUSED_KHR;
 
