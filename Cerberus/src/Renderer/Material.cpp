@@ -14,7 +14,6 @@ namespace cerberus
 	static const std::string s_MetalnessMapUniform = "u_MetallicTex";
 	static const std::string s_RoughnessMapUniform = "u_RoughnessTex";
 
-
 	Material::Material(const Ref<Shader>& shader, const std::string& name, bool persistent)
 		: m_Shader(shader), m_Name(name), m_WriteDescriptors(Renderer::GetRendererConfig().FramesInFlight),
 		m_DescriptorSets(Renderer::GetRendererConfig().FramesInFlight), m_Persistent(persistent)
@@ -59,11 +58,12 @@ namespace cerberus
 			m_WriteDescriptors[frameIndex].push_back(pendingDescriptor->WriteDescriptorSet);
 		}
 
-		VkDescriptorSetLayout descriptorSetLayout = m_Shader->GetDescriptorSetLayouts()[0];
+		auto& descriptorSetLayouts = m_Shader->GetDescriptorSetLayouts();
 		//const bool persistent = m_Persistent;
 		const bool persistent = false;
-		if (!persistent || m_DescriptorSets[frameIndex] == VK_NULL_HANDLE)
+		if ((!persistent || m_DescriptorSets[frameIndex] == VK_NULL_HANDLE) && descriptorSetLayouts.size())
 		{
+			VkDescriptorSetLayout descriptorSetLayout = descriptorSetLayouts[0];
 			m_DescriptorSets[frameIndex] = Renderer::AllocateDescriptorSet(descriptorSetLayout, persistent);
 
 			CORE_ASSERT(m_DescriptorSets[frameIndex], "Invalid descriptor set created!");
@@ -126,8 +126,10 @@ namespace cerberus
 	{
 		Set<glm::mat4>(name, value);
 	}
-	void Material::Set(const std::string& name, const Ref<Image2D>& image)
+
+	void Material::Set(const std::string& name, const Ref<Image>& image)
 	{
+#if OLD_RENDERER
 		const ShaderResourceDeclaration* resource = FindResourceDeclaration(name);
 		CORE_ASSERT(resource, "Resource does not exist!");
 
@@ -146,9 +148,11 @@ namespace cerberus
 		m_ResidentDescriptors[binding] = std::make_shared<PendingDescriptor>(PendingDescriptor{ PendingDescriptorType::Image2D, *writeDescriptorSet, nullptr, image });
 		//image->UpdateDescriptor();
 		m_ResidentDescriptors[binding]->WriteDescriptorSet.pImageInfo = &image->GetVulkanDescriptorInfo();
+#endif
 	}
-	void Material::Set(const std::string& name, const Ref<Texture2D>& texture)
+	void Material::Set(const std::string& name, const Handle<Texture2D>& texture)
 	{
+#if OLD_RENDERER
 		const ShaderResourceDeclaration* resource = FindResourceDeclaration(name);
 		CORE_ASSERT(resource, "Resource does not exist!");
 
@@ -166,10 +170,12 @@ namespace cerberus
 		CORE_ASSERT(writeDescriptorSet, "Descriptor set not found!");
 		m_ResidentDescriptors[binding] = std::make_shared<PendingDescriptor>(PendingDescriptor{ PendingDescriptorType::Texture2D, *writeDescriptorSet,  std::static_pointer_cast<Texture>(texture) });
 		m_ResidentDescriptors[binding]->WriteDescriptorSet.pImageInfo = &texture->GetVulkanDescriptorInfo();
+#endif
 	}
 
-	void Material::Set(const std::string& name, const Ref<TextureCube>& texture)
+	void Material::Set(const std::string& name, const Handle<TextureCube>& texture)
 	{
+#if OLD_RENDERER
 		const ShaderResourceDeclaration* resource = FindResourceDeclaration(name);
 		CORE_ASSERT(resource, "Resource does not exist!");
 
@@ -187,8 +193,8 @@ namespace cerberus
 		CORE_ASSERT(writeDescriptorSet, "Descriptor set not found!");
 		m_ResidentDescriptors[binding] = std::make_shared<PendingDescriptor>(PendingDescriptor{ PendingDescriptorType::TextureCube, *writeDescriptorSet,  std::static_pointer_cast<Texture>(texture) });
 		m_ResidentDescriptors[binding]->WriteDescriptorSet.pImageInfo = &texture->GetVulkanDescriptorInfo();
+#endif
 	}
-
 	void Material::AllocateStorage()
 	{
 		const auto& shaderBuffers = m_Shader->GetShaderBuffers();
@@ -299,10 +305,13 @@ namespace cerberus
 		SetRoughness(0.4f);
 
 		// Maps
+#if OLD_RENDERER
 		SetAlbedoMap(Renderer::GetWhiteTexture());
 		SetNormalMap(Renderer::GetWhiteTexture());
 		SetMetalnessMap(Renderer::GetWhiteTexture());
 		SetRoughnessMap(Renderer::GetWhiteTexture());
+#endif
+
 	}
 
 	MaterialAsset::MaterialAsset(Ref<Material> material)
@@ -361,7 +370,11 @@ namespace cerberus
 
 	Ref<Texture2D> MaterialAsset::GetAlbedoMap()
 	{
+#if OLD_RENDERER
+
 		return m_Material->TryGetTexture2D(s_AlbedoMapUniform);
+#endif
+		return nullptr;
 	}
 
 	void MaterialAsset::SetAlbedoMap(Ref<Texture2D> texture)
@@ -371,7 +384,7 @@ namespace cerberus
 
 	bool MaterialAsset::IsUsingAlbedoMap()
 	{
-		return Renderer::GetWhiteTexture() != GetAlbedoMap();
+		return nullptr != GetAlbedoMap();
 	}
 
 	void MaterialAsset::ClearAlbedoMap()
@@ -381,7 +394,10 @@ namespace cerberus
 
 	Ref<Texture2D> MaterialAsset::GetNormalMap()
 	{
+#if OLD_RENDERER
 		return m_Material->TryGetTexture2D(s_NormalMapUniform);
+#endif
+			return nullptr;
 	}
 
 	void MaterialAsset::SetNormalMap(Ref<Texture2D> texture)
@@ -406,7 +422,10 @@ namespace cerberus
 
 	Ref<Texture2D> MaterialAsset::GetMetalnessMap()
 	{
+#if OLD_RENDERER
 		return m_Material->TryGetTexture2D(s_MetalnessMapUniform);
+#endif
+		return nullptr;
 	}
 
 	void MaterialAsset::SetMetalnessMap(Ref<Texture2D> texture)
@@ -416,7 +435,7 @@ namespace cerberus
 
 	bool MaterialAsset::IsUsingMetalnessMap()
 	{
-		return Renderer::GetWhiteTexture() != GetMetalnessMap();
+		return nullptr != GetMetalnessMap();
 	}
 
 	void MaterialAsset::ClearMetalnessMap()
@@ -426,7 +445,10 @@ namespace cerberus
 
 	Ref<Texture2D> MaterialAsset::GetRoughnessMap()
 	{
+#if OLD_RENDERER
 		return m_Material->TryGetTexture2D(s_RoughnessMapUniform);
+#endif
+		return nullptr;
 	}
 
 	void MaterialAsset::SetRoughnessMap(Ref<Texture2D> texture)
@@ -436,13 +458,17 @@ namespace cerberus
 
 	bool MaterialAsset::IsUsingRoughnessMap()
 	{
+#if OLD_RENDERER
 		return Renderer::GetWhiteTexture() != GetRoughnessMap();
+#endif
+		return false;
 	}
 
 	void MaterialAsset::ClearRoughnessMap()
 	{
 		m_Material->Set(s_RoughnessMapUniform, Renderer::GetWhiteTexture());
 	}
+
 	///////////////////////////////////////////////////////////////
 	///// MaterialTable
 	///////////////////////////////////////////////////////////////
@@ -464,7 +490,7 @@ namespace cerberus
 		m_Materials.clear();
 	}
 
-	void MaterialTable::SetMaterial(uint32_t index, Ref<MaterialAsset> material)
+	void MaterialTable::SetMaterial(uint32_t index, AssetHandle material)
 	{
 		m_Materials[index] = material;
 		if (index >= m_MaterialCount)

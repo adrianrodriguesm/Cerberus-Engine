@@ -137,7 +137,7 @@ namespace cerberus
 			}
 		}
 
-		m_VertexBuffer = CreateRef<VertexBuffer>(m_Vertices.data(), (uint32_t)(m_Vertices.size() * sizeof(Vertex)));
+		//m_VertexBuffer = CreateRef<VertexBuffer>(m_Vertices.data(), (uint32_t)(m_Vertices.size() * sizeof(Vertex)));
 		m_VertexBufferLayout = {
 			{ ShaderDataType::Float3, "a_Position"	},
 			{ ShaderDataType::Float3, "a_Normal"	},
@@ -145,7 +145,8 @@ namespace cerberus
 			{ ShaderDataType::Float3, "a_Binormal"	},
 			{ ShaderDataType::Float2, "a_TexCoord"	},
 		};
-		m_IndexBuffer = CreateRef<IndexBuffer>(m_Indices.data(), (uint32_t)(m_Indices.size() * sizeof(Index)));
+		//m_VertexBuffer->SetVertexBufferLayout(m_VertexBufferLayout);
+		//m_IndexBuffer = CreateRef<IndexBuffer>(m_Indices.data(), (uint32_t)(m_Indices.size() * sizeof(Index)));
 
 	}
 
@@ -168,6 +169,7 @@ namespace cerberus
 
 	void MeshSource::LoadMaterials()
 	{
+#if OLD_RENDERER
 		if (!m_Properties.SubmeshMaterials.empty())
 		{
 			for (uint32_t submeshIndex = 0; submeshIndex < m_Properties.SubmeshMaterials.size(); submeshIndex++)
@@ -177,13 +179,16 @@ namespace cerberus
 				Ref<MaterialAsset> materialAsset = AssetManager::GetAsset<MaterialAsset>(materialHandle);
 				if (materialAsset)
 				{
-					if(materialIndex >= m_MaterialsAsset.size())
+					if (materialIndex >= m_MaterialsAsset.size())
 						m_MaterialsAsset.resize(materialIndex + 1);
 
 					m_MaterialsAsset[materialIndex] = materialAsset;
 				}
 				else
 				{
+					if (materialIndex >= m_MaterialsAsset.size())
+						m_MaterialsAsset.resize(materialIndex + 1);
+
 					m_MaterialsAsset[materialIndex] = Renderer::GetDefaultPBRMaterial();
 				}
 			}
@@ -191,7 +196,7 @@ namespace cerberus
 		}
 		else
 		{
-			Ref<Texture2D> whiteTexture = Renderer::GetWhiteTexture();
+			Handle<Texture2D> whiteTexture = Renderer::GetWhiteTexture();
 			if (m_Scene->HasMaterials())
 			{
 				m_MaterialsAsset.resize(m_Scene->mNumMaterials);
@@ -199,7 +204,7 @@ namespace cerberus
 				for (uint32_t i = 0; i < m_Scene->mNumMaterials; i++)
 				{
 					auto aiMaterial = m_Scene->mMaterials[i];
-					std::string aiMaterialName = aiMaterial->GetName().C_Str(); 
+					std::string aiMaterialName = aiMaterial->GetName().C_Str();
 					aiMaterialName = (aiMaterialName == "") ? std::to_string(i) : aiMaterialName;
 					std::string filename = meshSourceName + "_" + aiMaterialName;
 					Ref<Material> material = CreateRef<Material>(m_MeshShader, filename);
@@ -228,6 +233,7 @@ namespace cerberus
 						textureProperties.SRGB = true;
 						textureProperties.GenerateMips = true;
 						AssetHandle albedoAssetHandle = AssetManager::GetMetadata(parentPath).Handle;
+#if OLD_RENDERER
 						Ref<Texture2D> texture = AssetManager::OverrideAsset<Texture2D>(albedoAssetHandle, texturePath, textureProperties);
 						if (texture->Loaded())
 						{
@@ -238,6 +244,7 @@ namespace cerberus
 						{
 							NV_CORE_ERROR("Could not load albedo texture: {0}", texturePath);
 						}
+#endif
 					}
 					else
 					{
@@ -263,6 +270,7 @@ namespace cerberus
 						textureProperties.SRGB = false;
 						textureProperties.GenerateMips = true;
 						AssetHandle albedoAssetHandle = AssetManager::GetMetadata(parentPath).Handle;
+#if OLD_RENDERER
 						Ref<Texture2D> texture = AssetManager::OverrideAsset<Texture2D>(albedoAssetHandle, texturePath, textureProperties);
 						if (texture->Loaded())
 						{
@@ -274,7 +282,7 @@ namespace cerberus
 						{
 							NV_CORE_ERROR("Could not load normal texture: {0}", texturePath);
 						}
-
+#endif
 					}
 					else
 					{
@@ -297,6 +305,7 @@ namespace cerberus
 						textureProperties.SRGB = false;
 						textureProperties.GenerateMips = true;
 						AssetHandle albedoAssetHandle = AssetManager::GetMetadata(parentPath).Handle;
+#if OLD_RENDERER
 						Ref<Texture2D> texture = AssetManager::OverrideAsset<Texture2D>(albedoAssetHandle, texturePath, textureProperties);
 						if (texture->Loaded())
 						{
@@ -307,10 +316,11 @@ namespace cerberus
 						{
 							NV_CORE_ERROR("Could not load Roughness texture: {0}", texturePath);
 						}
+#endif
 					}
 					else
 					{
-						float shininess, metalness;
+						float shininess;
 						if (aiMaterial->Get(AI_MATKEY_SHININESS, shininess) != aiReturn_SUCCESS)
 							shininess = 80.0f; // Default value
 
@@ -344,6 +354,7 @@ namespace cerberus
 								textureProperties.SRGB = false;
 								textureProperties.GenerateMips = true;
 								AssetHandle albedoAssetHandle = AssetManager::GetMetadata(parentPath).Handle;
+#if OLD_RENDERER
 								Ref<Texture2D> texture = AssetManager::OverrideAsset<Texture2D>(albedoAssetHandle, texturePath, textureProperties);
 								if (texture->Loaded())
 								{
@@ -354,6 +365,7 @@ namespace cerberus
 								{
 									NV_CORE_ERROR("Could not load Metallic texture: {0}", texturePath);
 								}
+#endif
 								break;
 							}
 						}
@@ -375,6 +387,8 @@ namespace cerberus
 				}
 			}
 		}
+#endif
+
 	}
 
 	////////////////////////////////////////////////////////
@@ -386,8 +400,8 @@ namespace cerberus
 		const auto& meshMaterials = meshSource->GetMaterialsAsset();
 		m_Materials = CreateRef<MaterialTable>(meshMaterials.size());
 
-		for (size_t i = 0; i < meshMaterials.size(); i++)
-			m_Materials->SetMaterial(i, meshMaterials[i]);
+		for (uint32_t i = 0; i < meshMaterials.size(); i++)
+			m_Materials->SetMaterial(i, meshMaterials[i]->Handle);
 	}
 
 	Mesh::Mesh(const Ref<MeshSource>& meshSource, const Ref<MaterialTable>& materialTable)

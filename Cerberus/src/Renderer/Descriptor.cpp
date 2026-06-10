@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "Descriptor.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/RenderQueueManager.h"
 namespace cerberus
 {
 	DescriptorAllocator::DescriptorAllocator(const DescriptorAllocatorSpecification& spec)
@@ -30,17 +31,12 @@ namespace cerberus
 
 	DescriptorAllocator::~DescriptorAllocator()
 	{
-		VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-
-		for (VkDescriptorPool descriptoPool : m_DescriptorPools)
-			vkDestroyDescriptorPool(device, descriptoPool, nullptr);
-
-		m_DescriptorPools.clear();
+		Release();
 	}
 
 	void DescriptorAllocator::Release()
 	{
-		Renderer::SubmitResourceFree([descriptorPools = m_DescriptorPools]() 
+		RenderQueueManager::SubmitResourceFree([descriptorPools = m_DescriptorPools]() 
 		{
 			VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 

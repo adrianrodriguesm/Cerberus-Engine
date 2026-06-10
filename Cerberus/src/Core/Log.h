@@ -10,7 +10,7 @@ namespace cerberus
 	class Log
 	{
 	public:
-		static void init();
+		static void Init();
 		inline static std::shared_ptr<spdlog::logger>& GetCoreLogger() { return s_CoreLogger; }
 
 	private:

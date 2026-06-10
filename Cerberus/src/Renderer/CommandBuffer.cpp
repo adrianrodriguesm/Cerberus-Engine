@@ -1,48 +1,49 @@
 #include "pch.h"
-#include "RenderCommandBuffer.h"
+#include "CommandBuffer.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/RenderQueueManager.h"
 #include "Core/Window.h"
 
 namespace cerberus
 {
-	RenderCommandBuffer::RenderCommandBuffer(bool ownedBySwapChain, const std::string& debugName)
+	CommandBuffer::CommandBuffer(bool ownedBySwapChain, const std::string& debugName)
 		: m_OwnedBySwapchain(ownedBySwapChain), m_DebugName(debugName)
 	{
 		if (m_OwnedBySwapchain)
 		{
 			Ref<Swapchain> swapchain = Window::GetCurrentSwapchain();
-			uint32_t frames = swapchain->GetSwapchainImages().size();
+			uint32_t frames = (uint32_t)swapchain->GetSwapchainImages().size();
 			m_CommandBuffers.resize(frames);
 			for (uint32_t frame = 0; frame < frames; frame++)
 				m_CommandBuffers[frame] = swapchain->GetDrawCommandBuffer(frame);
 		}
 		else
 		{
-			RenderCommandBuffer* instance = this;
-			Renderer::Submit([instance]()
+			CommandBuffer* instance = this;
+			RenderQueueManager::Submit([instance]()
 			{
 				uint32_t framesInFlight = Renderer::GetRendererConfig().FramesInFlight;
 				instance->Invalidate(framesInFlight);
 			});
 		}
 	}
-	RenderCommandBuffer::RenderCommandBuffer(uint32_t count, const std::string& debugName)
+	CommandBuffer::CommandBuffer(uint32_t count, const std::string& debugName)
 		: m_DebugName(debugName)
 	{
-		RenderCommandBuffer* instance = this;
-		Renderer::Submit([instance, count]() mutable
+		CommandBuffer* instance = this;
+		RenderQueueManager::Submit([instance, count]() mutable
 		{
 			if (count == 0)
 				count = Renderer::GetRendererConfig().FramesInFlight;
 			instance->Invalidate(count);
 		});
 	}
-	RenderCommandBuffer::~RenderCommandBuffer()
+	CommandBuffer::~CommandBuffer()
 	{
 		if (m_OwnedBySwapchain)
 			return;
 
-		Renderer::SubmitResourceFree([commandPool = m_CommandPool, waitFences = m_WaitFences, timestampQueryPools = m_TimestampQueryPools, pipelineQueryPool = m_PipelineStatisticsQueryPools]()
+		RenderQueueManager::SubmitResourceFree([commandPool = m_CommandPool, waitFences = m_WaitFences, timestampQueryPools = m_TimestampQueryPools, pipelineQueryPool = m_PipelineStatisticsQueryPools]()
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 
@@ -66,12 +67,12 @@ namespace cerberus
 		m_ExecutionGPUTimes.clear();
 	}
 
-	void RenderCommandBuffer::Begin()
+	void CommandBuffer::Begin()
 	{
-		// Reset Timestamp of the next avaliable query
+		// Reset Timestamp of the next available query
 		m_TimestampNextAvailableQuery = 2;
-		RenderCommandBuffer* instance = this;
-		Renderer::Submit([instance]()
+		CommandBuffer* instance = this;
+		RenderQueueManager::Submit([instance]()
 		{
 			uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 			VkCommandBuffer commandBuffer = instance->m_CommandBuffers[frameIndex];
@@ -95,10 +96,10 @@ namespace cerberus
 
 	}
 
-	void RenderCommandBuffer::End()
+	void CommandBuffer::End()
 	{
-		RenderCommandBuffer* instance = this;
-		Renderer::Submit([instance]()
+		CommandBuffer* instance = this;
+		RenderQueueManager::Submit([instance]()
 		{
 			uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 			VkCommandBuffer commandBuffer = instance->m_CommandBuffers[frameIndex];
@@ -108,13 +109,13 @@ namespace cerberus
 		});
 		
 	}
-	void RenderCommandBuffer::Submit()
+	void CommandBuffer::Submit()
 	{
 		if (m_OwnedBySwapchain)
 			return;
 
-		RenderCommandBuffer* instance = this;
-		Renderer::Submit([instance]() mutable
+		CommandBuffer* instance = this;
+		RenderQueueManager::Submit([instance]() mutable
 		{
 			Ref<Device> device = RendererContext::GetCurrentDevice();
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
@@ -153,12 +154,12 @@ namespace cerberus
 		});
 
 	}
-	uint32_t RenderCommandBuffer::BeginTimestampQuery()
+	uint32_t CommandBuffer::BeginTimestampQuery()
 	{
 		uint32_t queryIndex = m_TimestampNextAvailableQuery;
 		m_TimestampNextAvailableQuery += 2;
-		RenderCommandBuffer* instance = this;
-		Renderer::Submit([instance, queryIndex]()
+		CommandBuffer* instance = this;
+		RenderQueueManager::Submit([instance, queryIndex]()
 		{
 			uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 			VkCommandBuffer commandBuffer = instance->m_CommandBuffers[frameIndex];
@@ -166,17 +167,17 @@ namespace cerberus
 		});
 		return queryIndex;
 	}
-	void RenderCommandBuffer::EndTimestampQuery(uint32_t queryID)
+	void CommandBuffer::EndTimestampQuery(uint32_t queryID)
 	{
-		RenderCommandBuffer* instance = this;
-		Renderer::Submit([instance, queryID]()
+		CommandBuffer* instance = this;
+		RenderQueueManager::Submit([instance, queryID]()
 		{
 			uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 			VkCommandBuffer commandBuffer = instance->m_CommandBuffers[frameIndex];
 			vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, instance->m_TimestampQueryPools[frameIndex], queryID + 1);
 		});
 	}
-	float RenderCommandBuffer::GetExecutionGPUTime(uint32_t frameIndex, uint32_t queryIndex) const
+	float CommandBuffer::GetExecutionGPUTime(uint32_t frameIndex, uint32_t queryIndex) const
 	{
 		if (queryIndex / 2 >= m_TimestampNextAvailableQuery / 2)
 			return 0.0f;
@@ -184,15 +185,15 @@ namespace cerberus
 		return m_ExecutionGPUTimes[frameIndex][queryIndex / 2];
 	}
 
-	float RenderCommandBuffer::GetExecutionGPUTime(uint32_t queryIndex) const
+	float CommandBuffer::GetExecutionGPUTime(uint32_t queryIndex) const
 	{
 		return GetExecutionGPUTime(Renderer::GetCurrentFrameIndex(), queryIndex);
 	}
-	PipelineStatistics RenderCommandBuffer::GetPipelineStatistics() const
+	PipelineStatistics CommandBuffer::GetPipelineStatistics() const
 	{
 		return m_PipelineStatisticsQueryResults[Renderer::GetCurrentFrameIndex()];
 	}
-	void RenderCommandBuffer::RT_Begin()
+	void CommandBuffer::RT_Begin()
 	{
 		// Information about how to begin each command buffer
 		VkCommandBufferBeginInfo bufferBeginInfo = {};
@@ -201,11 +202,11 @@ namespace cerberus
 		bufferBeginInfo.pNext = nullptr;
 		VK_CHECK_RESULT(vkBeginCommandBuffer(m_CommandBuffers[Renderer::GetCurrentFrameIndex()], &bufferBeginInfo));
 	}
-	void RenderCommandBuffer::RT_End()
+	void CommandBuffer::RT_End()
 	{
 		VK_CHECK_RESULT(vkEndCommandBuffer(m_CommandBuffers[Renderer::GetCurrentFrameIndex()]));
 	}
-	void RenderCommandBuffer::RT_Submit()
+	void CommandBuffer::RT_Submit()
 	{
 		if (m_OwnedBySwapchain)
 			return;
@@ -228,22 +229,22 @@ namespace cerberus
 		// Submit command buffer to queue
 		VK_CHECK_RESULT(vkQueueSubmit(device->GetGraphicsQueue(), 1, &submitInfo, m_WaitFences[frameIndex]));
 	}
-	VkCommandBuffer RenderCommandBuffer::GetCommandBuffer() const
+	VkCommandBuffer CommandBuffer::GetCommandBuffer() const
 	{
 		uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 		CORE_ASSERT(frameIndex < m_CommandBuffers.size(), "Overflow! Invalid command buffer index!");
 		return m_CommandBuffers[frameIndex];
 		
 	}
-	Ref<RenderCommandBuffer> RenderCommandBuffer::CreateFromSwapchain()
+	Ref<CommandBuffer> CommandBuffer::CreateFromSwapchain()
 	{
-		return CreateRef<RenderCommandBuffer>(true, "Swapchain");
+		return CreateRef<CommandBuffer>(true, "Swapchain");
 	}
-	Ref<RenderCommandBuffer> RenderCommandBuffer::Create(uint32_t count, const std::string& debugName)
+	Ref<CommandBuffer> CommandBuffer::Create(uint32_t count, const std::string& debugName)
 	{
-		return CreateRef<RenderCommandBuffer>(count, debugName);
+		return CreateRef<CommandBuffer>(count, debugName);
 	}
-	void RenderCommandBuffer::Invalidate(uint32_t count)
+	void CommandBuffer::Invalidate(uint32_t count)
 	{
 		Ref<Device> device = RendererContext::GetCurrentDevice();
 		///////////////////////////////////////////////////////

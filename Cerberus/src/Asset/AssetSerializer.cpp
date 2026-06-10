@@ -6,12 +6,13 @@
 #include "Scene/Entity.h"
 #include "Utils/FileSystem.h"
 #include "Asset/AssetImporter.h"
+#include "Renderer/TextureAsset.h"
 #include <fstream>
 namespace cerberus
 {
 	void MeshSourceSerializer::Serialize(const AssetMetadata& metadata, const Ref<Asset>& asset)
 	{
-		auto& filepath = (metadata.FilePath.string() + ".meta");
+		const auto& filepath = (metadata.FilePath.string() + ".meta");
 		YAML::Emitter out;
 		out << YAML::BeginMap; // MeshSourceImporter
 		out << YAML::Key << "MeshSourceImporter" << YAML::Value << YAML::BeginSeq;
@@ -21,11 +22,13 @@ namespace cerberus
 				const auto& submeshes = meshSource->GetSubmeshes();
 				for (size_t i = 0; i < submeshes.size(); i++)
 				{
+#if OLD_RENDERER
 					out << YAML::BeginMap;
 					out << YAML::Key << "SubmeshIndex" << YAML::Value << i;
 					AssetHandle materialHandle = materialAsset[submeshes[i].MaterialIndex]->Handle;
 					out << YAML::Key << "MaterialHandle" << YAML::Value << (uint64_t)materialHandle;
-					out << YAML::EndMap;
+					out << YAML::EndMap;7
+#endif
 				}
 			
 			out << YAML::EndSeq;
@@ -152,9 +155,9 @@ namespace cerberus
 			out << YAML::BeginMap; // TransformComponent
 
 			auto& tc = entity.GetComponent<TransformComponent>();
-			out << YAML::Key << "Translation" << YAML::Value << tc.Translation;
-			out << YAML::Key << "Rotation" << YAML::Value << tc.Rotation;
-			out << YAML::Key << "Scale" << YAML::Value << tc.Scale;
+			out << YAML::Key << "Translation" << YAML::Value << tc.GetTranslation();
+			out << YAML::Key << "Rotation" << YAML::Value << tc.GetRotation();
+			out << YAML::Key << "Scale" << YAML::Value << tc.GetScale();
 
 			out << YAML::EndMap; // TransformComponent
 		}
@@ -182,7 +185,7 @@ namespace cerberus
 				Ref<MaterialAsset> defaultMaterial = Renderer::GetDefaultPBRMaterial();
 				for (uint32_t i = 0; i < materialTable->GetMaterialCount(); i++)
 				{
-					Ref<MaterialAsset> material = materialTable->GetMaterial(i);
+					Ref<MaterialAsset> material = AssetManager::GetAsset<MaterialAsset>(materialTable->GetMaterial(i));
 					AssetHandle handle = (material != defaultMaterial) ? material->Handle : (AssetHandle)0;
 					out << YAML::Key << i << YAML::Value << handle;
 
@@ -232,7 +235,7 @@ namespace cerberus
 
 	bool SceneSerializer::TryToLoadData(const AssetMetadata& metadata, Ref<Asset>& asset)
 	{
-		auto& filepath = metadata.FilePath.string();
+		const auto& filepath = metadata.FilePath.string();
 		YAML::Node data = YAML::LoadFile(filepath);
 		if (!data["Scene"])
 			return false;
@@ -263,9 +266,9 @@ namespace cerberus
 				{
 					// Entities always have transforms
 					auto& tc = deserializedEntity.GetComponent<TransformComponent>();
-					tc.Translation = transformComponent["Translation"].as<glm::vec3>();
-					tc.Rotation = transformComponent["Rotation"].as<glm::vec3>();
-					tc.Scale = transformComponent["Scale"].as<glm::vec3>();
+					tc.SetTranslation(transformComponent["Translation"].as<glm::vec3>());
+					tc.SetRotation(transformComponent["Rotation"].as<glm::vec3>());
+					tc.SetScale(transformComponent["Scale"].as<glm::vec3>());
 				}
 
 				auto meshComponent = entity["MeshComponent"];
@@ -283,9 +286,12 @@ namespace cerberus
 							uint32_t index = materialEntry.first.as<uint32_t>();
 							AssetHandle materialAssetHandle = materialEntry.second.as<AssetHandle>();
 							if (materialAssetHandle && AssetManager::IsAssetHandleValid(materialAssetHandle))
-								mc.MaterialTable->SetMaterial(index, AssetManager::GetAsset<MaterialAsset>(materialAssetHandle));
+								mc.MaterialTable->SetMaterial(index, materialAssetHandle);
+							// OLD_RENDERER
+							/** /
 							else
 								mc.MaterialTable->SetMaterial(index, defaultPBRMaterial);
+							/**/
 						}
 					}
 
@@ -294,12 +300,14 @@ namespace cerberus
 				auto skyLightComponent = entity["SkyLightComponent"];
 				if (skyLightComponent)
 				{
+#if OLD_RENDERER
 					auto& slc = deserializedEntity.AddComponent<SkyLightComponent>();
 					
 					AssetHandle assetHandle = skyLightComponent["AssetHandle"].as<AssetHandle>();
 					slc.EnvironmentHandle = AssetManager::GetAsset<EnvironmentMap>(assetHandle)->Handle;
 					slc.Intensity = skyLightComponent["Intensity"].as<float>();
 					slc.SampleLOD = skyLightComponent["SampleLOD"].as<uint32_t>();
+#endif
 				}
 
 				auto directionalLightComponent = entity["DirectionalLightComponent"];
@@ -321,6 +329,7 @@ namespace cerberus
 
 	bool EnvironmentMapSerializer::TryToLoadData(const AssetMetadata& metadata, Ref<Asset>& asset)
 	{
+#if OLD_RENDERER
 		auto& filepath = metadata.FilePath;
 
 		Ref<EnvironmentMap> environment = Renderer::CreateEnvironmentMap(filepath.string());
@@ -328,6 +337,10 @@ namespace cerberus
 		asset = environment;
 
 		return true;
+#else
+		return false;
+
+#endif
 	}
 	void MaterialSerializer::Serialize(const AssetMetadata& metadata, const Ref<Asset>& asset)
 	{
@@ -343,31 +356,42 @@ namespace cerberus
 			out << YAML::Key << "UseNormalMap" << YAML::Value << material->IsUsingNormalMap();
 			out << YAML::Key << "Metalness" << YAML::Value << material->GetMetalness();
 			out << YAML::Key << "Roughness" << YAML::Value << material->GetRoughness();
+#if OLD_RENDERER
 			// Textures
 			{
 				Ref<Texture2D> albedoMap = material->GetAlbedoMap();
 				bool hasAlbedoMap = albedoMap ? (albedoMap != Renderer::GetWhiteTexture()) : false;
-				AssetHandle albedoMapHandle = hasAlbedoMap ? albedoMap->Handle : 0;
+				// OLD_RENDERER
+				// AssetHandle albedoMapHandle = hasAlbedoMap ? albedoMap->Handle : AssetHandle(0);
+				AssetHandle albedoMapHandle = AssetHandle();
 				out << YAML::Key << "AlbedoMapHandle" << YAML::Value << (uint64_t)albedoMapHandle;
 			}
 			{
 				Ref<Texture2D> normalMap = material->GetNormalMap();
 				bool hasNormalMap = normalMap ? (normalMap != Renderer::GetWhiteTexture()) : false;
-				AssetHandle normalMapHandle = hasNormalMap ? normalMap->Handle : 0;
+				// OLD_RENDERER
+				//AssetHandle normalMapHandle = hasNormalMap ? normalMap->Handle : AssetHandle(0);
+				AssetHandle normalMapHandle = AssetHandle();
 				out << YAML::Key << "NormalMapHandle" << YAML::Value << (uint64_t)normalMapHandle;
 			}
 			{
 				Ref<Texture2D> metalnessMap = material->GetMetalnessMap();
 				bool hasMetalnessMap = metalnessMap ? (metalnessMap != Renderer::GetWhiteTexture()) : false;
-				AssetHandle metalnessMapHandle = hasMetalnessMap ? metalnessMap->Handle : 0;
+				// OLD_RENDERER
+				//AssetHandle metalnessMapHandle = hasMetalnessMap ? metalnessMap->Handle : AssetHandle(0);
+				AssetHandle metalnessMapHandle =  AssetHandle();
 				out << YAML::Key << "MetalnessMapHandle" << YAML::Value << (uint64_t)metalnessMapHandle;
 			}
 			{
 				Ref<Texture2D> roughnessMap = material->GetRoughnessMap();
 				bool hasRoughnessMap = roughnessMap ? (roughnessMap != Renderer::GetWhiteTexture()) : false;
-				AssetHandle roughnessMapHandle = hasRoughnessMap ? roughnessMap->Handle : 0;
+				// OLD_RENDERER
+				//AssetHandle roughnessMapHandle = hasRoughnessMap ? roughnessMap->Handle : AssetHandle(0);
+				AssetHandle roughnessMapHandle = AssetHandle();
 				out << YAML::Key << "RoughnessMapHandle" << YAML::Value << (uint64_t)roughnessMapHandle;
 			}
+
+#endif
 
 			out << YAML::EndMap;
 		}
@@ -379,7 +403,8 @@ namespace cerberus
 
 	bool MaterialSerializer::TryToLoadData(const AssetMetadata& metadata, Ref<Asset>& asset)
 	{
-		auto& filepath = metadata.FilePath.string();
+#if OLD_RENDERER
+		const auto& filepath = metadata.FilePath.string();
 		YAML::Node data = YAML::LoadFile(filepath);
 		if (!data["Material"])
 			return false;
@@ -422,13 +447,16 @@ namespace cerberus
 		material->Handle = metadata.Handle;
 		asset = material;
 		return true;
+#else
+		return false;
+#endif
 	}
 
 	void TextureSerializer::Serialize(const AssetMetadata& metadata, const Ref<Asset>& asset)
 	{
 		Ref<Texture2D> texture = std::dynamic_pointer_cast<Texture2D>(asset);
 		const auto& textureProp = texture->GetTextureProperties();
-		auto& filepath = (metadata.FilePath.string() + ".meta");
+		const auto& filepath = (metadata.FilePath.string() + ".meta");
 		YAML::Emitter out;
 		out << YAML::BeginMap; // Texture2D
 		out << YAML::Key << "TextureImporter";
@@ -477,12 +505,17 @@ namespace cerberus
 
 	bool TextureSerializer::TryToLoadData(const AssetMetadata& metadata, Ref<Asset>& asset)
 	{
+#if OLD_RENDERER
 		TextureProperties textureProp = LoadTextureImportSettings(metadata.FilePath);
-		Ref<Texture2D> texture = CreateRef<Texture2D>(metadata.FilePath.string(), textureProp);
+
+		Ref<TextureAsset> texture = CreateRef<TextureAsset>(metadata.FilePath.string(), textureProp);
 
 		texture->Handle = metadata.Handle;
 		asset = texture;
 
 		return texture->Loaded();
+#else
+		return false;
+#endif
 	}
 }

@@ -1,85 +1,77 @@
 #include "pch.h"
 #include "VertexBuffer.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/ResourceManager.h"
 
 namespace cerberus
 {
-	VertexBuffer::VertexBuffer(void* data, uint32_t size)
-		: m_Size(size)
+	VertexBuffer::VertexBuffer(const void* data, uint32_t size)
 	{
 		m_LocalData = Buffer::Copy(data, size);
-		VertexBuffer* instance = this;
-		Renderer::Submit([instance]() mutable
-		{
-			auto vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-			// CREATE STAGING BUFFER
-			// Information to create a buffer (doesn't include assigning memory)
-			VkBufferCreateInfo stagingBufferCreateInfo = {};
-			stagingBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-			stagingBufferCreateInfo.size = instance->m_Size;							// Size of buffer (size of 1 vertex * number of vertices)
-			stagingBufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;			// Multiple types of buffer possible, we want Transfer Buffer 
-																						// to sent the data to the Vertex buffer on the GPU
-			stagingBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;			// Similar to Swap Chain images, can share vertex buffers
-
-			VkBuffer stagingBuffer;
-			VulkanAllocator allocator("VertexBuffer");
-			// Allocation is the piece of memory associate with the buffer
-			VmaAllocation stagingBufferAllocation = allocator.AllocateBuffer(stagingBufferCreateInfo, VMA_MEMORY_USAGE_CPU_TO_GPU, stagingBuffer);
-
-			// Copy data to staging buffer
-			// 1. Create pointer to a point in normal memory and  "Map" the staging buffer memory to that point
-			uint8_t* destData = allocator.MapMemory<uint8_t>(stagingBufferAllocation);
-			// 2. Copy memory from vertices vector to the point
-			memcpy(destData, instance->m_LocalData.Data, instance->m_LocalData.Size);
-			// 3. Unmap the vertex buffer memory
-			allocator.UnmapMemory(stagingBufferAllocation);
-
-			// CREATE VERTEX BUFFER
-			VkBufferCreateInfo vertexBufferCreateInfo = {};
-			vertexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-			vertexBufferCreateInfo.size = instance->m_Size;
-			// VK_BUFFER_USAGE_TRANSFER_DST_BIT : will receive data from another tranfer source (staging buffer)
-			vertexBufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-			vertexBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-			// Create Vertex buffer
-			instance->m_MemoryAllocation = allocator.AllocateBuffer(vertexBufferCreateInfo, VMA_MEMORY_USAGE_GPU_ONLY, instance->m_VertexBuffer);
-
-			// Get a copy command buffer to tranfer the data 
-			// from the staging buffer to the vertex buffer
-			VkCommandBuffer copyCmd = Renderer::GetCommandBuffer(true);
-
-			// Region of data to copy from and to
-			VkBufferCopy copyRegion = {};
-			copyRegion.srcOffset = 0;			// Copy from the begining of the fisrt buffer
-			copyRegion.dstOffset = 0;			// Copy from the begining of the destination buffer
-			copyRegion.size = instance->m_LocalData.Size;
-			// Record copy operation to the command buffer
-			vkCmdCopyBuffer(copyCmd, stagingBuffer, instance->m_VertexBuffer, 1, &copyRegion);
-			// Flush command bufer (sumit to execution and detroy)
-			Renderer::FlushCommandBuffer(copyCmd);
-
-			// Destroy staging buffer, not longer need it
-			allocator.DestroyBuffer(stagingBuffer, stagingBufferAllocation);
-		});
-
-
+		Invalidate();
 	}
 	VertexBuffer::VertexBuffer(uint32_t size)
 	{
 	}
 	VertexBuffer::~VertexBuffer()
 	{
-		VmaAllocation memoryAllocation = m_MemoryAllocation;
-		VkBuffer vertexBuffer = m_VertexBuffer;
-		Renderer::SubmitResourceFree([memoryAllocation, vertexBuffer]()
-		{
-			VulkanAllocator allocator("VertexBuffer");
-			allocator.DestroyBuffer(vertexBuffer, memoryAllocation);
-		});
-
+		ResourceManager::DestroyBuffer(m_VertexBuffer);
 		m_LocalData.Release();
-		m_MemoryAllocation = nullptr;
-		m_VertexBuffer = nullptr;
 	}
+
+	VkBuffer VertexBuffer::GetHandle() const
+	{
+		GPUBuffer* buffer = ResourceManager::GetBuffer(m_VertexBuffer);
+		CORE_ASSERT(buffer, "Invalid vertex buffer!")
+		return buffer->Buffer;
+	}
+
+	void VertexBuffer::Invalidate()
+	{
+		GPUBufferSpecification stagingBufferSpec;
+		stagingBufferSpec.DebugName = "Vertex Staging Buffer";
+		stagingBufferSpec.MemoryUsage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+		stagingBufferSpec.Size = m_LocalData.GetSize();
+		stagingBufferSpec.Usage = GPUBufferUsage::StagingUsage;
+		Handle<GPUBuffer> stagingBufferHandle = ResourceManager::CreateBuffer(stagingBufferSpec);
+		GPUBuffer* stagingBuffer = ResourceManager::GetBuffer(stagingBufferHandle);
+
+		ResourceAllocator allocator("Vertex Staging Buffer");
+
+		// Copy data to staging buffer
+		// 1. Create pointer to a point in normal memory and  "Map" the staging buffer memory to that point
+		uint8_t* destData = allocator.MapMemory<uint8_t>(stagingBuffer->Allocation);
+		// 2. Copy memory from vertices vector to the point
+		memcpy(destData,m_LocalData.Data, m_LocalData.Size);
+		// 3. Unmap the vertex buffer memory
+		allocator.UnmapMemory(stagingBuffer->Allocation);
+
+		GPUBufferSpecification vertexBufferSpec;
+		vertexBufferSpec.DebugName = "Vertex Buffer";
+		vertexBufferSpec.MemoryUsage = VMA_MEMORY_USAGE_GPU_ONLY;
+		vertexBufferSpec.Size = m_LocalData.GetSize();
+		vertexBufferSpec.Usage = GPUBufferUsage::VertexBufferUsage;
+		m_VertexBuffer = ResourceManager::CreateBuffer(vertexBufferSpec);
+		GPUBuffer* vertexBuffer = ResourceManager::GetBuffer(m_VertexBuffer);
+		stagingBuffer = ResourceManager::GetBuffer(stagingBufferHandle);
+
+		// Get a copy command buffer to tranfer the data 
+		// from the staging buffer to the vertex buffer
+		VkCommandBuffer copyCmd = Renderer::GetCommandBuffer(true);
+
+		// Region of data to copy from and to
+		VkBufferCopy copyRegion = {};
+		copyRegion.srcOffset = 0;			// Copy from the begining of the fisrt buffer
+		copyRegion.dstOffset = 0;			// Copy from the begining of the destination buffer
+		copyRegion.size = m_LocalData.Size;
+		// Record copy operation to the command buffer
+		vkCmdCopyBuffer(copyCmd, stagingBuffer->Buffer, vertexBuffer->Buffer, 1, &copyRegion);
+		// Flush command bufer (sumit to execution and detroy)
+		Renderer::FlushCommandBuffer(copyCmd);
+		
+
+		ResourceManager::DestroyBuffer(stagingBufferHandle);
+	}
+
+
 }

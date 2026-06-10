@@ -8,7 +8,7 @@
 
 #define CORE_ASSERT(x, errorMSG) if(!(x) )							\
 							{										\
-								NV_CORE_ERROR("{0}", errorMSG);		\
+								/** /NV_CORE_ERROR("{0}", errorMSG);	*/	\
 								__debugbreak();						\
 							}										\
 
@@ -24,6 +24,7 @@
 #define VK_COORD_SYSTEM VK_FRONT_FACE_CLOCKWISE
 #endif
 
+#define OLD_RENDERER 0
 
 namespace cerberus 
 {

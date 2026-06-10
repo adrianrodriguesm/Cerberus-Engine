@@ -1,6 +1,6 @@
 #pragma once
 #include <entt.hpp>
-#include "Components.h"
+#include "Scene/Components/Components.h"
 #include "Scene/Scene.h"
 namespace cerberus
 {
@@ -43,8 +43,9 @@ namespace cerberus
 		}
 
 
-		glm::mat4& Transform() { return m_Scene->m_Registry.get<TransformComponent>(m_EntityHandle).GetTransform(); }
+		//glm::mat4& Transform() { return m_Scene->m_Registry.get<TransformComponent>(m_EntityHandle).GetTransform(); }
 		const glm::mat4& Transform() const { return m_Scene->m_Registry.get<TransformComponent>(m_EntityHandle).GetTransform(); }
+
 
 		operator uint32_t () const { return (uint32_t)m_EntityHandle; }
 		operator entt::entity() { return m_EntityHandle; }

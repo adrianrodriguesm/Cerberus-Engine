@@ -219,9 +219,20 @@ namespace cerberus
 
 		DrawComponent<TransformComponent>("TRANSFORM", entity, [](auto& component)
 		{
-			DrawVec3Control("Translation", component.Translation);
-			DrawVec3Control("Rotation", component.Rotation, 1.f);
-			DrawVec3Control("Scale", component.Scale, 0.1f, 1.f);
+			// Translation
+			glm::vec3 translation = component.GetTranslation();
+			DrawVec3Control("Translation", translation);
+			component.SetTranslation(translation);
+
+			// Rotation
+			glm::vec3 rotation = component.GetRotation();
+			DrawVec3Control("Rotation", rotation, 1.f);
+			component.SetRotation(rotation);
+
+			// Scale
+			glm::vec3 scale = component.GetScale();
+			DrawVec3Control("Scale", scale, 0.1f, 1.f);
+			component.SetScale(scale);
 		});
 
 		DrawComponent<DirectionalLightComponent>("DIRECTIONAL LIGHT", entity, [](auto& component)
@@ -246,7 +257,7 @@ namespace cerberus
 			if (mesh && ui::BeginTreeNode("Material Table", true))
 			{
 				ui::BeginPropertyGrid();
-				auto& meshMaterialTable = mesh->GetMaterialTable();
+				const auto& meshMaterialTable = mesh->GetMaterialTable();
 				uint32_t materialCount = meshMaterialTable->GetMaterialCount();
 				// New mesh update the material table
 				if (succeeded)
@@ -255,17 +266,17 @@ namespace cerberus
 				ui::PropertyAssetReferenceSettings settings;
 				settings.AdvanceToNextColumn = false;
 				settings.WidthOffset = ImGui::GetStyle().ItemSpacing.x + 28.0f;
-
+#if OLD_RENDERER
 				for (size_t i = 0; i < materialCount; i++)
 				{
-					Ref<MaterialAsset> materialAsset =  component.MaterialTable->GetMaterial(i);
+					Ref<MaterialAsset> materialAsset =  AssetManager::GetAsset<MaterialAsset>(component.MaterialTable->GetMaterial(i));
 						
 					std::string label = fmt::format("[Material {0}]", i);
 					AssetHandle materialAssetHandle = materialAsset->Handle;
 
 					ui::PropertyAssetReferenceTarget<MaterialAsset>(label.c_str(), materialAssetHandle, [i, materialTable = component.MaterialTable](Ref<MaterialAsset> materialAsset) mutable
 					{
-						materialTable->SetMaterial(i, materialAsset);
+						materialTable->SetMaterial(i, materialAsset->Handle);
 					}, settings);
 
 
@@ -273,13 +284,18 @@ namespace cerberus
 					float prevItemHeight = ImGui::GetItemRectSize().y;
 
 					{
+#if OLD_RENDERER
+						/** /
 						ui::ScopedFont boldFont(ImGui::GetIO().Fonts->Fonts[0]);
 						if (ImGui::Button("X", { prevItemHeight, prevItemHeight }))
-							component.MaterialTable->SetMaterial(i, Renderer::GetDefaultPBRMaterial());
+							component.MaterialTable->SetMaterial(i, Renderer::GetDefaultPBRMaterial()->Handle);
+						/**/
+#endif
 					}
 					ImGui::NextColumn();
 					
 				}
+#endif
 				ui::EndPropertyGrid();
 				ui::EndTreeNode();
 			}

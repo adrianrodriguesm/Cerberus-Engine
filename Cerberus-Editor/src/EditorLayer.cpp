@@ -22,7 +22,7 @@ namespace cerberus
 		SceneRendererSpecification rendererSpec;
 		rendererSpec.SwapChainTarget = false;
 		rendererSpec.Resolution = { resolution.first, resolution.second };
-		m_SceneRenderer = CreateRef<SceneRenderer>(m_Scene, rendererSpec);
+		m_SceneRenderer = CreateRef<PathTracerSceneRenderer>(m_Scene, rendererSpec);
 		m_Camera = FlyingCamera(45.f, resolution.first / resolution.second, 0.1f, 1000.f);
 		
 
@@ -33,7 +33,7 @@ namespace cerberus
 		m_EditorPanelManager = CreateRef<EditorPanelManager>();
 		m_EditorPanelManager->AddPanel("ScenePropertiesPanel", { true, scenePropertiesPanel });
 		m_EditorPanelManager->AddPanel("SceneHierarchyPanel", { true, sceneHierarchyPanel });
-		m_EditorPanelManager->AddPanel("ContentBrowserPanel", { true, contentBrowserPanel });
+		//m_EditorPanelManager->AddPanel("ContentBrowserPanel", { true, contentBrowserPanel });
 	}
 
 	void EditorLayer::OnDetach()
@@ -49,7 +49,9 @@ namespace cerberus
 		UI_Viewport();
 		m_SceneRenderer->OnImGuiRender();
 		m_EditorPanelManager->OnImGuiRender();
+#if OLD_RENDERER
 		AssetEditorManager::OnImGuiRender();
+#endif
 	}
 
 	void EditorLayer::OnEvent(Event& event)
@@ -139,8 +141,6 @@ namespace cerberus
 
 	bool EditorLayer::OnWindowResize(WindowResizeEvent& event)
 	{
-		m_SceneRenderer->SetViewportSize(event.GetWidth(), event.GetHeight());
-		m_Camera.SetViewportSize((float)event.GetWidth(), (float)event.GetHeight());
 		return false;
 	}
 
@@ -230,7 +230,6 @@ namespace cerberus
 
 			// Render viewport image
 			ui::Image(m_SceneRenderer->GetFinalPassImage(), viewportSize, { 0, 1 }, { 1, 0 });
-
 			// ImGuizmo
 			if (m_SelectedEntity && m_GizmoType != -1)
 			{
@@ -269,9 +268,9 @@ namespace cerberus
 				{
 					glm::vec3 translation, rotation, scale;
 					math::DecomposeTransform(transform, translation, rotation, scale);
-					tc.Translation = translation;
-					tc.Rotation += glm::degrees(rotation) - tc.Rotation;
-					tc.Scale = scale;
+					tc.SetTranslation(translation);
+					tc.SetRotation(tc.GetRotation() + glm::degrees(rotation) - tc.GetRotation());
+					tc.SetScale(scale);
 				}
 			}
 			// Drag scene into the viewport

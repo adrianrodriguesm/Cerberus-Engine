@@ -179,9 +179,12 @@ namespace cerberus
 	}
 	void FlyingCamera::SetViewportSize(float width, float height)
 	{
-		m_ViewportWidth = width;
-		m_ViewportHeight = height;
-		UpdateProjection();
+		if (m_ViewportWidth != width || m_ViewportHeight != height)
+		{
+			m_ViewportWidth = width;
+			m_ViewportHeight = height;
+			UpdateProjection();
+		}
 
 	}
 

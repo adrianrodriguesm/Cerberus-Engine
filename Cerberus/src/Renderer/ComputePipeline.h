@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Renderer/Shader.h"
-#include "Renderer/RenderCommandBuffer.h"
+#include "Renderer/CommandBuffer.h"
 namespace cerberus
 {
 	class ComputePipeline
@@ -12,7 +12,7 @@ namespace cerberus
 
 		void Invalidate();
 
-		void Begin(Ref<RenderCommandBuffer> renderCommandBuffer = nullptr);
+		void Begin(Ref<CommandBuffer> commandBuffer = nullptr);
 		void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ, VkDescriptorSet descriptorSet, uint32_t firstSet = 0);
 		void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ, const std::vector<VkDescriptorSet>& descriptorSets, uint32_t firstSet = 0);
 		void End();

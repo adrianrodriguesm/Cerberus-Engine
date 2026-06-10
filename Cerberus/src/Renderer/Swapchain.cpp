@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "Swapchain.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/ResourceManager.h"
+#include "Renderer/RenderQueueManager.h"
 namespace cerberus
 {
 	Swapchain::Swapchain(VkInstance instance, const Ref<Device>& device)
@@ -37,7 +39,7 @@ namespace cerberus
 		VkDevice vulkanDevice = m_Device->GetVulkanDevice();
 		// -- GET NEXT IMAGE --
 		// Free all the requested resources from that index
-		Renderer::ReleaseResourceFromQueue(m_CurrentCmdBufferIndex);
+		RenderQueueManager::FreeResourceFromQueue(m_CurrentCmdBufferIndex);
 
 		// Get index of next image to be drawn to, and signal semaphore when ready to be drawn to
 		// By setting timeout to UINT64_MAX we will always wait until the next image has been acquired or an actual error is thrown

@@ -17,6 +17,9 @@ Assets:
   - Handle: 624494486461864232
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_19.cmaterial
     Type: Material
+  - Handle: 667632242651293457
+    FilePath: Resources/Textures/Ronaldo.jpg
+    Type: Texture
   - Handle: 1054953002496912709
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_6.cmaterial
     Type: Material

@@ -1,7 +1,6 @@
 #pragma once
 #include "Renderer/UniformBufferSet.h"
 #include "Renderer/Material.h"
-#include "Scene/SceneRenderer.h"
 namespace cerberus
 {
 	///////////////////////////////////////////////////////////////////////
@@ -35,6 +34,7 @@ namespace cerberus
 		DescriptorAllocator() = default;
 		DescriptorAllocator(const DescriptorAllocatorSpecification& spec);
 		~DescriptorAllocator();
+
 		void Release();
 
 		void ResetPool();

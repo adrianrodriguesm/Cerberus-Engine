@@ -2,6 +2,8 @@
 #include "Core/Application.h"
 #include "Core/Timer.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/ResourceManager.h"
+#include "Renderer/RenderQueueManager.h"
 #include "Asset/AssetManager.h"
 
 #include <imgui/imgui.h>
@@ -22,14 +24,12 @@ namespace cerberus
 		windowSpec.Height = m_Specification.WindowHeight;
 		m_Window = CreateRef<Window>(windowSpec);
 		m_Window->SetEventCallback(BIND_EVENT_FN(Application::OnEvent));
-		Log::init();
+		Log::Init();
 		m_Window->Init();
 		Renderer::Init();
 		AssetManager::Init();
-
-		
-
 	}
+
 	Application::~Application()
 	{
 		for (Layer* layer : m_LayerStack)
@@ -37,8 +37,9 @@ namespace cerberus
 			layer->OnDetach();
 			delete layer;
 		}
-		AssetManager::Shutdown();
+
 		Renderer::Shutdown();
+		AssetManager::Shutdown();
 		m_Window->Shutdown();
 		
 	}
@@ -56,7 +57,7 @@ namespace cerberus
 
 	void Application::Run()
 	{
-		Renderer::ExecuteRenderQueue();
+		RenderQueueManager::ExecuteRenderQueue();
 		Timer timer;
 		
 		while (m_Running)
@@ -69,17 +70,18 @@ namespace cerberus
 			m_TimeStep = timer.ElapsedAndReset();
 			Renderer::BeginFrame();
 			{
+				Renderer::RenderImGui();
+				
 				for (Layer* layer : m_LayerStack)
 					layer->OnUpdate(m_TimeStep);
 
-				Renderer::RenderImGui();
 			}
 			Renderer::EndFrame();
 			
 			auto swapChain = m_Window->GetSwapchain();
 			swapChain->UpdateNextImageToRender();
 			{
-				Renderer::ExecuteRenderQueue();
+				RenderQueueManager::ExecuteRenderQueue();
 			}
 			swapChain->Present();
 		}

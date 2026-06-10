@@ -221,14 +221,20 @@ namespace cerberus
 	////////////////////////////////////////////////////////////////////////////////////
 	// Vulkan Device
 	////////////////////////////////////////////////////////////////////////////////////
-	Device::Device(Ref<PhysicalDevice> physicalDevice)
+	Device::Device(Ref<PhysicalDevice> physicalDevice, const DeviceProperties& deviceCapabilities)
 		: m_PhysicalDevice(physicalDevice)
 	{
-		// Do we need to enable any other extensions (eg. NV_RAYTRACING?)
+		// Do we need to enable any other extensions (e.g. NV_RAYTRACING?)
 		std::vector<const char*> deviceExtensions;
-		// If the device will be used for presenting to a display via a swapchain we need to request the swapchain extension
-		CORE_ASSERT(m_PhysicalDevice->IsExtensionSupported(VK_KHR_SWAPCHAIN_EXTENSION_NAME), "Swapchain extension not supported by the Physical Device!");
-		deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+		for (const auto& extension : deviceCapabilities.DeviceExtensions)
+		{
+			// If the device will be used for presenting to a display via a swapchain we need to request the swapchain extension
+			NV_CORE_INFO("{0} extension supported by the Physical Device!", extension.Name);
+			CORE_ASSERT(m_PhysicalDevice->IsExtensionSupported(extension.Name), "Swapchain extension not supported by the Physical Device!");
+			deviceExtensions.push_back(extension.Name.c_str());
+		}
+
 
 		// Physical Device Features the logical device will be using
 		VkPhysicalDeviceFeatures deviceFeatures = {};
@@ -239,27 +245,85 @@ namespace cerberus
 		VkDeviceCreateInfo deviceCreateInfo = {};
 		deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 		deviceCreateInfo.queueCreateInfoCount = static_cast<uint32_t>(m_PhysicalDevice->m_QueueCreateInfos.size());	// Number of Queue Create Info
-		deviceCreateInfo.pQueueCreateInfos = m_PhysicalDevice->m_QueueCreateInfos.data();								// List of queue create infos so device can create required queues
+		deviceCreateInfo.pQueueCreateInfos = m_PhysicalDevice->m_QueueCreateInfos.data();							// List of queue create infos so device can create required queues
 		deviceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());					// Number of enabled logical device extensions
 		deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();											// List of enabled logical device extensions
 		deviceCreateInfo.pEnabledFeatures = &deviceFeatures;														// Physical Device features Logical Device will use
+
+		// RAY TRACING FEATURES
+		// If a pNext(Chain) has been passed, we need to add it to the device creation info
+		VkPhysicalDeviceFeatures2 physicalDeviceFeatures2{};
+		// Enable features required for ray tracing using feature chaining via pNext		
+		VkPhysicalDeviceBufferDeviceAddressFeatures enabledBufferDeviceAddresFeatures = {};
+		enabledBufferDeviceAddresFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+		enabledBufferDeviceAddresFeatures.bufferDeviceAddress = VK_TRUE;
+
+		VkPhysicalDeviceRayTracingPipelineFeaturesKHR enabledRayTracingPipelineFeatures{};
+		enabledRayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+		enabledRayTracingPipelineFeatures.rayTracingPipeline = VK_TRUE;
+		enabledRayTracingPipelineFeatures.pNext = &enabledBufferDeviceAddresFeatures;
+
+		VkPhysicalDeviceAccelerationStructureFeaturesKHR enabledAccelerationStructureFeatures{};
+		enabledAccelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+		enabledAccelerationStructureFeatures.accelerationStructure = VK_TRUE;
+		enabledAccelerationStructureFeatures.pNext = &enabledRayTracingPipelineFeatures;
+
+		/**/
+		// Provided by VK_EXT_host_query_reset
+		VkPhysicalDeviceHostQueryResetFeatures enabledHostQueryResetFeatures{};
+		enabledHostQueryResetFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES;
+		enabledHostQueryResetFeatures.hostQueryReset = VK_TRUE;
+		enabledHostQueryResetFeatures.pNext = &enabledAccelerationStructureFeatures;
+
+		/**/
+		void* deviceCreatepNextChain = &enabledHostQueryResetFeatures;
+
+		physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+		physicalDeviceFeatures2.features = deviceFeatures;
+		physicalDeviceFeatures2.pNext = deviceCreatepNextChain;
+
+
+		deviceCreateInfo.pEnabledFeatures = nullptr;
+		deviceCreateInfo.pNext = &physicalDeviceFeatures2;
+
+
 
 		//CREATE LOGICAL DEVICE
 		VK_CHECK_RESULT(vkCreateDevice(m_PhysicalDevice->GetVulkanPhysicalDevice(), &deviceCreateInfo, nullptr, &m_LogicalDevice));
 
 		// Queues are created at the same time as the device...
 		// So we want handle queues
-		// From given logical device, of given Queue family, of given Queue Index (0 since only one queue), place reference in given vkQueue
+		// From given logical device, of given Queue family, of given Queue Index (0 since only one queue), place reference in given vkQueuek
 		vkGetDeviceQueue(m_LogicalDevice, m_PhysicalDevice->m_QueueFamilyIndices.Graphics, 0, &m_GraphicsQueue);
 		vkGetDeviceQueue(m_LogicalDevice, m_PhysicalDevice->m_QueueFamilyIndices.Compute, 0, &m_ComputeQueue);
+
+		QueryRayTracingProperties();
 	}
 	Device::~Device()
 	{
 	}
 	void Device::Shutdown()
 	{
-		
 		vkDestroyDevice(m_LogicalDevice, nullptr);
 		m_LogicalDevice = VK_NULL_HANDLE;
 	}
+
+	void Device::QueryRayTracingProperties()
+	{
+		
+		VkPhysicalDevice physicalDevice = m_PhysicalDevice->GetVulkanPhysicalDevice();
+		// Get ray tracing pipeline properties, which will be used later on in the sample
+		m_RayTracingPipelineProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+		VkPhysicalDeviceProperties2 deviceProperties2{};
+		deviceProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+		deviceProperties2.pNext = &m_RayTracingPipelineProperties;
+		vkGetPhysicalDeviceProperties2(physicalDevice, &deviceProperties2);
+
+		// Get acceleration structure properties, which will be used later on in the sample
+		m_AccelerationStructureProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+		deviceProperties2.pNext = &m_AccelerationStructureProperties;
+		vkGetPhysicalDeviceProperties2(physicalDevice, &deviceProperties2);
+	}
+
+
 }

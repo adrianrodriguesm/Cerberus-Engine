@@ -1,24 +1,72 @@
 #pragma once
-#include "Renderer/Framebuffer.h"
+#include "Renderer/Image.h"
 namespace cerberus
 {
+
+	namespace utils
+	{
+		inline bool IsDepthFormat(ImageFormat format)
+		{
+			if (format == ImageFormat::DEPTH24STENCIL8 || format == ImageFormat::DEPTH32F)
+				return true;
+
+			return false;
+		}
+	}
+	enum class BlendMode : uint8_t
+	{
+		None = 0,
+		OneZero,
+		SrcAlphaOneMinusSrcAlpha,	// Swapchain blend mode too
+		Zero_SrcColor
+	};
+
+	enum class LOAD_OP : uint8_t
+	{
+		CLEAR,
+		DONT_CARE,
+		LOAD,
+		NONE
+	};
+	enum class STORE_OP : uint8_t
+	{
+		DONT_CARE,
+		STORE,
+		NONE
+	};
+	struct AttachmentInfo
+	{
+		std::string DebugName;
+		ImageFormat Format = ImageFormat::RGBA;
+		LOAD_OP LoadOP;
+		STORE_OP StoreOP;
+		BlendMode BlendMode = BlendMode::SrcAlphaOneMinusSrcAlpha;
+		bool BlendEnabled = true;
+		bool IsRenderTarget = true;
+	};
 	struct RenderPassSpecification
 	{
-		Ref<Framebuffer> TargetFramebuffer;
 		std::string DebugName;
+		bool Blend = true;
+		std::vector<AttachmentInfo> Attachments;
 	};
-	class RenderPass
+
+	class RenderPass final
 	{
 	public:
 		RenderPass(const RenderPassSpecification& spec);
 		~RenderPass();
 
+		void Invalidate();
+
 		RenderPassSpecification& GetSpecification() { return m_Specification; };
 		const RenderPassSpecification& GetSpecification() const { return m_Specification; }
 
-		const VkRenderPass GetVulkanRenderPass() const { return m_Specification.TargetFramebuffer->GetVulkanRenderPass(); }
+		const VkRenderPass GetHandle() const { return m_RenderPass; }
 	private:
 		RenderPassSpecification m_Specification;
+		VkRenderPass m_RenderPass;
+
 	};
 }
 

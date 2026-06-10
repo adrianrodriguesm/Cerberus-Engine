@@ -3,6 +3,7 @@
 #include "Renderer/Renderer.h"
 #include "Core/Timer.h"
 #include "Renderer/Fence.h"
+#include "Renderer/RenderQueueManager.h"
 namespace cerberus
 {
 	static Ref<Fence> s_ComputeFence;
@@ -11,7 +12,7 @@ namespace cerberus
 		: m_Shader(computeShader)
 	{
 		ComputePipeline* instance = this;
-		Renderer::Submit([instance]()
+		RenderQueueManager::Submit([instance]()
 		{
 			if (!s_ComputeFence)
 			{
@@ -27,7 +28,7 @@ namespace cerberus
 		if (!m_ComputePipeline)
 			return;
 
-		Renderer::SubmitResourceFree([computePipeline = m_ComputePipeline, pipelineLayout = m_ComputePipelineLayout, pipelineCache = m_PipelineCache]()
+		RenderQueueManager::SubmitResourceFree([computePipeline = m_ComputePipeline, pipelineLayout = m_ComputePipelineLayout, pipelineCache = m_PipelineCache]()
 		{
 			VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
@@ -73,13 +74,13 @@ namespace cerberus
 		VK_CHECK_RESULT(vkCreateComputePipelines(device, m_PipelineCache, 1, &computePipelineCreateInfo, nullptr, &m_ComputePipeline));
 	}
 
-	void ComputePipeline::Begin(Ref<RenderCommandBuffer> renderCommandBuffer)
+	void ComputePipeline::Begin(Ref<CommandBuffer> commandBuffer)
 	{
 		CORE_ASSERT(!m_ActiveComputeCommandBuffer, "Command already created!");
-		if (renderCommandBuffer)
+		if (commandBuffer)
 		{
 			uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
-			m_ActiveComputeCommandBuffer = renderCommandBuffer->GetCommandBuffer(frameIndex);
+			m_ActiveComputeCommandBuffer = commandBuffer->GetCommandBuffer(frameIndex);
 			m_UsingGraphicsQueue = true;
 		}
 		else
@@ -131,7 +132,8 @@ namespace cerberus
 
 	void ComputePipeline::ReleaseComputeFence()
 	{
-		s_ComputeFence->Release();
+		if(s_ComputeFence)
+			s_ComputeFence->Release();
 	}
 
 	void ComputePipeline::Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ, VkDescriptorSet descriptorSet, uint32_t firstSet)

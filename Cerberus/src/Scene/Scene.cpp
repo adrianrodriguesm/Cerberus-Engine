@@ -1,8 +1,9 @@
 #include "pch.h"
 #include "Scene.h"
-#include "Scene/SceneRenderer.h"
+#include "Renderer/SceneRenderer/SceneRenderer.h"
 #include "Scene/Entity.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/RenderQueueManager.h"
 #include "Asset/AssetManager.h"
 namespace cerberus
 {
@@ -16,12 +17,21 @@ namespace cerberus
 
 	void Scene::OnUpdate(Ref<SceneRenderer> sceneRenderer, const SceneRendererCamera& sceneRendererCamera, Timestep ts)
 	{
+		if (m_MeshToRemoved.size() > 0)
+		{
+			for (const auto assetHandle : m_MeshToRemoved)
+			{
+				Ref<Mesh> mesh = AssetManager::GetAsset<Mesh>(assetHandle);
+				sceneRenderer->UnregisterMesh(mesh);
+			}
+			m_MeshToRemoved.clear();
+		}
 		m_LightEnvironment = {};
-		// Enviornment
+		// Environment
 		{
 			// Sky Light - Environment Map
 			{
-				auto& view = m_Registry.view<SkyLightComponent>();
+				const auto& view = m_Registry.view<SkyLightComponent>();
 				CORE_ASSERT(view.size() <= 1, "There is more than one SkyLightComponenet in the Scene!");
 				if (view.size())
 				{
@@ -41,7 +51,7 @@ namespace cerberus
 			}
 			// Directional Light
 			{
-				auto& view = m_Registry.view<DirectionalLightComponent>();
+				const auto& view = m_Registry.view<DirectionalLightComponent>();
 				uint32_t directionalLightIndex = 0;
 				for (auto& entity : view)
 				{
@@ -64,15 +74,31 @@ namespace cerberus
 		sceneRenderer->BeginScene(sceneRendererCamera);
 		// Submit Meshes
 		{
-			auto& group = m_Registry.group<TransformComponent>(entt::get<MeshComponent>);
+			const auto& group = m_Registry.group<TransformComponent>(entt::get<MeshComponent>);
 			for (auto& entity : group)
 			{
-				auto& [transform, mesh] = group.get<TransformComponent, MeshComponent>(entity);
-				if(mesh.MeshHandle != 0)
-					sceneRenderer->SubmitMesh(AssetManager::GetAsset<Mesh>(mesh.MeshHandle), mesh.MaterialTable, transform.GetTransform());
+				const auto& [transform, mesh] = group.get<TransformComponent, MeshComponent>(entity);
+				if (!mesh.m_Registered)
+				{
+					bool registered = sceneRenderer->RegisterMesh(AssetManager::GetAsset<Mesh>(mesh.MeshHandle), mesh.MaterialTable, transform.GetTransform());
+					mesh.m_Registered = registered;
+					transform.m_TransformStateDirty = false;
+					//sceneRenderer->SubmitMesh(AssetManager::GetAsset<Mesh>(mesh.MeshHandle), mesh.MaterialTable, transform.GetTransform());
+				}
+				else if (transform.IsTransformDirty())
+				{
+					sceneRenderer->UpdateMeshTransform(AssetManager::GetAsset<Mesh>(mesh.MeshHandle), transform.GetTransform());
+					transform.m_TransformStateDirty = false;
+				}
+
+					
 			}
 		}
 		sceneRenderer->EndScene();
+		RenderQueueManager::Submit([sceneRenderer, sceneRendererCamera]() mutable
+		{
+			sceneRenderer->Render(sceneRendererCamera);
+		});
 	}
 
 	Entity Scene::CreateEntity(const std::string& tagName)
@@ -90,6 +116,11 @@ namespace cerberus
 
 	void Scene::DestroyEntity(Entity entity)
 	{
+		if (entity.HasComponent<MeshComponent>())
+		{
+			auto& component = entity.GetComponent<MeshComponent>();
+			m_MeshToRemoved.push_back(component.MeshHandle);
+		}
 		m_Registry.destroy(entity);
 	}
 

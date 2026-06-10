@@ -1,7 +1,9 @@
 #include "pch.h"
 #include "Pipeline.h"
-#include "Renderer/Renderer.h"
 #include "Core/Window.h"
+#include "Renderer/ResourceManager.h"
+#include "Renderer/RenderQueueManager.h"
+#include "Renderer/VulkanExtensions.h"
 namespace cerberus
 {
 	namespace utils
@@ -66,63 +68,18 @@ namespace cerberus
 		}
 	}
 
-	// TODO: Move to shader class
-	static VkShaderModule CreateShaderModule(const std::vector<char>& code)
-	{
-		auto vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-		//////////////////////////////////////////////////////////////////////////////////////
-		// Shader Module Creation Info
-		//////////////////////////////////////////////////////////////////////////////////////
-		VkShaderModuleCreateInfo shaderModuleCreationInfo = {};
-		shaderModuleCreationInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-		shaderModuleCreationInfo.codeSize = code.size();									// Size of code
-		shaderModuleCreationInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());	// Pointer to code (of uint32_t pointer type) ->reinterpret is using to cast pointers
-		VkShaderModule shaderModule;
-		VK_CHECK_RESULT(vkCreateShaderModule(vulkanDevice, &shaderModuleCreationInfo, nullptr, &shaderModule));
-		return shaderModule;
-	}
-
-	static std::vector<char> LoadFile(const std::string& filename)
-	{
-		// Open string from given file
-		// std::ios::bynary tells stream to read file as binary
-		// std::ios::ate tells stream to start reading from end of file
-		std::ifstream file(filename, std::ios::binary | std::ios::ate);
-
-		ASSERT(file.is_open(), "Failed to open a file!");
-
-		// Get current read position and use to resize file buffer
-		size_t fileSize = (size_t)file.tellg();
-		std::vector<char> fileBuffer(fileSize);
-
-		// Move read position (seek to) the start of the file
-		file.seekg(0);
-
-		// Read the file data into the buffer (stream "filesize" in total)
-		file.read(fileBuffer.data(), fileSize);
-
-		file.close();
-
-		return fileBuffer;
-	}
-
-	Pipeline::Pipeline(PipelineSpecification spec)
+	GraphicsPipeline::GraphicsPipeline(PipelineSpecification spec)
 		: m_Specification(spec)
 	{
-		Pipeline* instance = this;
-		Renderer::Submit([instance]()
-		{
-			instance->Invalidate();
-		});
-		
+		Invalidate();
 	}
 
-	Pipeline::~Pipeline()
+	GraphicsPipeline::~GraphicsPipeline()
 	{
-		VkPipeline pipeline = m_VulkanPipeline;
+		VkPipeline pipeline = m_Pipeline;
 		VkPipelineLayout pipelineLayout = m_PipelineLayout;
 		VkPipelineCache pipelineCache = m_PipelineCache;
-		Renderer::SubmitResourceFree([pipeline, pipelineLayout, pipelineCache]() mutable
+		RenderQueueManager::SubmitResourceFree([pipeline, pipelineLayout, pipelineCache]() mutable
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 
@@ -132,15 +89,17 @@ namespace cerberus
 		});
 	}
 
-	void Pipeline::Invalidate()
+	void GraphicsPipeline::Invalidate()
 	{
-
-		VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-		if (m_VulkanPipeline != VK_NULL_HANDLE)
+		if (m_Pipeline)
 		{
-			vkDestroyPipeline(vulkanDevice, m_VulkanPipeline, nullptr);
-			vkDestroyPipelineCache(vulkanDevice, m_PipelineCache, nullptr);
-			vkDestroyPipelineLayout(vulkanDevice, m_PipelineLayout, nullptr);
+			RenderQueueManager::SubmitResourceFree([this]() mutable
+			{
+				VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+				vkDestroyPipeline(vulkanDevice, m_Pipeline, nullptr);
+				vkDestroyPipelineCache(vulkanDevice, m_PipelineCache, nullptr);
+				vkDestroyPipelineLayout(vulkanDevice, m_PipelineLayout, nullptr);
+			});
 		}
 		// CREATE PIPELINE
 		// -- VERTEX INPUT
@@ -192,24 +151,8 @@ namespace cerberus
 		inputAssemblyCreateInfo.topology = utils::GetVulkanTopology(m_Specification.Topology);		// Primitive type to assemble vertices (e.g triangles, lines, etc)
 		inputAssemblyCreateInfo.primitiveRestartEnable = VK_FALSE;							// Allow overriding of "strip" topology to start new primitives
 
-		/** /
 		// -- VIEWPORT & SCISSOR --
 		// Create a viewport info struct (viewport is how we transform something to the screen)
-		VkExtent2D extent = Window::GetCurrentSwapchain()->GetSwapchainExtent();
-		VkViewport viewport = {};
-		viewport.x = 0.f;												// x - start coordinate
-		viewport.y = 0.f;												// y - start coordinate
-		viewport.width = (float)extent.width;							// width of the viewport
-		viewport.height = (float)extent.height;							// height of the viewport
-		viewport.minDepth = 0.f;										// min framebuffer depth
-		viewport.maxDepth = 1.f;										// max framebuffer depth
-
-		// Create a scissor info struct
-		VkRect2D scissor = {};
-		// Everything between offset and extent will be visible (outside of that range will be cut)
-		scissor.offset = { 0 };			// Offset to the region from
-		scissor.extent = extent;		// Extent to describe region to use, starting at offset
-		/**/
 		VkPipelineViewportStateCreateInfo pipelineViewportCreateInfo = {};
 		pipelineViewportCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 		pipelineViewportCreateInfo.scissorCount = 1;
@@ -254,63 +197,53 @@ namespace cerberus
 		// -- BLENDING -- (Blending fragments together)
 		// Blending decides how to blend a new colour being written to a fragment, with the old value
 		// We need one blend attachment state per color attachment (even if blending is not used)
-		Ref<Framebuffer> framebuffer = m_Specification.RenderPass->GetSpecification().TargetFramebuffer;
-		size_t colorAttachmentCount = framebuffer->GetColorAttachmentCount(); // If is swapchain target will return 1
+		RenderPass* renderPass = ResourceManager::GetRenderPass(m_Specification.RenderPass);
 		// Blend Attachment State (How blending is handled)
-		std::vector<VkPipelineColorBlendAttachmentState> blendAttachmentStates(colorAttachmentCount);
+		const auto& renderTargetInfo = renderPass->GetSpecification().Attachments;
+		std::vector<VkPipelineColorBlendAttachmentState> blendAttachmentStates;
+		blendAttachmentStates.reserve(renderTargetInfo.size());
 		// Only use one attachment
-		if (framebuffer->GetSpecification().SwapchainTarget)
-		{	
-			blendAttachmentStates[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT		// Colors to apply blending to (in this case apply to all the colors)
-				| VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-			blendAttachmentStates[0].blendEnable = VK_TRUE;													// Enable blending
-
-			// Blending uses equation: (srcColorBlendFactor * new color) colorBlendOp (dstColorBlendFactor * old color)
-			blendAttachmentStates[0].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-			blendAttachmentStates[0].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-			blendAttachmentStates[0].colorBlendOp = VK_BLEND_OP_ADD;
-			// Summarised: (VK_BLEND_FACTOR_SRC_ALPHA * new color) + (VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA * old color)
-			//			   (new color alpha * new color) + ((1 - new color alpha) * old color)	
-			blendAttachmentStates[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-			blendAttachmentStates[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;	// Dst = old color
-			blendAttachmentStates[0].alphaBlendOp = VK_BLEND_OP_ADD;
-			// Summarised: (1 * new alpha) + (0 * old alpha) = new alpha
-		}
-		else if(framebuffer->GetSpecification().Blend)
+		if (renderPass->GetSpecification().Blend)
 		{
-			for (size_t i = 0; i < colorAttachmentCount; i++)
+			for (size_t i = 0; i < renderTargetInfo.size(); i++)
 			{
-				const auto& attachmentSpec = framebuffer->GetSpecification().AttachmentsSpecification.Attachments[i];
-				FramebufferBlendMode blendMode = framebuffer->GetSpecification().BlendMode == FramebufferBlendMode::None
-					? attachmentSpec.BlendMode
-					: framebuffer->GetSpecification().BlendMode;
-				blendAttachmentStates[i].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT		// Colors to apply blending to (in this case apply to all the colors)
+				
+				const auto& renderTarget = renderTargetInfo[i];
+				if (utils::IsDepthFormat(renderTarget.Format))
+					continue;
+
+				VkPipelineColorBlendAttachmentState& blendState = blendAttachmentStates.emplace_back();
+				BlendMode blendMode = renderTarget.BlendMode;
+				blendState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT		// Colors to apply blending to (in this case apply to all the colors)
 					| VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-				blendAttachmentStates[i].blendEnable = attachmentSpec.Blend ? VK_TRUE : VK_FALSE;
+				blendState.blendEnable = renderTarget.BlendEnabled ? VK_TRUE : VK_FALSE;
 				// Choose the src and dst blend factor
 				switch (blendMode)
 				{
-				case FramebufferBlendMode::OneZero:
-					blendAttachmentStates[i].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-					blendAttachmentStates[i].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+				case BlendMode::OneZero:
+					blendState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+					blendState.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
 					break;
-				case FramebufferBlendMode::SrcAlphaOneMinusSrcAlpha:
-					blendAttachmentStates[i].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-					blendAttachmentStates[i].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+				case BlendMode::SrcAlphaOneMinusSrcAlpha:
+					// Blending uses equation: (srcColorBlendFactor * new color) colorBlendOp (dstColorBlendFactor * old color)
+					blendState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+					blendState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 					break;
-				case FramebufferBlendMode::Zero_SrcColor:
-					blendAttachmentStates[i].srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-					blendAttachmentStates[i].dstColorBlendFactor = VK_BLEND_FACTOR_SRC_COLOR;
+				case BlendMode::Zero_SrcColor:
+					blendState.srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+					blendState.dstColorBlendFactor = VK_BLEND_FACTOR_SRC_COLOR;
 					break;
 				default:
 					CORE_ASSERT(false, "Blend mode not implemented!");
 					break;
 				}
-				blendAttachmentStates[i].colorBlendOp = VK_BLEND_OP_ADD;
+				blendState.colorBlendOp = VK_BLEND_OP_ADD;
+				// Summarised: (VK_BLEND_FACTOR_SRC_ALPHA * new color) + (VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA * old color)
+				//			   (new color alpha * new color) + ((1 - new color alpha) * old color)	
 				//			   (srcBlendFactor * new color) + (dstBlendFactor * old color)	
-				blendAttachmentStates[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-				blendAttachmentStates[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-				blendAttachmentStates[i].alphaBlendOp = VK_BLEND_OP_ADD;
+				blendState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+				blendState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+				blendState.alphaBlendOp = VK_BLEND_OP_ADD;
 				// Summarised: (1 * new alpha) + (0 * old alpha) = new alpha
 			}
 		}
@@ -329,9 +262,10 @@ namespace cerberus
 		pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		pipelineLayoutCreateInfo.setLayoutCount = (uint32_t)descriptorSetLayout.size();
 		pipelineLayoutCreateInfo.pSetLayouts = descriptorSetLayout.data();
-		pipelineLayoutCreateInfo.pushConstantRangeCount = pushConstantRanges.size();
+		pipelineLayoutCreateInfo.pushConstantRangeCount = (uint32_t)pushConstantRanges.size();
 		pipelineLayoutCreateInfo.pPushConstantRanges = pushConstantRanges.data();
-			
+		
+		VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 		// Create Pipeline Layout
 		VK_CHECK_RESULT(vkCreatePipelineLayout(vulkanDevice, &pipelineLayoutCreateInfo, nullptr, &m_PipelineLayout))
 
@@ -344,7 +278,7 @@ namespace cerberus
 		depthStencilState.depthTestEnable = m_Specification.DepthTest ? VK_TRUE : VK_FALSE;
 		// Enable writing to depth buffer (to replace old values)
 		depthStencilState.depthWriteEnable = m_Specification.DepthWrite ? VK_TRUE : VK_FALSE;
-		// Comparison operation that allows an overwirte (is in front)
+		// Comparison operation that allows an overwrite (is in front)
 		depthStencilState.depthCompareOp = utils::GetVulkanCompareOperator(m_Specification.DepthOperator); 
 		depthStencilState.depthBoundsTestEnable = VK_FALSE;			    // Depth Bounds Test: Does the depth value exist between two bounds	
 		depthStencilState.back.failOp = VK_STENCIL_OP_KEEP;
@@ -368,21 +302,150 @@ namespace cerberus
 		pipelineCreateInfo.pColorBlendState = &colorBlendingCreateInfo;
 		pipelineCreateInfo.pDepthStencilState = &depthStencilState;
 		pipelineCreateInfo.layout = m_PipelineLayout;											// Pipeline Layout pipeline should use
-		pipelineCreateInfo.renderPass = m_Specification.RenderPass->GetVulkanRenderPass();		// Render pass description the pipeline is compatible with
+		pipelineCreateInfo.renderPass = renderPass->GetHandle();								// Render pass description the pipeline is compatible with
 		pipelineCreateInfo.subpass = 0;															// Subpass of render pass to use with pipeline
 
-		// Pipeline Derivatives : Can create multiple pipelines that derive from one another for optimisation
+		// Pipeline Derivatives : Can create multiple pipelines that derive from one another for optimization
 		pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;	// Existing pipeline to derive from...
 		pipelineCreateInfo.basePipelineIndex = -1;				// or index of pipeline being created to derive from (in case creating multiple at once)
 
-		/**/
+		
 		VkPipelineCacheCreateInfo pipelineCacheCreateInfo = {};
 		pipelineCacheCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
 		VK_CHECK_RESULT(vkCreatePipelineCache(vulkanDevice, &pipelineCacheCreateInfo, nullptr, &m_PipelineCache));
-		/**/
+		
 		// Create Graphics Pipeline
-		VK_CHECK_RESULT(vkCreateGraphicsPipelines(vulkanDevice, m_PipelineCache, 1, &pipelineCreateInfo, nullptr, &m_VulkanPipeline));
+		VK_CHECK_RESULT(vkCreateGraphicsPipelines(vulkanDevice, m_PipelineCache, 1, &pipelineCreateInfo, nullptr, &m_Pipeline));
 		
 
 	}	
+
+	RayTracingPipeline::RayTracingPipeline(const PipelineSpecification& spec)
+		: m_Specification(spec)
+	{
+		Invalidate();
+	}
+
+	RayTracingPipeline::~RayTracingPipeline()
+	{
+
+	}
+
+
+
+	void RayTracingPipeline::Invalidate()
+	{
+		if (m_rtPipeline)
+		{
+			RenderQueueManager::SubmitResourceFree([this]() mutable
+				{
+					VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+					vkDestroyPipeline(vulkanDevice, m_rtPipeline, nullptr);
+					vkDestroyPipelineCache(vulkanDevice, m_rtPipelineCache, nullptr);
+					vkDestroyPipelineLayout(vulkanDevice, m_rtPipelineLayout, nullptr);
+				});
+		}
+
+
+
+		VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+
+		// TODO: get rid of this....
+		// Push constant structure for the ray tracer
+		struct PushConstantRay
+		{
+			glm::vec4  ClearColor;
+			glm::vec3  LightPosition;
+			float LightIntensity;
+			int   LightType;
+		};
+
+		// -- PUSH CONSTANT --
+		//const std::vector<VkPushConstantRange>& pushConstantRanges = m_Specification.Shader->GetVulkanPushConstantRanges();
+		// Push constant: we want to be able to update constants used by the shaders
+		VkPushConstantRange pushConstant{ VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR,
+										 0, sizeof(PushConstantRay) };
+
+
+		// -- PIPELINE LAYOUT --
+		auto& descriptorSetLayout = m_Specification.Shader->GetDescriptorSetLayouts();
+		VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
+		pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pipelineLayoutCreateInfo.setLayoutCount = (uint32_t)descriptorSetLayout.size();
+		pipelineLayoutCreateInfo.pSetLayouts = descriptorSetLayout.data();
+		//pipelineLayoutCreateInfo.pushConstantRangeCount = (uint32_t)pushConstantRanges.size();
+		//pipelineLayoutCreateInfo.pPushConstantRanges = pushConstantRanges.data();
+		pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
+		pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstant;
+
+
+		VK_CHECK_RESULT(vkCreatePipelineLayout(vulkanDevice, &pipelineLayoutCreateInfo, nullptr, &m_rtPipelineLayout));
+
+		std::vector<VkPipelineShaderStageCreateInfo> pipelineShaderStageInfo = m_Specification.Shader->GetPipelineShaderModules();
+
+		// TODO: MOVE this to Shader Land and abstracted
+		// Shader groups
+		m_RayGenIndex = 0;
+		VkRayTracingShaderGroupCreateInfoKHR rayGenGroupInfo = {};
+		rayGenGroupInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+		rayGenGroupInfo.pNext = nullptr;
+		rayGenGroupInfo.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+		rayGenGroupInfo.generalShader = m_RayGenIndex;
+		rayGenGroupInfo.closestHitShader = VK_SHADER_UNUSED_KHR;
+		rayGenGroupInfo.anyHitShader = VK_SHADER_UNUSED_KHR;
+		rayGenGroupInfo.intersectionShader = VK_SHADER_UNUSED_KHR;
+
+		m_MissHitIndex = 1;
+		VkRayTracingShaderGroupCreateInfoKHR missGroupInfo = {};
+		missGroupInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+		missGroupInfo.pNext = nullptr;
+		missGroupInfo.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+		missGroupInfo.generalShader = m_MissHitIndex;
+		missGroupInfo.closestHitShader = VK_SHADER_UNUSED_KHR;
+		missGroupInfo.anyHitShader = VK_SHADER_UNUSED_KHR;
+		missGroupInfo.intersectionShader = VK_SHADER_UNUSED_KHR;
+
+		m_TriangleHitIndex = 2;
+		VkRayTracingShaderGroupCreateInfoKHR triangleHitGroupInfo = {};
+		triangleHitGroupInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+		triangleHitGroupInfo.pNext = nullptr;
+		triangleHitGroupInfo.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+		triangleHitGroupInfo.generalShader = VK_SHADER_UNUSED_KHR;
+		triangleHitGroupInfo.closestHitShader = 2;
+		triangleHitGroupInfo.anyHitShader = VK_SHADER_UNUSED_KHR;
+		triangleHitGroupInfo.intersectionShader = VK_SHADER_UNUSED_KHR;
+
+		std::vector<VkRayTracingShaderGroupCreateInfoKHR> groups =
+		{
+			rayGenGroupInfo,
+			missGroupInfo,
+			triangleHitGroupInfo,
+		};
+
+
+		VkPipelineCacheCreateInfo pipelineCacheCreateInfo = {};
+		pipelineCacheCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+		VK_CHECK_RESULT(vkCreatePipelineCache(vulkanDevice, &pipelineCacheCreateInfo, nullptr, &m_rtPipelineCache));
+
+
+		// Create ray tracing pipeline info
+		VkRayTracingPipelineCreateInfoKHR pipelineInfo = {};
+		pipelineInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+		pipelineInfo.pNext = nullptr;
+		pipelineInfo.flags = 0;
+		pipelineInfo.stageCount = static_cast<uint32_t>(pipelineShaderStageInfo.size());
+		pipelineInfo.pStages = pipelineShaderStageInfo.data();
+		pipelineInfo.groupCount = static_cast<uint32_t>(groups.size());
+		pipelineInfo.pGroups = groups.data();
+		pipelineInfo.maxPipelineRayRecursionDepth = 1;
+		pipelineInfo.layout = m_rtPipelineLayout;
+		pipelineInfo.basePipelineHandle = nullptr;
+		pipelineInfo.basePipelineIndex = 0;
+		pipelineInfo.maxPipelineRayRecursionDepth = 1;  // Ray depth
+
+		// Create ray tracing pipeline
+		VK_CHECK_RESULT(ext::vkCreateRayTracingPipelinesKHR(vulkanDevice, nullptr, nullptr, 1, &pipelineInfo, nullptr, &m_rtPipeline));
+
+	}
+
 }

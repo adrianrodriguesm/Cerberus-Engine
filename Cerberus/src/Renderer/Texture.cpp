@@ -2,10 +2,11 @@
 #include "Texture.h"
 #include "stb_image.h"
 #include "Renderer/Renderer.h"
-#include "Renderer/VulkanUtility.h"
 #include "Renderer/ComputePipeline.h"
+#include "Renderer/ResourceManager.h"
 namespace cerberus
 {
+
 	namespace utils
 	{
 
@@ -52,54 +53,10 @@ namespace cerberus
 	}
 
 
-	Texture2D::Texture2D(const std::string& path, TextureProperties properties)
-		: m_Path(path), m_Properties(properties)
-	{
-		int width, height, channels;
-
-		// Check if it is an HDR image
-		if (stbi_is_hdr(path.c_str()))
-		{
-			m_ImageData.Data = (byte*)stbi_loadf(path.c_str(), &width, &height, &channels, 4);
-			m_ImageData.Size = width * height * 4 * sizeof(float); // 4 = number of channels
-			m_Format = ImageFormat::RGBA32F;
-		}
-		else
-		{
-			m_ImageData.Data = stbi_load(path.c_str(), &width, &height, &channels, 4);
-			m_ImageData.Size = width * height * 4;
-			m_Format = m_Properties.SRGB ? ImageFormat::SRGBA : ImageFormat::RGBA;
-		}
-
-		// Check if the image was succesfully loaded
-		if (!m_ImageData.Data)
-		{
-			CORE_ASSERT(false, "Falied to load image!");
-			return;
-		}
-
-		m_Width = width;
-		m_Height = height;
-
-		ImageSpecification imageSpec;
-		imageSpec.Format = m_Format;
-		imageSpec.Width = m_Width;
-		imageSpec.Height = m_Height;
-		imageSpec.Mips = m_Properties.GenerateMips ? GetMipLevelCount() : 1;
-		imageSpec.DebugName = m_Path;
-		m_Image = CreateRef<Image2D>(imageSpec);
-
-		Texture2D* instance = this;
-		Renderer::Submit([instance]() mutable
-		{
-			instance->Invalidate();
-		});
-	}
-
 	Texture2D::Texture2D(ImageFormat format, const uint32_t width, const uint32_t height, const void* data, TextureProperties properties)
-		: m_Format(format), m_Width(width), m_Height(height), m_Properties(properties)
+		: m_Properties(properties)
 	{
-		uint32_t imageSize = Image::GetImageMemorySize(m_Format, m_Width, m_Height);
+		uint32_t imageSize = Image::GetImageMemorySize(format, width, height);
 		if (imageSize)
 			m_ImageData = Buffer::Copy(data, imageSize);
 
@@ -111,55 +68,129 @@ namespace cerberus
 		}
 
 		ImageSpecification imageSpec;
-		imageSpec.Format = m_Format;
-		imageSpec.Width = m_Width;
-		imageSpec.Height = m_Height;
-		imageSpec.Mips = m_Properties.GenerateMips ? GetMipLevelCount() : 1;
-		m_Image = CreateRef<Image2D>(imageSpec);
+		imageSpec.DebugName = "Texture2D";
+		imageSpec.Usage = ImageUsage::Sampler;
+		imageSpec.Format = format;
+		imageSpec.Width = width;
+		imageSpec.Height = height;
+		imageSpec.Layers = 1;
+		imageSpec.Mips = m_Properties.GenerateMips ? Image::CalculateMipCount(width, height) : 1;
+		imageSpec.Flags = SAMPLE_COMPATIBLE;
+		m_Image = ResourceManager::CreateImage(imageSpec);
 
+		ImageViewProperties viewProp;
+		viewProp.ViewType = ImageViewType::Image2D;
+		viewProp.BaseLayer = 0;
+		viewProp.LayerCount = 1;
+		viewProp.BaseMip = 0;
+		viewProp.MipCount = m_Properties.GenerateMips ? GetMipLevelCount() : 1;
+		viewProp.Image = m_Image;
+		m_ImageView = ResourceManager::CreateImageView(viewProp);
+		Invalidate(format, width, height);
+/** /
 		Texture2D* instance = this;
 		Renderer::Submit([instance]()
 		{
 			instance->Invalidate();
 		});
+/**/
 	}
-
+#if 0
 	Texture2D::Texture2D(const Ref<Image2D>& image2D)
 		: m_Image(image2D), m_Format(image2D->GetSpecification().Format), m_Width(image2D->GetSpecification().Width), 
 		m_Height(image2D->GetSpecification().Height)
 	{
 	}
-
+#endif
 	Texture2D::~Texture2D()
 	{
-		if (m_Image)
-			m_Image->Release();
+		ResourceManager::DestroyImageView(m_ImageView);
+		ResourceManager::DestroyImage(m_Image);
+
 		if (m_ImageData)
 			m_ImageData.Release();
 	}
 
-	void Texture2D::Invalidate()
+
+	ImageFormat Texture2D::GetFormat() const
+	{
+		Image* img = ResourceManager::GetImage(m_Image);
+		if (!img)
+		{
+			CORE_ASSERT(false, "Invalid image");
+			return ImageFormat();
+		}
+
+		return img->GetSpecification().Format;
+		
+	}
+
+	uint32_t Texture2D::GetWidth() const
+	{
+		Image* img = ResourceManager::GetImage(m_Image);
+		if (!img)
+		{
+			CORE_ASSERT(false, "Invalid image");
+			return 0;
+		}
+
+		return img->GetWidth();
+	}
+
+	uint32_t Texture2D::GetHeight() const
+	{
+		Image* img = ResourceManager::GetImage(m_Image);
+		if (!img)
+		{
+			CORE_ASSERT(false, "Invalid image");
+			return 0;
+		}
+
+		return img->GetHeight();
+	}
+
+	uint64_t Texture2D::GetHash() const
+	{
+		ImageView* imgView = ResourceManager::GetImageView(m_ImageView);
+		if (!imgView)
+		{
+			CORE_ASSERT(false, "Invalid image view");
+			return 0;
+		}
+
+		return (uint64_t)imgView->GetHandle();
+	}
+
+	void Texture2D::Invalidate(ImageFormat format, const uint32_t width, const uint32_t height)
 	{
 		VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-		// Release all image resources
-		//m_Image->Release(); // The image resources are automatically release when invalidated
-		// Re-create image
+		ImageView* imgView = ResourceManager::GetImageView(m_ImageView);
+		ImageViewProperties& viewProp = imgView->GetProperties();
 
-		ImageSpecification& imageSpec = m_Image->GetSpecification();
-		imageSpec.Format = m_Format;
-		imageSpec.Width = m_Width;
-		imageSpec.Height = m_Height;
+		// Invalidate Image
+		Image* image = ResourceManager::GetImage(m_Image);
+		ImageSpecification& imageSpec = image->GetSpecification();
+		imageSpec.Format = format;
+		imageSpec.Width = width;
+		imageSpec.Height = height;
 		imageSpec.Mips = m_Properties.GenerateMips ? GetMipLevelCount() : 1;
-		imageSpec.SamplerSpec = {  m_Properties.SamplerWrap, m_Properties.SamplerFilter };
-		m_Image->Invalidate();
-		ImageInfo& imageInfo = m_Image->GetImageInfo();
-		VkDeviceSize size = (uint64_t)m_ImageData.Size;
+		image->Invalidate();
+		// Invalidate ImageView
+		SamplerSpecification samplerSpec = { m_Properties.SamplerWrap, m_Properties.SamplerFilter };
+		samplerSpec.ShaderResource = true;
+		viewProp.Image = m_Image;
+		viewProp.SamplerSpec = samplerSpec;
+		imgView->Invalidate();
 
+		VkImage vkImage = image->GetHandle();
+		VkImageView vkImageView = imgView->GetHandle();
+
+		VkDeviceSize size = (uint64_t)m_ImageData.Size;
 		uint32_t mipCount = m_Properties.GenerateMips ? GetMipLevelCount() : 1;
 		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		// STAGING BUFFER
 		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-		VulkanAllocator allocator("Texture2D");
+		ResourceAllocator allocator("Texture2D");
 		// Create staging buffer to hold loaded data, ready to copy to device
 		VkBuffer stagingBuffer;
 		VkBufferCreateInfo bufferCreateInfo{};
@@ -182,9 +213,8 @@ namespace cerberus
 		// Insert a memory dependency at the proper pipeline stages that will execute the image layout transition 
 		// Source pipeline stage is host write/read exection (VK_PIPELINE_STAGE_HOST_BIT)
 		// Destination pipeline stage is copy command exection (VK_PIPELINE_STAGE_TRANSFER_BIT)
-		utils::SetImageLayout(copyCommandBuffer, imageInfo.Image, 
-							VK_IMAGE_ASPECT_COLOR_BIT, // Image only contains color data
-							VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
+		image->SetLayout(copyCommandBuffer,
+						VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
 							VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
 		// Define Region of the Image to Copy 
@@ -195,10 +225,10 @@ namespace cerberus
 		bufferCopyRegion.imageSubresource.mipLevel = 0;								// Mipmap level to copy
 		bufferCopyRegion.imageSubresource.baseArrayLayer = 0;						// Starting array layer (if array)
 		bufferCopyRegion.imageSubresource.layerCount = 1;							// Number of layers to copy starting at baseArrayLayer
-		bufferCopyRegion.imageExtent = { m_Width, m_Height, 1 };					// Size of region to copy as (x, y, z) values
+		bufferCopyRegion.imageExtent = { width, height, 1 };						// Size of region to copy as (x, y, z) values
 
 		// Copy buffer to given image
-		vkCmdCopyBufferToImage(copyCommandBuffer, stagingBuffer, imageInfo.Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferCopyRegion);
+		vkCmdCopyBufferToImage(copyCommandBuffer, stagingBuffer, vkImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferCopyRegion);
 		
 		VkImageLayout dstLayout;
 		VkPipelineStageFlags dstPipelineStgFlags;
@@ -214,9 +244,7 @@ namespace cerberus
 		}
 
 		// Once the data has been uploaded we transfer to the texture image to the shader read layout, so it can be sampled from
-		utils::SetImageLayout(copyCommandBuffer, imageInfo.Image,
-			VK_IMAGE_ASPECT_COLOR_BIT, // Image only contains color data
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, dstLayout,
+		image->SetLayout(copyCommandBuffer,dstLayout,
 			VK_PIPELINE_STAGE_TRANSFER_BIT, dstPipelineStgFlags);
 
 
@@ -227,27 +255,29 @@ namespace cerberus
 		if (m_Properties.GenerateMips)
 			GenerateMips();
 	}
+
 	uint32_t Texture2D::GetMipLevelCount() const
 	{
-		return Image::CalculateMipCount(m_Width, m_Height);
+		Image* img = ResourceManager::GetImage(m_Image);
+		return Image::CalculateMipCount(img->GetWidth(), img->GetHeight());
 	}
+
 	std::pair<uint32_t, uint32_t> Texture2D::GetMipSize(uint32_t mip) const
 	{
-		return std::pair<uint32_t, uint32_t>(uint32_t(m_Width >> mip), uint32_t(m_Height >> mip));
+		Image* img = ResourceManager::GetImage(m_Image);
+		return std::pair<uint32_t, uint32_t>(uint32_t(img->GetWidth() >> mip), uint32_t(img->GetHeight() >> mip));
 	}
+
 	void Texture2D::GenerateMips()
 	{
 		uint32_t mipLevels = GetMipLevelCount();
 
-		const ImageInfo& info = m_Image->GetImageInfo();
+		Image* image = ResourceManager::GetImage(m_Image);
+		VkImage vkImage = image->GetHandle();
+		uint32_t width = image->GetWidth();
+		uint32_t height = image->GetHeight();
 		// Get a command buffer to blit the image between the mip levels
 		const VkCommandBuffer blitCmd = Renderer::GetCommandBuffer(true);
-
-		VkImageMemoryBarrier barrier = {};
-		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		barrier.image = info.Image;
-		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
 		for (uint32_t i = 1; i < mipLevels; i++)
 		{
@@ -259,8 +289,8 @@ namespace cerberus
 			imageBlit.srcSubresource.mipLevel = i - 1;
 			// The region that data will be blitted from
 			imageBlit.srcOffsets[0] = { 0, 0, 0 };
-			imageBlit.srcOffsets[1].x = int32_t(m_Width >> (i - 1)); // Note: >> i <=> /2^i
-			imageBlit.srcOffsets[1].y = int32_t(m_Height >> (i - 1));
+			imageBlit.srcOffsets[1].x = int32_t(width >> (i - 1)); // Note: >> i <=> /2^i
+			imageBlit.srcOffsets[1].y = int32_t(height >> (i - 1));
 			imageBlit.srcOffsets[1].z = 1; 	// 1 Since is a 2D image has depth of 1
 
 			// Destination
@@ -269,8 +299,8 @@ namespace cerberus
 			imageBlit.dstSubresource.mipLevel = i;
 			// The region that data will be blitted to
 			imageBlit.dstOffsets[0] = { 0, 0, 0 };
-			imageBlit.dstOffsets[1].x = int32_t(m_Width >> i); // Note: >> i <=> /2^i
-			imageBlit.dstOffsets[1].y = int32_t(m_Height >> i);
+			imageBlit.dstOffsets[1].x = int32_t(width >> i); // Note: >> i <=> /2^i
+			imageBlit.dstOffsets[1].y = int32_t(height >> i);
 			imageBlit.dstOffsets[1].z = 1;	// 1 Since is a 2D image has depth of 1
 
 			VkImageSubresourceRange mipSubRange = {};
@@ -280,11 +310,12 @@ namespace cerberus
 			mipSubRange.layerCount = 1;
 
 			// Prepare current mip level as image blit destination
-			utils::InsertImageMemoryBarrier(blitCmd, info.Image,
+			utils::InsertImageMemoryBarrier(blitCmd, vkImage,
 				0, VK_ACCESS_TRANSFER_WRITE_BIT,
 				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
 				mipSubRange);
+
 
 			/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 			// Blit is transfer operation that allows to copying, scaling, and filtering. This operation depends
@@ -297,16 +328,16 @@ namespace cerberus
 			// parameter. This is because we're blitting between different levels of the same image.
 			vkCmdBlitImage(
 				blitCmd,
-				info.Image,
+				vkImage,
 				VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-				info.Image,
+				vkImage,
 				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 				1,
 				&imageBlit,
 				VK_FILTER_LINEAR); //  We use the VK_FILTER_LINEAR to enable interpolation
 
 			// Prepare current mip level as image blit source for next level
-			utils::InsertImageMemoryBarrier(blitCmd, info.Image,
+			utils::InsertImageMemoryBarrier(blitCmd, vkImage,
 				VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
 				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -319,8 +350,8 @@ namespace cerberus
 		subresourceRange.layerCount = 1;
 		subresourceRange.levelCount = mipLevels;
 
-		utils::InsertImageMemoryBarrier(blitCmd, info.Image,
-			VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+		utils::InsertImageMemoryBarrier(blitCmd, vkImage,
+			VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT, 
 			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 			subresourceRange);
@@ -334,16 +365,57 @@ namespace cerberus
 	{
 		if (data)
 		{
-			uint32_t imageSize = Image::GetImageMemorySize(m_Format, m_Width, m_Height) * m_LayersCount; // six layers
+			uint32_t imageSize = Image::GetImageMemorySize(m_Format, m_Width, m_Height) * 6; // six layers
 			m_ImageData = Buffer::Copy(data, imageSize);
 		}
 
-		m_MipsLevels = Image::CalculateMipCount(m_Width, m_Height);
+		if (m_Properties.GenerateMips)
+		{
+			m_MipsLevels = Image::CalculateMipCount(m_Width, m_Height);
+		}
+		else
+		{
+			m_MipsLevels = 1;
+		}
+
+		ImageSpecification imageSpec;
+		imageSpec.DebugName = "TextureCube";
+		imageSpec.Format = format;
+		imageSpec.Usage = ImageUsage::Sampler;
+		imageSpec.Width = width;
+		imageSpec.Height = height;
+		imageSpec.Layers = 6;
+		imageSpec.Mips = m_Properties.GenerateMips ? GetMipLevelCount() : 1;
+		imageSpec.Flags = SAMPLE_COMPATIBLE | CUBE_COMPATIBLE;
+		m_Image = ResourceManager::CreateImage(imageSpec);
+
+		ImageViewProperties viewProp;
+		viewProp.ViewType = ImageViewType::ImageCube;
+		viewProp.BaseLayer = 0;
+		viewProp.LayerCount = 6;
+		viewProp.BaseMip = 0;
+		viewProp.MipCount = m_MipsLevels;
+		viewProp.Image = m_Image;
+
+		SamplerSpecification SamplerSpec;
+		SamplerSpec.SamplerWrap = SamplerWrap::Clamp;
+		SamplerSpec.SamplerFilter = SamplerFilter::Linear;
+		SamplerSpec.Anisotropy = false;
+		SamplerSpec.MinLOD = 0.f;
+		SamplerSpec.MaxLOD = m_MipsLevels;
+		SamplerSpec.ShaderResource = true;
+
+		viewProp.SamplerSpec = SamplerSpec;
+
+		m_ImageView = ResourceManager::CreateImageView(viewProp);
+		Invalidate(format, width, height);
+#if OLD_RENDERER
 		TextureCube* instance = this;
 		Renderer::Submit([instance]()
 		{
 			instance->Invalidate();
 		});
+#endif
 	}
 	TextureCube::~TextureCube()
 	{
@@ -352,25 +424,10 @@ namespace cerberus
 
 	void TextureCube::Release()
 	{
-		if (!m_Info.Image)
-			return;
-
-		Renderer::SubmitResourceFree([info = m_Info, name = m_Properties.DebugName]() mutable
-		{
-			NV_CORE_WARN("TextureCube::Release ImageView ({1}) = {0}", (const void*)info.ImageView, name);
-			auto vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-			
-			// Main Image
-			vkDestroyImageView(vulkanDevice, info.ImageView, nullptr);
-			vkDestroySampler(vulkanDevice, info.Sampler, nullptr);
-
-			VulkanAllocator allocator("TextureCube");
-			allocator.DestroyImage(info.Image, info.MemoryAlloc);
-		});
-		m_Info.MemoryAlloc = nullptr;
-		m_Info.Image = nullptr;
-		m_Info.ImageView = nullptr;
-		m_Info.Sampler = nullptr;
+		NV_CORE_WARN("TextureCube::Release ImageView ({1})", m_Properties.DebugName);
+		// Main Image
+		ResourceManager::DestroyImage(m_Image);
+		ResourceManager::DestroyImageView(m_ImageView);
 	}
 
 	void TextureCube::GenerateMips(bool readonly)
@@ -380,7 +437,7 @@ namespace cerberus
 
 		VkCommandBuffer blitCmd = Renderer::GetCommandBuffer(true);
 		uint32_t mipLevels = GetMipLevelCount();
-
+		Image* image = ResourceManager::GetImage(m_Image);
 		// Change each face (layer) layout to  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
 		for (uint32_t face = 0; face < 6; face++)
 		{
@@ -392,9 +449,9 @@ namespace cerberus
 			mipSubRange.layerCount = 1;
 
 			// Prepare current mip level as image blit destination
-			utils::InsertImageMemoryBarrier(blitCmd, m_Info.Image,
+			image->InsertImageMemoryBarrier(blitCmd,
 				0, VK_ACCESS_TRANSFER_WRITE_BIT,
-				VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
 				mipSubRange);
 		}
@@ -434,9 +491,9 @@ namespace cerberus
 				mipSubRange.layerCount = 1;
 
 				// Prepare current mip level as image blit destination
-				utils::InsertImageMemoryBarrier(blitCmd, m_Info.Image,
+				image->InsertImageMemoryBarrier(blitCmd,
 					0, VK_ACCESS_TRANSFER_WRITE_BIT,
-					VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 					VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
 					mipSubRange);
 
@@ -451,18 +508,18 @@ namespace cerberus
 				// parameter. This is because we're blitting between different levels of the same image.
 				vkCmdBlitImage(
 					blitCmd,
-					m_Info.Image,
+					image->GetHandle(),
 					VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-					m_Info.Image,
+					image->GetHandle(),
 					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 					1,
 					&imageBlit,
 					VK_FILTER_LINEAR); //  We use the VK_FILTER_LINEAR to enable interpolation
 
 				// Prepare current mip level as image blit source for next level
-				utils::InsertImageMemoryBarrier(blitCmd, m_Info.Image,
+				image->InsertImageMemoryBarrier(blitCmd,
 					VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+					VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 					VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
 					mipSubRange);
 			}
@@ -472,22 +529,21 @@ namespace cerberus
 		// After the loop, all mip layers are in TRANSFER_SRC layout, so transition all to SHADER_READ
 		VkImageSubresourceRange subresourceRange = {};
 		subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		subresourceRange.layerCount = m_LayersCount;
+		subresourceRange.layerCount = 6;
 		subresourceRange.levelCount = mipLevels;
 
-		utils::InsertImageMemoryBarrier(blitCmd, m_Info.Image,
+		image->InsertImageMemoryBarrier(blitCmd,
 			VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, readonly ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL,
+			readonly ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL,
 			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 			subresourceRange);
 
 		Renderer::FlushCommandBuffer(blitCmd);
-
-		m_DescriptorImageInfo.imageLayout = readonly ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
 	}
 
 	VkImageView TextureCube::CreateImageViewSingleMip(uint32_t mip)
 	{
+#if OLD_RENDERER
 		CORE_ASSERT(mip <= m_MipsLevels, "Mip level does not exists!");
 		auto device = RendererContext::GetCurrentDevice();
 		auto vulkanDevice = device->GetVulkanDevice();
@@ -509,6 +565,8 @@ namespace cerberus
 		VkImageView result;
 		VK_CHECK_RESULT(vkCreateImageView(vulkanDevice, &view, nullptr, &result));
 		return result;
+#endif
+		return nullptr;
 	}
 
 	std::pair<uint32_t, uint32_t> TextureCube::GetMipSize(uint32_t mip) const
@@ -516,17 +574,30 @@ namespace cerberus
 		return std::pair<uint32_t, uint32_t>(uint32_t(m_Width >> mip), uint32_t(m_Height >> mip));
 	}
 
-	void TextureCube::Invalidate()
+	uint64_t TextureCube::GetHash() const
+	{
+		ImageView* imgView = ResourceManager::GetImageView(m_ImageView);
+		if (!imgView)
+		{
+			CORE_ASSERT(false, "Invalid image view");
+			return 0;
+		}
+
+		return (uint64_t)imgView->GetHandle();
+	}
+
+	void TextureCube::Invalidate(ImageFormat format, const uint32_t width, const uint32_t height)
 	{
 		// Get Devices
 		auto device = RendererContext::GetCurrentDevice();
 		auto vulkanDevice = device->GetVulkanDevice();
+#if 0
 		// Release data if exits
 		Release();
 
 		VkFormat vulkanFormat = utils::VulkanImageFormat(m_Format);
 		uint32_t mipCount = GetMipLevelCount();
-		VulkanAllocator allocator("TextureCube");
+		ResourceAllocator allocator("TextureCube");
 		/////////////////////////////////////////////////
 		////// Create Image
 		/////////////////////////////////////////////////
@@ -538,7 +609,7 @@ namespace cerberus
 		imageCreateInfo.extent.height = m_Height;
 		imageCreateInfo.extent.depth = 1;
 		imageCreateInfo.mipLevels = mipCount;
-		imageCreateInfo.arrayLayers = m_LayersCount;
+		imageCreateInfo.arrayLayers = 6;
 		imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 		imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL; // texels are laid out in an implementation-dependent arrangement, for more efficient memory access
@@ -563,7 +634,7 @@ namespace cerberus
 		imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
 		imageViewCreateInfo.subresourceRange.levelCount = mipCount;
 		imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
-		imageViewCreateInfo.subresourceRange.layerCount = m_LayersCount;
+		imageViewCreateInfo.subresourceRange.layerCount = 6;
 		imageViewCreateInfo.image = m_Info.Image;
 		VK_CHECK_RESULT(vkCreateImageView(vulkanDevice, &imageViewCreateInfo, nullptr, &m_Info.ImageView));
 		/////////////////////////////////////////////////
@@ -600,12 +671,20 @@ namespace cerberus
 		VK_CHECK_RESULT(vkCreateSampler(vulkanDevice, &samplerCreateInfo, nullptr, &m_Info.Sampler));
 
 
+#endif
+		Image* image = ResourceManager::GetImage(m_Image);
+		ImageView* imageView = ResourceManager::GetImageView(m_ImageView);
+
+		image->Invalidate();
+		imageView->Invalidate();
+
 		/////////////////////////////////////////////////
 		////// Staging Buffer
 		/////////////////////////////////////////////////
 		// Copy data if present
 		if (m_ImageData)
 		{
+			ResourceAllocator allocator("TextureCube");
 			VkDeviceSize size = (uint64_t)m_ImageData.Size;
 			// Create staging buffer
 			// Create staging buffer to hold loaded data, ready to copy to device
@@ -628,14 +707,14 @@ namespace cerberus
 			// Transition the texture image layout to transfer target, so we can safely copy our buffer data to it.
 			// Insert a memory dependency at the proper pipeline stages that will execute the image layout transition 
 			utils::ImageLayoutSpecification layoutSpec;
-			layoutSpec.Commadbuffer = copyCommandBuffer;
-			layoutSpec.Image = m_Info.Image;
+			layoutSpec.CommandBuffer = copyCommandBuffer;
+			layoutSpec.Image = image->GetHandle();
 			layoutSpec.AspectMask = VK_IMAGE_ASPECT_COLOR_BIT;					// Image only contains color data
 			layoutSpec.OldImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 			layoutSpec.NewImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 			layoutSpec.SrcStageMask = VK_PIPELINE_STAGE_HOST_BIT;				// Source pipeline stage is host write/read exection (VK_PIPELINE_STAGE_HOST_BIT)
 			layoutSpec.DstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;			// Destination pipeline stage is copy command exection (VK_PIPELINE_STAGE_TRANSFER_BIT)
-			layoutSpec.LayerCount = m_LayersCount;
+			layoutSpec.LayerCount = 6;
 			// Changed image layout
 			utils::SetImageLayout(layoutSpec);
 
@@ -646,24 +725,24 @@ namespace cerberus
 			bufferCopyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;	// Which aspect of image to copy
 			bufferCopyRegion.imageSubresource.mipLevel = 0;								// Mipmap level to copy
 			bufferCopyRegion.imageSubresource.baseArrayLayer = 0;						// Starting array layer (if array)
-			bufferCopyRegion.imageSubresource.layerCount = m_LayersCount;				// Number of layers to copy starting at baseArrayLayer
+			bufferCopyRegion.imageSubresource.layerCount = 6;							// Number of layers to copy starting at baseArrayLayer
 			bufferCopyRegion.imageExtent = { m_Width, m_Height, 1 };					// Size of region to copy as (x, y, z) values
 
 			// Copy buffer to given image
-			vkCmdCopyBufferToImage(copyCommandBuffer, stagingBuffer, m_Info.Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferCopyRegion);
+			vkCmdCopyBufferToImage(copyCommandBuffer, stagingBuffer, image->GetHandle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferCopyRegion);
 
 			// Transition the texture image layout to  target, so we can safely copy our buffer data to it.
 			// Once the data has been uploaded we transfer to the texture image to the VK_IMAGE_LAYOUT_GENERAL, so it can be write from and read to
-			layoutSpec.Commadbuffer = copyCommandBuffer;
-			layoutSpec.Image = m_Info.Image;
+			layoutSpec.CommandBuffer = copyCommandBuffer;
+			layoutSpec.Image = image->GetHandle();
 			layoutSpec.AspectMask = VK_IMAGE_ASPECT_COLOR_BIT;					// Image only contains color data
 			layoutSpec.OldImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 			layoutSpec.NewImageLayout = VK_IMAGE_LAYOUT_GENERAL;
 			layoutSpec.SrcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;			// Source pipeline stage is host write/read exection (VK_PIPELINE_STAGE_HOST_BIT)
 			layoutSpec.DstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;			// Destination pipeline stage is copy command exection (VK_PIPELINE_STAGE_TRANSFER_BIT)
-			layoutSpec.LayerCount = m_LayersCount;
+			layoutSpec.LayerCount = 6;
 
-			utils::SetImageLayout(layoutSpec);
+			image->SetImageLayout(layoutSpec);
 
 			Renderer::FlushCommandBuffer(copyCommandBuffer);
 			allocator.DestroyBuffer(stagingBuffer, stagingBufferAllocation);
@@ -676,8 +755,8 @@ namespace cerberus
 			// Transition the texture image layout to  target, so we can safely copy our buffer data to it.
 			// Once the data has been uploaded we transfer to the texture image to the VK_IMAGE_LAYOUT_GENERAL, so it can be write from, and read to
 			utils::ImageLayoutSpecification layoutSpec;
-			layoutSpec.Commadbuffer = copyCommandBuffer;
-			layoutSpec.Image = m_Info.Image;
+			layoutSpec.CommandBuffer = copyCommandBuffer;
+			layoutSpec.Image = image->GetHandle();
 			layoutSpec.AspectMask = VK_IMAGE_ASPECT_COLOR_BIT;					// Image only contains color data
 			layoutSpec.OldImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 			layoutSpec.NewImageLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -687,12 +766,12 @@ namespace cerberus
 			layoutSpec.LevelCount = m_MipsLevels;
 			layoutSpec.BaseMipLevel = 0;
 
-			utils::SetImageLayout(layoutSpec);
+			image->SetImageLayout(layoutSpec);
 			Renderer::FlushCommandBuffer(copyCommandBuffer);
 			/**/
 		}
 
-
+#if 0
 		// Update Descriptor
 		// Image Layout when use
 		m_DescriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -700,6 +779,7 @@ namespace cerberus
 		m_DescriptorImageInfo.imageView = m_Info.ImageView;
 		// Sampler to use for set
 		m_DescriptorImageInfo.sampler = m_Info.Sampler;
+#endif
 
 	}
 	//////////////////////////////////////////
@@ -768,8 +848,9 @@ namespace cerberus
 		return result;
 	}
 
-	Ref<Texture2D> TextureFactory::CreateBRDF()
+	Handle<Texture2D> TextureFactory::CreateBRDF()
 	{
+#if OLD_RENDERER
 		uint32_t brdfSize = Renderer::GetRendererConfig().BrdfLutSize;
 		ImageSpecification spec;
 		spec.DebugName = "BRDF";
@@ -807,26 +888,143 @@ namespace cerberus
 		});
 
 		return brdfTex;
-		/** /
-		TextureProperties prop;
-		prop.GenerateMips = true;
-		prop.SamplerWrap = SamplerWrap::Clamp;
-		Ref<Texture2D> texture = CreateRef<Texture2D>("Resources/Textures/BRDF_LUT.tga", prop);
-		
-		return texture;
-		/**/
+#endif
+		return Handle<Texture2D>();
 	}
-	Ref<Texture2D> TextureFactory::CreateTexture2DWithColor(const glm::ivec4& color)
+
+	Handle<Texture2D> TextureFactory::CreateTexture2DWithColor(const glm::ivec4& color)
 	{
 		uint32_t textureData = ConvertRGBtoHex(color.r, color.g, color.b, color.a);
-		return CreateRef<Texture2D>(ImageFormat::RGBA, 1, 1, &textureData);
+		return ResourceManager::CreateTexture2D(ImageFormat::RGBA, 1, 1, &textureData);
 	}
-	Ref<TextureCube> TextureFactory::CreateTextureCubeWithColor(const glm::vec4& color)
+
+	Handle<TextureCube> TextureFactory::CreateTextureCubeWithColor(const glm::vec4& color)
 	{
-		uint32_t textureData = ConvertRGBtoHex(color.r, color.g, color.b, color.a);
+		uint32_t textureData = ConvertRGBtoHex((float)color.r, (float)color.g, (float)color.b, (float)color.a);
 		uint32_t cubeTextureData[6] = { textureData, textureData, textureData, textureData, textureData, textureData };
 		TextureProperties prop;
 		prop.DebugName = "Colored Texture Cube";
-		return CreateRef<TextureCube>(ImageFormat::RGBA, 1, 1, prop, &cubeTextureData);
+		return ResourceManager::CreateTextureCube(ImageFormat::RGBA, 1, 1, prop, &cubeTextureData);
 	}
+
+	RenderTargetTexture::RenderTargetTexture(const RenderTargetProperties& rtProp)
+		: m_Properties(rtProp)
+	{
+		Invalidate();
+	}
+
+	RenderTargetTexture::~RenderTargetTexture()
+	{
+		Release();
+	}
+
+	void RenderTargetTexture::Release()
+	{
+		ImageView* imgView = ResourceManager::GetImageView(m_ImageView);
+		if (!imgView)
+		{
+			return;
+		}
+
+		Handle<Image> image;
+		// if we own the handle then submit it for release, otherwise just leave it invalid it
+		if (!m_Properties.ExistingImage.IsValid())
+		{
+			image = m_Image;
+		}
+
+		NV_CORE_WARN("RenderTargetTexture::Release ImageView ({1})", m_Properties.DebugName);
+		// Main Image
+		ResourceManager::DestroyImage(image); // If image is invalid the ResourceManager will ignore it
+		ResourceManager::DestroyImageView(m_ImageView);
+	}
+
+	void RenderTargetTexture::Resize(uint32_t width, uint32_t height)
+	{
+		if (m_Properties.Resizable && (width != m_Properties.Width || height != m_Properties.Height))
+		{
+			m_Properties.Width = width;
+			m_Properties.Height = height;
+			Invalidate();
+		}
+	}
+
+	std::pair<uint32_t, uint32_t> RenderTargetTexture::GetMipSize(uint32_t mip) const
+	{
+		return std::pair<uint32_t, uint32_t>(uint32_t(m_Properties.Width >> mip), uint32_t(m_Properties.Height >> mip));
+	}
+
+	uint64_t RenderTargetTexture::GetHash() const
+	{
+		ImageView* imgView = ResourceManager::GetImageView(m_ImageView);
+		if (!imgView)
+		{
+			CORE_ASSERT(false, "Invalid image view");
+			return 0;
+		}
+
+		return (uint64_t)imgView->GetHandle();
+	}
+
+	void RenderTargetTexture::Invalidate()
+	{
+		Release();
+		Handle<Image> imgHandle = m_Properties.ExistingImage;
+		Image* img = ResourceManager::GetImage(imgHandle);
+		if (img == nullptr)
+		{
+			ImageSpecification spec;
+			spec.DebugName = m_Properties.DebugName;
+			spec.Width = m_Properties.Width;
+			spec.Height = m_Properties.Height;
+
+
+			spec.Format = m_Properties.Format;
+			spec.Layers = m_Properties.LayerCount;
+			spec.Usage = ImageUsage::Attachment;
+			spec.Mips = m_Properties.MipCount;
+			spec.Flags = m_Properties.ShaderResource ? SAMPLE_COMPATIBLE : 0;
+
+			m_Image = imgHandle = ResourceManager::CreateImage(spec);
+			img = ResourceManager::GetImage(imgHandle);
+			img->Invalidate();
+		}
+		else
+		{
+			const auto& imgSpec = img->GetSpecification();
+			CORE_ASSERT(img->GetWidth() == m_Properties.Width && img->GetHeight() == m_Properties.Height 
+							&& imgSpec.Usage == ImageUsage::Attachment,
+				"Exiting image does not have the proper size of usage for the Framebuffer!")
+		}
+
+		ImageViewProperties viewProp;
+		viewProp.Image = imgHandle;
+		viewProp.BaseLayer = m_Properties.BaseLayer;
+		viewProp.BaseMip = m_Properties.BaseMip;
+		viewProp.LayerCount = m_Properties.LayerCount;
+		viewProp.MipCount = m_Properties.MipCount;
+		viewProp.ViewType = m_Properties.ViewType;
+
+		SamplerSpecification SamplerSpec;
+		// TODO - SORT the resource stuff
+		SamplerSpec.ShaderResource = true;
+		if (true || m_Properties.ShaderResource)
+		{
+			SamplerSpec.SamplerWrap = SamplerWrap::Clamp;
+			SamplerSpec.SamplerFilter = SamplerFilter::Linear;
+			SamplerSpec.Anisotropy = false;
+			SamplerSpec.MinLOD = 0.f;
+			SamplerSpec.MaxLOD = m_Properties.MipCount;
+			SamplerSpec.ShaderResource = m_Properties.ShaderResource;
+			
+		}
+		viewProp.SamplerSpec = SamplerSpec;
+		
+		m_ImageView = ResourceManager::CreateImageView(viewProp);
+		ImageView* imgView = ResourceManager::GetImageView(m_ImageView);
+		imgView->Invalidate();
+
+
+	}
+
 }

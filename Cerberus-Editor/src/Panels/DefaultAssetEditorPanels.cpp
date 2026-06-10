@@ -72,10 +72,12 @@ namespace cerberus
 	MaterialPanel::MaterialPanel()
 		: AssetEditorPanel("MaterialPanel")
 	{
+#if OLD_RENDERER
 		TextureProperties prop;
 		prop.GenerateMips = true;
 		prop.SamplerFilter = SamplerFilter::Nearest;
 		m_CheckerboardTex = CreateRef<Texture2D>("Resources/Editor/Checkerboard.png", prop);
+#endif
 	}
 	MaterialPanel::~MaterialPanel()
 	{
@@ -83,7 +85,9 @@ namespace cerberus
 	}
 	void MaterialPanel::Shutdown()
 	{
+#if OLD_RENDERER
 		m_CheckerboardTex->GetImage()->Release();
+#endif
 	}
 	void MaterialPanel::SetAsset(const Ref<Asset>& asset)
 	{
@@ -94,7 +98,8 @@ namespace cerberus
 
 	void MaterialPanel::Render()
 	{
-		auto& material = m_Material->GetMaterial();
+#if OLD_RENDERER
+		const auto& material = m_Material->GetMaterial();
 		ImGui::Text("Shader: %s", material->GetShader()->GetName().c_str());
 		bool needsSerialize = false;
 
@@ -121,11 +126,13 @@ namespace cerberus
 				{
 					AssetHandle assetHandle = *(AssetHandle*)data->Data;
 					Ref<Texture2D> texture = AssetManager::GetAsset<Texture2D>(assetHandle);
+#if OLD_RENDERER
 					if (texture && texture->GetAssetType() == Texture::GetStaticType())
 					{
 						m_Material->SetAlbedoMap(texture);
 						needsSerialize = true;
 					}
+#endif
 				}
 				ImGui::EndDragDropTarget();
 			}
@@ -134,7 +141,9 @@ namespace cerberus
 			{
 				ImGui::BeginTooltip();
 				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+#if OLD_RENDERER
 				ImGui::TextUnformatted(albedoTex->GetPath().c_str());
+#endif
 				ImGui::PopTextWrapPos();
 				ui::Image(albedoTex, ImVec2(256, 256));
 				ImGui::EndTooltip();
@@ -175,12 +184,14 @@ namespace cerberus
 				if (const ImGuiPayload* data = ImGui::AcceptDragDropPayload("asset_payload"))
 				{
 					AssetHandle assetHandle = *(AssetHandle*)data->Data;
+#if OLD_RENDERER
 					Ref<Texture2D> texture = AssetManager::GetAsset<Texture2D>(assetHandle);
 					if (texture && texture->GetAssetType() == Texture::GetStaticType())
 					{
 						m_Material->SetNormalMap(texture);
 						needsSerialize = true;
 					}
+#endif
 				}
 				ImGui::EndDragDropTarget();
 			}
@@ -189,7 +200,9 @@ namespace cerberus
 			{
 				ImGui::BeginTooltip();
 				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+#if OLD_RENDERER
 				ImGui::TextUnformatted(normalTex->GetPath().c_str());
+#endif
 				ImGui::PopTextWrapPos();
 				ui::Image(normalTex, ImVec2(256, 256));
 				ImGui::EndTooltip();
@@ -233,11 +246,13 @@ namespace cerberus
 				{
 					AssetHandle assetHandle = *(AssetHandle*)data->Data;
 					Ref<Texture2D> texture = AssetManager::GetAsset<Texture2D>(assetHandle);
+#if OLD_RENDERER
 					if (texture && texture->GetAssetType() == Texture::GetStaticType())
 					{
 						m_Material->SetMetalnessMap(texture);
 						needsSerialize = true;
 					}
+#endif
 				}
 				ImGui::EndDragDropTarget();
 			}
@@ -246,7 +261,9 @@ namespace cerberus
 			{
 				ImGui::BeginTooltip();
 				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+#if OLD_RENDERER
 				ImGui::TextUnformatted(metalnessTex->GetPath().c_str());
+#endif
 				ImGui::PopTextWrapPos();
 				ui::Image(metalnessTex, ImVec2(256, 256));
 				ImGui::EndTooltip();
@@ -286,12 +303,14 @@ namespace cerberus
 				if (const ImGuiPayload* data = ImGui::AcceptDragDropPayload("asset_payload"))
 				{
 					AssetHandle assetHandle = *(AssetHandle*)data->Data;
+#if OLD_RENDERER
 					Ref<Texture2D> texture = AssetManager::GetAsset<Texture2D>(assetHandle);
 					if (texture && texture->GetAssetType() == Texture::GetStaticType())
 					{
 						m_Material->SetRoughnessMap(texture);
 						needsSerialize = true;
 					}
+#endif
 				}
 				ImGui::EndDragDropTarget();
 			}
@@ -300,7 +319,9 @@ namespace cerberus
 			{
 				ImGui::BeginTooltip();
 				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+#if OLD_RENDERER
 				ImGui::TextUnformatted(roughnessTex->GetPath().c_str());
+#endif
 				ImGui::PopTextWrapPos();
 				ui::Image(roughnessTex, ImVec2(256, 256));
 				ImGui::EndTooltip();
@@ -332,6 +353,7 @@ namespace cerberus
 			NV_CORE_WARN("Serializing...");
 			AssetImporter::Serialize(m_Material);
 		}
+#endif
 
 	}
 	void MaterialPanel::OnClose()

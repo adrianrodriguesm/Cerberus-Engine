@@ -93,7 +93,7 @@ namespace cerberus
 						{
 							auto newEntity = m_SceneContext->CreateEntity("Directional Light");
 							newEntity.AddComponent<DirectionalLightComponent>();
-							newEntity.GetComponent<TransformComponent>().Rotation = glm::radians(glm::vec3{ 80.0f, 10.0f, 0.0f });
+							newEntity.GetComponent<TransformComponent>().SetRotation(glm::radians(glm::vec3{ 80.0f, 10.0f, 0.0f }));
 							SetSelected(newEntity);
 						}
 						if (ImGui::MenuItem("Sky Light"))

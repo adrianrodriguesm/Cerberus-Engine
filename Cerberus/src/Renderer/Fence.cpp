@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "Fence.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/RenderQueueManager.h"
 namespace cerberus
 {
 	Fence::Fence(uint32_t count, const std::string& debugName)
@@ -26,7 +27,7 @@ namespace cerberus
 		if (!m_Fences.size())
 			return;
 
-		Renderer::SubmitResourceFree([fences = m_Fences]()
+		RenderQueueManager::SubmitResourceFree([fences = m_Fences]()
 		{
 			VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			for (auto& fence : fences)

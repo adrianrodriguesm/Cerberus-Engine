@@ -4,14 +4,35 @@
 #include <entt.hpp>
 #include <glm/glm.hpp>
 #include "Asset/Asset.h"
+#include "Components/Components.h"
 namespace cerberus
 {
 	struct SceneRendererCamera;
+	class ForwardSceneRenderer;
 	class SceneRenderer;
 	class Entity;
 	class SceneHierarchyPanel;
 	class ScenePropertiesPanel;
 	class SceneSerializer;
+
+	class RegisterContext
+	{
+	public:
+		RegisterContext(Scene* scene)
+			: m_Scene(scene)
+		{}
+
+		void AddMesh(MeshComponent& PrimitiveComponent)
+		{
+			AddPrimitiveBatches.emplace_back(PrimitiveComponent);
+		}
+
+		void Process();
+
+	private:
+		Scene* m_Scene;
+		std::vector<MeshComponent> AddPrimitiveBatches;
+	};
 
 	class Scene : public Asset
 	{
@@ -19,7 +40,7 @@ namespace cerberus
 		Scene(const std::string& name = "Untitled Scene");
 		~Scene();
 
-		void OnUpdate(Ref<SceneRenderer>  sceneRenderer, const SceneRendererCamera& sceneRendererCamera, Timestep ts);
+		void OnUpdate(Ref<SceneRenderer> sceneRenderer, const SceneRendererCamera& sceneRendererCamera, Timestep ts);
 
 		//void OnViewportResize(uint32_t width, uint32_t height);
 		void SetViewport(uint32_t width, uint32_t height);
@@ -39,9 +60,12 @@ namespace cerberus
 		std::string m_Name;
 
 		LightEnvironment m_LightEnvironment;
+		std::vector<Entity> m_DirtyTransform;
+
+		std::vector<AssetHandle> m_MeshToRemoved;
 
 		friend class Entity;
-		friend class SceneRenderer;
+		friend class ForwardSceneRenderer;
 		friend class SceneSerializer;
 		friend class SceneHierarchyPanel;
 		friend class ScenePropertiesPanel;

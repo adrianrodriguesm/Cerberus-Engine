@@ -1,80 +1,71 @@
 #include "pch.h"
 #include "IndexBuffer.h"
+#include "Renderer/ResourceManager.h"
 #include "Renderer/Renderer.h"
 
 namespace cerberus
 {
-	IndexBuffer::IndexBuffer(void* data, const uint32_t size)
-		: m_Size(size)
+	IndexBuffer::IndexBuffer(const void* data, const uint32_t size)
 	{
 		m_LocalData = Buffer::Copy(data, size);
-		IndexBuffer* instance = this;
-		Renderer::Submit([instance]() mutable
-		{
-			auto vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-			// CREATE STAGING BUFFER
-			// Information to create a buffer (doesn't include assigning memory)
-			VkBufferCreateInfo stagingBufferCreateInfo = {};
-			stagingBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-			stagingBufferCreateInfo.size = instance->m_Size;							// Size of buffer (size of 1 vertex * number of vertices)
-			stagingBufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;			// Multiple types of buffer possible, we want Transfer Buffer 
-																						// to sent the data to the Vertex buffer on the GPU
-			stagingBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;			// Similar to Swap Chain images, can share vertex buffers
-
-			VkBuffer stagingBuffer;
-			VulkanAllocator allocator("IndexBuffer");
-			// Allocation is the piece of memory associate with the buffer
-			VmaAllocation stagingBufferAllocation = allocator.AllocateBuffer(stagingBufferCreateInfo, VMA_MEMORY_USAGE_CPU_TO_GPU, stagingBuffer);
-
-			// Copy data to staging buffer
-			// 1. Create pointer to a point in normal memory and  "Map" the staging buffer memory to that point
-			uint8_t* destData = allocator.MapMemory<uint8_t>(stagingBufferAllocation);
-			// 2. Copy memory from vertices vector to the point
-			memcpy(destData, instance->m_LocalData.Data, instance->m_LocalData.Size);
-			// 3. Unmap the vertex buffer memory
-			allocator.UnmapMemory(stagingBufferAllocation);
-
-			// CREATE VERTEX BUFFER
-			VkBufferCreateInfo vertexBufferCreateInfo = {};
-			vertexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-			vertexBufferCreateInfo.size = instance->m_Size;
-			// VK_BUFFER_USAGE_TRANSFER_DST_BIT : will receive data from another tranfer source (staging buffer)
-			vertexBufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-			vertexBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-			// Create Vertex buffer
-			instance->m_MemoryAllocation = allocator.AllocateBuffer(vertexBufferCreateInfo, VMA_MEMORY_USAGE_GPU_ONLY, instance->m_IndexBuffer);
-
-			// Get a copy command buffer to tranfer the data 
-			// from the staging buffer to the vertex buffer
-			VkCommandBuffer copyCmd = Renderer::GetCommandBuffer(true);
-			// Region of data to copy from and to
-			VkBufferCopy copyRegion = {};
-			copyRegion.srcOffset = 0;			// Copy from the begining of the fisrt buffer
-			copyRegion.dstOffset = 0;			// Copy from the begining of the destination buffer
-			copyRegion.size = instance->m_LocalData.Size;
-			// Record copy operation to the command buffer
-			vkCmdCopyBuffer(copyCmd, stagingBuffer, instance->m_IndexBuffer, 1, &copyRegion);
-			// Flush command bufer (sumit to execution and detroy)
-			Renderer::FlushCommandBuffer(copyCmd);
-
-			// Destroy staging buffer not longer need it
-			allocator.DestroyBuffer(stagingBuffer, stagingBufferAllocation);
-		});
-
+		Invalidate();
 	}
 	IndexBuffer::~IndexBuffer()
 	{
-		VkBuffer indexBuffer = m_IndexBuffer;
-		VmaAllocation memoryAllocation = m_MemoryAllocation;
-		Renderer::SubmitResourceFree([indexBuffer, memoryAllocation]() 
-		{
-			VulkanAllocator allocator("IndexBuffer");
-			allocator.DestroyBuffer(indexBuffer, memoryAllocation);
-		});
-		
+		ResourceManager::DestroyBuffer(m_IndexBuffer);
 		m_LocalData.Release();
-		m_MemoryAllocation = nullptr;
-		m_IndexBuffer = nullptr;
+	}
+
+	void IndexBuffer::Invalidate()
+	{
+		GPUBufferSpecification stagingBufferSpec;
+		stagingBufferSpec.DebugName = "Index Staging Buffer";
+		stagingBufferSpec.MemoryUsage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+		stagingBufferSpec.Size = m_LocalData.GetSize();
+		stagingBufferSpec.Usage = GPUBufferUsage::StagingUsage;
+		Handle<GPUBuffer> stagingBufferHandle = ResourceManager::CreateBuffer(stagingBufferSpec);
+		GPUBuffer* stagingBuffer = ResourceManager::GetBuffer(stagingBufferHandle);
+		ResourceAllocator allocator("Index Staging Buffer");
+
+		// Copy data to staging buffer
+		// 1. Create pointer to a point in normal memory and  "Map" the staging buffer memory to that point
+		uint8_t* destData = allocator.MapMemory<uint8_t>(stagingBuffer->Allocation);
+		// 2. Copy memory from vertices vector to the point
+		memcpy(destData, m_LocalData.Data, m_LocalData.Size);
+		// 3. Unmap the vertex buffer memory
+		allocator.UnmapMemory(stagingBuffer->Allocation);
+
+		GPUBufferSpecification indexBufferSpec;
+		indexBufferSpec.DebugName = "Index Buffer";
+		indexBufferSpec.MemoryUsage = VMA_MEMORY_USAGE_GPU_ONLY;
+		indexBufferSpec.Size = m_LocalData.GetSize();
+		indexBufferSpec.Usage = GPUBufferUsage::IndexBufferUsage;
+		m_IndexBuffer = ResourceManager::CreateBuffer(indexBufferSpec);
+		
+		GPUBuffer* indexBuffer = ResourceManager::GetBuffer(m_IndexBuffer);
+		stagingBuffer = ResourceManager::GetBuffer(stagingBufferHandle);
+
+		// Get a copy command buffer to tranfer the data 
+		// from the staging buffer to the vertex buffer
+		VkCommandBuffer copyCmd = Renderer::GetCommandBuffer(true);
+
+		// Region of data to copy from and to
+		VkBufferCopy copyRegion = {};
+		copyRegion.srcOffset = 0;			// Copy from the begining of the fisrt buffer
+		copyRegion.dstOffset = 0;			// Copy from the begining of the destination buffer
+		copyRegion.size = m_LocalData.Size;
+		// Record copy operation to the command buffer
+		vkCmdCopyBuffer(copyCmd, stagingBuffer->Buffer, indexBuffer->Buffer, 1, &copyRegion);
+		// Flush command bufer (sumit to execution and detroy)
+		Renderer::FlushCommandBuffer(copyCmd);
+
+
+		ResourceManager::DestroyBuffer(stagingBufferHandle);
+	}
+	VkBuffer IndexBuffer::GetHandle() const
+	{
+		GPUBuffer* buffer = ResourceManager::GetBuffer(m_IndexBuffer);
+		CORE_ASSERT(buffer, "Invalid index buffer!")
+		return buffer->Buffer;
 	}
 }

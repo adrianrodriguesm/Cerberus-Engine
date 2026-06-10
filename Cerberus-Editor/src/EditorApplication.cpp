@@ -10,7 +10,7 @@ namespace cerberus
 		EditorApplication(const ApplicationSpecification& specification)
 			: Application(specification)
 		{
-			GetWindow()->Maximize();
+			//GetWindow()->Maximize();
 			PushLayer(new EditorLayer());
 		}
 		~EditorApplication() {}

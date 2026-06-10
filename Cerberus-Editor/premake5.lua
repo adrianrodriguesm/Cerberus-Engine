@@ -1,7 +1,7 @@
 project "Cerberus-Editor"
 	kind "ConsoleApp"
 	language "C++"
-	cppdialect "C++17"
+	cppdialect "C++20"
 	staticruntime "off"
 
 	targetdir ("../bin/" .. outputdir .. "/%{prj.name}")
@@ -55,7 +55,6 @@ project "Cerberus-Editor"
 		postbuildcommands 
 		{
 			'{COPY} "../Cerberus/vendor/assimp/bin/Debug/assimp-vc141-mtd.dll" "%{cfg.targetdir}"',	
-			'{COPY} "../Cerberus/vendor/VulkanSDK/Bin/shaderc_sharedd.dll" "%{cfg.targetdir}"'
 		}
 
 	filter "configurations:Release"

@@ -19,6 +19,19 @@ namespace cerberus
 	private:
 		uint64_t m_UUID;
 	};
+
+	class UUID_16
+	{
+	public:
+		UUID_16();
+		UUID_16(uint16_t uuid);
+		UUID_16(const UUID_16& other);
+
+		operator uint16_t () { return m_UUID; }
+		operator const uint16_t() const { return m_UUID; }
+	private:
+		uint16_t m_UUID;
+	};
 }
 
 // Creation of a hash function for the UUID
@@ -32,6 +45,15 @@ namespace std
 		std::size_t operator()(const cerberus::UUID& uuid) const
 		{
 			return hash<uint64_t>()((uint64_t)uuid);
+		}
+	};
+
+	template <>
+	struct hash<cerberus::UUID_16>
+	{
+		std::size_t operator()(const cerberus::UUID_16& uuid) const
+		{
+			return hash<uint16_t>()((uint16_t)uuid);
 		}
 	};
 }

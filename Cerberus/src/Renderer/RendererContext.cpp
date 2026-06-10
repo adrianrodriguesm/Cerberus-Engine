@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "RendererContext.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/VulkanExtensions.h"
 namespace cerberus
 {
 	VkInstance RendererContext::m_VulkanInstance = nullptr;
@@ -14,11 +15,11 @@ namespace cerberus
 	}
 	void RendererContext::Init()
 	{
+		
 		// Check validation layer
 		if (ValidationLayer::s_EnableValidationLayers && !ValidationLayer::CheckValidationLayerSupport())
-		{
-			ASSERT(false, "Required Validation Layers not supported!");
-		}
+			CORE_ASSERT(false, "Required Validation Layers not supported!");
+		
 		NV_CORE_INFO("...");
 		CreateInstance();
 		NV_CORE_INFO("Vulkan Instace created with success");
@@ -30,18 +31,32 @@ namespace cerberus
 		m_VulkanPhyicalDevice = PhysicalDevice::Select();
 		NV_CORE_INFO("Vulkan Physical Device selected with success");
 		NV_CORE_INFO("...");
-		m_VulkanDevice = CreateRef<Device>(m_VulkanPhyicalDevice);
+		{
+			DeviceProperties deviceCapabilities;
+			// Activate the swapchain extension
+			deviceCapabilities.AddDeviceExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+			// Activate the ray tracing extension
+			VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeature{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR };
+			deviceCapabilities.AddDeviceExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, false, &accelFeature);  // To build acceleration structures
+			VkPhysicalDeviceRayTracingPipelineFeaturesKHR rtPipelineFeature{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR };
+			deviceCapabilities.AddDeviceExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, false, &rtPipelineFeature);  // To use vkCmdTraceRaysKHR
+			deviceCapabilities.AddDeviceExtension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);  // Required by ray tracing pipeline
+			deviceCapabilities.AddDeviceExtension(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);  // Required by ray tracing pipeline
+			deviceCapabilities.AddDeviceExtension(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+			m_VulkanDevice = CreateRef<Device>(m_VulkanPhyicalDevice, deviceCapabilities);
+		}
+		ext::LoadVKExtensions(m_VulkanInstance, vkGetInstanceProcAddr, m_VulkanDevice->GetVulkanDevice(), vkGetDeviceProcAddr);
 		NV_CORE_INFO("Vulkan Logical Device created with success");
 		NV_CORE_INFO("...");
 
-		VulkanAllocator::Init(m_VulkanDevice);
+		ResourceAllocator::Init(m_VulkanDevice);
 		
 	}
 	void RendererContext::Shutdown()
 	{
 		auto vulkanLogicalDevice = m_VulkanDevice->GetVulkanDevice();
 		
-		VulkanAllocator::Shutdown();
+		ResourceAllocator::Shutdown();
 
 		m_VulkanDevice->Shutdown();
 		m_ValidationLayer->Shutdown();
@@ -60,17 +75,17 @@ namespace cerberus
 	void RendererContext::CreateInstance() 
 	{
 		////////////////////////////////////////////////////////////////////////////////////
-		// Aplication Info
+		// Application Info
 		////////////////////////////////////////////////////////////////////////////////////
-		// Information about the aplication itself
+		// Information about the Application itself
 		// Most data here does not affect the program and is for developer convenience
 		VkApplicationInfo appInfo = {};
 		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-		appInfo.pApplicationName = "Cerberus";						// Custon name of the application
-		//appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);	// Custon version of the application
-		appInfo.pEngineName = "Cerberus";					// Custon name of the engine
-		//appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);		// Custon version of the engine
-		appInfo.apiVersion = VK_API_VERSION_1_2;				// The Vulkan Version
+		appInfo.pApplicationName = "Cerberus";						// Custom name of the application
+		//appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);	// Custom version of the application
+		appInfo.pEngineName = "Cerberus";							// Custom name of the engine
+		//appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);			// Custon version of the engine
+		appInfo.apiVersion = VK_API_VERSION_1_3;					// The Vulkan Version
 
 		// Necessary info for a creation of a VkInstance 
 		VkInstanceCreateInfo createInfo = {};
@@ -81,13 +96,10 @@ namespace cerberus
 		auto intanceExtension = GetRequiredExtensions();
 
 		// Check instance extension supported
-		ASSERT(CheckInstanceExtensionSupport(&intanceExtension), "Vulkan Instance does not support required extensions!");
+		CORE_ASSERT(CheckInstanceExtensionSupport(&intanceExtension), "Vulkan Instance does not support required extensions!");
 
 		createInfo.enabledExtensionCount = static_cast<uint32_t>(intanceExtension.size());
 		createInfo.ppEnabledExtensionNames = intanceExtension.data();
-
-		createInfo.enabledLayerCount = 0;
-		createInfo.ppEnabledLayerNames = nullptr;
 
 		// If validation enabled, include the validation layer names
 		if (ValidationLayer::s_EnableValidationLayers)
@@ -100,6 +112,15 @@ namespace cerberus
 			createInfo.enabledLayerCount = 0;
 			createInfo.ppEnabledLayerNames = nullptr;
 		}
+
+		VkValidationFeatureEnableEXT enables[] = { /*VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,*/  VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
+												   /*VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT,*/ VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT};
+		VkValidationFeaturesEXT features = {};
+		features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+		features.enabledValidationFeatureCount = sizeof(enables)/sizeof(VkValidationFeatureEnableEXT);
+		features.pEnabledValidationFeatures = enables;
+
+		createInfo.pNext = &features;
 
 		// VkAllocationCallbacks(2º parameter) is a paremeter that 
 		// allow us to specify where and how store the memory -> Require good knowledge in memory manegement

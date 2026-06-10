@@ -62,7 +62,7 @@ namespace cerberus
 		uint32_t RendererID;
 		//std::vector<ShaderUniform> Uniforms;
 	};
-
+	// PushConstants
 	struct ShaderBuffer
 	{
 		std::string Name;
@@ -70,10 +70,21 @@ namespace cerberus
 		std::unordered_map<std::string, ShaderUniform> Uniforms;
 	};
 
+
 	class Shader
 	{
 	public:
 		struct UniformBuffer
+		{
+			VkDescriptorBufferInfo Descriptor;
+			uint32_t Size = 0;
+			uint32_t BindingPoint = 0;
+			std::string Name;
+			VkShaderStageFlagBits ShaderStage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+			BufferUsageType UsageType = BufferUsageType::Default;
+		};
+
+		struct StorageBuffer
 		{
 			VkDescriptorBufferInfo Descriptor;
 			uint32_t Size = 0;
@@ -91,17 +102,28 @@ namespace cerberus
 			std::string Name;
 			VkShaderStageFlagBits ShaderStage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
 		};
+
+		struct AccelerationStructure
+		{
+			uint32_t BindingPoint = 0;
+			uint32_t DescriptorSet = 0;
+			std::string Name;
+			VkShaderStageFlagBits ShaderStage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+		};
+
 		struct ShaderDescriptorSet
 		{
-			std::unordered_map<uint32_t, UniformBuffer*> UniformBuffers;
-			//std::unordered_map<uint32_t, StorageBuffer*> StorageBuffers;
-			std::unordered_map<uint32_t, ImageSampler> ImageSamplers;
-			std::unordered_map<uint32_t, ImageSampler> StorageImages;
+			std::unordered_map<uint32_t, Shader::UniformBuffer*> UniformBuffers;
+			std::unordered_map<uint32_t, Shader::StorageBuffer*> StorageBuffers;
+			std::unordered_map<uint32_t, Shader::AccelerationStructure*> AccelerationStructures;
+			
+			std::unordered_map<uint32_t, Shader::ImageSampler> ImageSamplers;
+			std::unordered_map<uint32_t, Shader::ImageSampler> StorageImages;
 			
 			// VkWriteDescriptorSet descripte how the buffer write to the descriptor set
 			std::unordered_map<std::string, VkWriteDescriptorSet> WriteDescriptorSets;
 
-			operator bool() const { return !(UniformBuffers.empty() && ImageSamplers.empty() && StorageImages.empty()); }
+			operator bool() const { return !(UniformBuffers.empty() && StorageBuffers.empty() && ImageSamplers.empty() && StorageImages.empty() && AccelerationStructures.empty()); }
 		};
 	public:
 		Shader(const std::string& path, bool forceCompile = false);
@@ -114,6 +136,7 @@ namespace cerberus
 		void Reload(bool forceCompile = false);
 		const size_t GetHash() const;
 		const std::string& GetName() const { return  m_Name; }
+		const std::unordered_map<VkShaderStageFlagBits, std::vector<uint32_t >>& GetShaderByteCode() const { return m_ShaderByteCodeData; }
 		const std::unordered_map<std::string, ShaderBuffer>& GetShaderBuffers() const  { return m_Buffers; }
 		const std::unordered_map<std::string, ShaderResourceDeclaration>& GetResources() const { return m_Resources; }
 		const std::vector<VkPushConstantRange>& GetVulkanPushConstantRanges() const { return m_VulkanPushConstantRanges; }
@@ -128,6 +151,7 @@ namespace cerberus
 		// Compile or Get Binary shader cached
 		void CompileOrGetVulkanBinary(std::unordered_map<VkShaderStageFlagBits, std::vector<uint32_t>>& outputBinary, bool forceCompile);
 		// Create Shader Modules
+
 		void LoadAndCreateShaders(const std::unordered_map<VkShaderStageFlagBits, std::vector<uint32_t>>& shaderData);
 		// Cache the data from push constant and the 
 		void Reflect(VkShaderStageFlagBits shaderStage, const std::vector<uint32_t>& shaderData);
@@ -147,11 +171,13 @@ namespace cerberus
 
 		std::unordered_map<std::string, ShaderBuffer> m_Buffers;
 
+
 		std::vector<VkDescriptorSetLayout> m_DescriptorSetLayouts;
 		VkDescriptorSet m_DescriptorSet;
 		//VkDescriptorPool m_DescriptorPool = nullptr;
 
 		std::unordered_map<uint32_t, std::vector<VkDescriptorPoolSize>> m_TypeCounts;
+		std::unordered_map<VkShaderStageFlagBits, std::vector<uint32_t >> m_ShaderByteCodeData;
 	};
 
 	class Renderer;

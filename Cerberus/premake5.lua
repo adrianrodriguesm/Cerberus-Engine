@@ -1,7 +1,7 @@
 project "Cerberus"
 	kind "StaticLib"
 	language "C++"
-	cppdialect "C++17"
+	cppdialect "C++20"
 	staticruntime "off"
 
 	targetdir ("%{wks.location}/bin/" .. outputdir .. "/%{prj.name}")
@@ -33,11 +33,12 @@ project "Cerberus"
 		"%{IncludeDir.yaml_cpp}",
 		"%{IncludeDir.glm}",
 		"%{IncludeDir.spdlog}",
-		"%{IncludeDir.VulkanSDK_LocalInclude}",
 		"%{IncludeDir.VulkanSDK}",
 		"%{IncludeDir.assimp}",
 		"%{IncludeDir.entt}",
 		"%{IncludeDir.stb}",
+		"%{IncludeDir.shaderc_util}",
+		"%{IncludeDir.shaderc}"
 	}
 		
 	links

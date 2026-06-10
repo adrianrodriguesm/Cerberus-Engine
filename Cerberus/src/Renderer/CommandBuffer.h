@@ -14,12 +14,12 @@ namespace cerberus
 		uint64_t ComputeShaderInvocations = 0;
 	};
 
-	class RenderCommandBuffer
+	class CommandBuffer
 	{
 	public:
-		RenderCommandBuffer(bool ownedBySwapChain = false, const std::string& debugName = "");
-		RenderCommandBuffer(uint32_t count = 0, const std::string& debugName = "");
-		~RenderCommandBuffer();
+		CommandBuffer(bool ownedBySwapChain = false, const std::string& debugName = "");
+		CommandBuffer(uint32_t count = 0, const std::string& debugName = "");
+		~CommandBuffer();
 
 		// Start recording commands to command buffer
 		void Begin();
@@ -47,8 +47,8 @@ namespace cerberus
 
 		VkCommandBuffer GetCommandBuffer() const;
 
-		static Ref<RenderCommandBuffer> CreateFromSwapchain();
-		static Ref<RenderCommandBuffer> Create(uint32_t count = 0,const std::string& debugName = "");
+		static Ref<CommandBuffer> CreateFromSwapchain();
+		static Ref<CommandBuffer> Create(uint32_t count = 0,const std::string& debugName = "");
 	private:
 		void Invalidate(uint32_t count);
 	private:

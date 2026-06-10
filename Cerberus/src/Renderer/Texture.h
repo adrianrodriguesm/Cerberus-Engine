@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/Handle.h"
 #include "Renderer/Image.h"
 #include "Core/Buffer.h"
 #include "Asset/Asset.h"
@@ -15,7 +16,7 @@ namespace cerberus
 		std::string DebugName = "None";
 	};
 
-	class Texture : public Asset
+	class Texture
 	{
 	public:
 		virtual ~Texture() {}
@@ -25,53 +26,45 @@ namespace cerberus
 		virtual uint32_t GetMipLevelCount() const = 0;
 		virtual std::pair<uint32_t, uint32_t> GetMipSize(uint32_t mip) const = 0;
 		virtual uint64_t GetHash() const = 0;
-
-		static AssetType GetStaticType() { return AssetType::Texture; }
-		AssetType GetAssetType() const { return GetStaticType(); }
 	};
 	////////////////////////////////////////////////
 	////// Texture2D
 	////////////////////////////////////////////////
-	class Texture2D : public Texture
+	class Texture2D final : public Texture
 	{
 	public:
-		Texture2D(const std::string& path, TextureProperties properties);
 		Texture2D(ImageFormat format, const uint32_t width, const uint32_t height, const void* data, TextureProperties properties = {});
-		Texture2D(const Ref<Image2D>& image2D);
 		virtual ~Texture2D();
 
 
-		Ref<Image2D> GetImage() const { return m_Image; }
-		virtual ImageFormat GetFormat() const override { return m_Format; }
-		virtual uint32_t GetWidth() const override { return m_Width; }
-		virtual uint32_t GetHeight() const override { return m_Height; }
-		virtual uint64_t GetHash() const override { return (uint64_t)m_Image->GetImageInfo().ImageView; };
-		const VkDescriptorImageInfo& GetVulkanDescriptorInfo() const { return m_Image->GetVulkanDescriptorInfo(); }
+		Handle<ImageView> GetImageView() const { return m_ImageView; }
+		Handle<Image> GetImage() const { return m_Image; }
+
+		virtual ImageFormat GetFormat() const override;
+		virtual uint32_t GetWidth() const override;
+		virtual uint32_t GetHeight() const override;
+		virtual uint64_t GetHash() const override;
+
 		const Buffer& GetWriteableBuffer() const { return m_ImageData; }
 		bool Loaded() const { return m_ImageData; }
-		const std::string& GetPath() const { return m_Path; }
+
 		const TextureProperties& GetTextureProperties() const { return m_Properties; }
 		uint32_t GetMipLevelCount() const;
 		virtual std::pair<uint32_t, uint32_t> GetMipSize(uint32_t mip) const override;
 	private:
-		void Invalidate();
+		void Invalidate(ImageFormat format, const uint32_t width, const uint32_t height);
 		void GenerateMips();
 	private:
-		std::string m_Path;
-		uint32_t m_Width;
-		uint32_t m_Height;
 		TextureProperties m_Properties;
-
 		Buffer m_ImageData;
-
-		Ref<Image2D> m_Image;
-
-		ImageFormat m_Format = ImageFormat::None;
+		Handle<Image> m_Image;
+		Handle<ImageView> m_ImageView;
+		AssetHandle m_TextureAsset;
 	};
 	////////////////////////////////////////////////
 	////// TextureCube
 	////////////////////////////////////////////////
-	class TextureCube : public Texture
+	class TextureCube final : public Texture
 	{
 	public:
 		TextureCube(ImageFormat format, uint32_t width, uint32_t height, TextureProperties properties = TextureProperties(), const void* data = nullptr);
@@ -80,6 +73,7 @@ namespace cerberus
 		void Release();
 		
 		void GenerateMips(bool readonly);
+		// TODO: delete this
 		VkImageView CreateImageViewSingleMip(uint32_t mip);
 
 		virtual ImageFormat GetFormat() const override { return m_Format; }
@@ -90,35 +84,88 @@ namespace cerberus
 		
 		virtual uint32_t GetMipLevelCount() const override { return m_MipsLevels; };
 		virtual std::pair<uint32_t, uint32_t> GetMipSize(uint32_t mip) const override;
-		virtual uint64_t GetHash() const override { return (uint64_t)m_Info.ImageView; }
+		virtual uint64_t GetHash() const override;
 
 
-		const VkDescriptorImageInfo& GetVulkanDescriptorInfo() const { return m_DescriptorImageInfo; }
+		//const VkDescriptorImageInfo& GetVulkanDescriptorInfo() const { return m_DescriptorImageInfo; }
 	private:
-		void Invalidate();
+		void Invalidate(ImageFormat format, const uint32_t width, const uint32_t height);
 	private:
 		ImageFormat m_Format = ImageFormat::None;
 		uint32_t m_Width = 0, m_Height = 0;
 		TextureProperties m_Properties;
 		uint32_t m_MipsLevels;
 
-		bool m_MipsGenerated = false;
+		Handle<Image> m_Image;
+		Handle<ImageView> m_ImageView;
+		AssetHandle m_TextureAsset;
+
 		// 6 sides of the cube
-		const uint32_t m_LayersCount = 6; 
 		Buffer m_ImageData;
-		ImageInfo m_Info;
-		VkDescriptorImageInfo m_DescriptorImageInfo = {};
 	};
+
+	struct RenderTargetProperties
+	{
+		std::string DebugName;
+		Handle<Image> ExistingImage;
+
+		ImageFormat Format = ImageFormat::RGBA;
+		ImageViewType ViewType = ImageViewType::Image2D;
+
+		uint32_t Width, Height;
+ 
+		bool Resizable = true, ShaderResource = true;
+
+		uint32_t BaseMip = 0, MipCount = 1;
+		uint32_t BaseLayer = 0, LayerCount = 1;
+		
+		glm::vec4 ClearColor = { 0.f, 0.f, 0.f, 0.f };
+	};
+
+	class RenderTargetTexture final : public Texture
+	{
+	public:
+		RenderTargetTexture(const RenderTargetProperties& rtProp);
+		virtual ~RenderTargetTexture();
+
+		void Release();
+		void Resize(uint32_t width, uint32_t height);
+
+		Handle<ImageView> GetImageView() const { return m_ImageView; }
+
+		glm::vec4 GetClearColor() const { return m_Properties.ClearColor; }
+
+		virtual ImageFormat GetFormat() const override { return m_Properties.Format; }
+
+		bool IsDepthTarget() const { return Image::IsDepthFormat(m_Properties.Format); };
+
+		virtual uint32_t GetWidth() const override { return m_Properties.Width; }
+		virtual uint32_t GetHeight() const override { return m_Properties.Height; };
+		glm::ivec2 GetSize() const { return { m_Properties.Width, m_Properties.Height }; }
+
+		virtual uint32_t GetMipLevelCount() const override { return m_Properties.MipCount; };
+		virtual std::pair<uint32_t, uint32_t> GetMipSize(uint32_t mip) const override;
+		virtual uint64_t GetHash() const override;
+
+	private:
+		void Invalidate();
+	private:
+		Handle<Image> m_Image;
+		Handle<ImageView> m_ImageView;
+
+		RenderTargetProperties m_Properties;
+	};
+
 	////////////////////////////////////////////////
 	////// TextureFactory
 	////////////////////////////////////////////////
 	class TextureFactory
 	{
 	public:
-		static Ref<Texture2D> CreateBRDF();
+		static Handle<Texture2D> CreateBRDF();
 		// color - each component in a range between 0 to 255
-		static Ref<Texture2D> CreateTexture2DWithColor(const glm::ivec4& color);
+		static Handle<Texture2D> CreateTexture2DWithColor(const glm::ivec4& color);
 		// color - each component in a range between 0 to 255
-		static Ref<TextureCube> CreateTextureCubeWithColor(const glm::vec4& color);
+		static Handle<TextureCube> CreateTextureCubeWithColor(const glm::vec4& color);
 	};
 }

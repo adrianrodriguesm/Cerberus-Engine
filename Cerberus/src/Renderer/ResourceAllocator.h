@@ -9,15 +9,15 @@ namespace cerberus
 		uint64_t Free = 0;
 	};
 
-	class VulkanAllocator
+	class ResourceAllocator
 	{
 	public:
-		VulkanAllocator() = default;
-		VulkanAllocator(const std::string& tag);
-		~VulkanAllocator();
-
+		ResourceAllocator() = default;
+		ResourceAllocator(const std::string& tag);
+		~ResourceAllocator();
 
 		VmaAllocation AllocateBuffer(VkBufferCreateInfo bufferCreateInfo, VmaMemoryUsage usage, VkBuffer& outBuffer);
+		VmaAllocation AllocateBuffer(VkBufferCreateInfo bufferCreateInfo, VmaMemoryUsage usage, VmaAllocationCreateFlags flags, VkBuffer& outBuffer);
 		VmaAllocation AllocateImage(VkImageCreateInfo imageCreateInfo, VmaMemoryUsage usage, VkImage& outImage);
 
 		void DestroyBuffer(VkBuffer buffer, VmaAllocation allocation);
@@ -30,7 +30,7 @@ namespace cerberus
 		T* MapMemory(VmaAllocation allocation)
 		{
 			T* mappedMemory;
-			vmaMapMemory(VulkanAllocator::GetVMAAllocator(), allocation, (void**)&mappedMemory);
+			vmaMapMemory(ResourceAllocator::GetVMAAllocator(), allocation, (void**)&mappedMemory);
 			return mappedMemory;
 		}
 

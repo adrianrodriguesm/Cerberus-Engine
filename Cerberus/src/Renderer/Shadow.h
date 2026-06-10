@@ -1,5 +1,5 @@
 #pragma once
-
+#include "Renderer/SceneRenderer/SceneRenderer.h"
 namespace cerberus
 {
 	struct ShadowCascade

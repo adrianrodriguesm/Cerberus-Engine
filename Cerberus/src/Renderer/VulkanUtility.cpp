@@ -159,7 +159,7 @@ namespace cerberus::utils
 		subresourceRange.levelCount = imgLayoutSpec.LevelCount;
 		subresourceRange.layerCount = imgLayoutSpec.LayerCount;
 
-		SetImageLayout( imgLayoutSpec.Commadbuffer, imgLayoutSpec.Image, 
+		SetImageLayout( imgLayoutSpec.CommandBuffer, imgLayoutSpec.Image,
 						imgLayoutSpec.OldImageLayout, imgLayoutSpec.NewImageLayout,
 						subresourceRange, 
 						imgLayoutSpec.SrcStageMask, imgLayoutSpec.DstStageMask);
