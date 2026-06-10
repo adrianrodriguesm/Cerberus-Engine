@@ -19,6 +19,11 @@ namespace cerberus
 	/**/
 	PathTracerSceneRenderer::PathTracerSceneRenderer(Ref<Scene> scene, const SceneRendererSpecification& spec)
 	{
+		m_Specification = spec;
+		m_ViewportResolution = spec.Resolution;
+		if (m_ViewportResolution.x <= 0 || m_ViewportResolution.y <= 0)
+			m_ViewportResolution = { 1920, 1080 };
+
 		auto& shaderLibrary = Renderer::GetShaderLibrary();
 		shaderLibrary.Load("Resources/Shaders/Ray Tracing/Raytrace.rgen", true);
 
@@ -108,8 +113,8 @@ namespace cerberus
 			FramebufferSpecification preDepthFramebufferSpec;
 			preDepthFramebufferSpec.DebugName = "RayTrace Framebuffer";
 			preDepthFramebufferSpec.RenderPass = m_RenderPass;
-			preDepthFramebufferSpec.Width = 1920;
-			preDepthFramebufferSpec.Height = 1080;
+			preDepthFramebufferSpec.Width = m_ViewportResolution.x;
+			preDepthFramebufferSpec.Height = m_ViewportResolution.y;
 
 			RenderTargetProperties rtPropertiesColor;
 			rtPropertiesColor.DebugName = "Color Target";
@@ -120,8 +125,8 @@ namespace cerberus
 			rtPropertiesColor.BaseLayer = 0;
 			rtPropertiesColor.LayerCount = 1;
 			rtPropertiesColor.Resizable = true;
-			rtPropertiesColor.Height = 1080;
-			rtPropertiesColor.Width = 1920;
+			rtPropertiesColor.Height = m_ViewportResolution.y;
+			rtPropertiesColor.Width = m_ViewportResolution.x;
 
 			RenderTargetProperties rtPropertiesDepth;
 			rtPropertiesDepth.DebugName = "Depth Target";
@@ -132,8 +137,8 @@ namespace cerberus
 			rtPropertiesDepth.BaseLayer = 0;
 			rtPropertiesDepth.LayerCount = 1;
 			rtPropertiesDepth.Resizable = true;
-			rtPropertiesDepth.Height = 1080;
-			rtPropertiesDepth.Width = 1920;
+			rtPropertiesDepth.Height = m_ViewportResolution.y;
+			rtPropertiesDepth.Width = m_ViewportResolution.x;
 
 			preDepthFramebufferSpec.RenderTargetsInfo = { rtPropertiesColor, rtPropertiesDepth };
 
@@ -201,6 +206,8 @@ namespace cerberus
 
 	PathTracerSceneRenderer::~PathTracerSceneRenderer()
 	{
+		if (m_MeshRegister.ASRegisterInfo.TLAS.IsValid())
+			ResourceManager::DestroyAccelerationStructure(m_MeshRegister.ASRegisterInfo.TLAS);
 		ResourceManager::DestroyTexture2D(m_TextureRonaldo);
 		ResourceManager::DestroyFramebuffer(m_Framebuffer);
 		ResourceManager::DestroyGraphicsPipeline(m_Pipeline);
@@ -210,6 +217,8 @@ namespace cerberus
 		ResourceManager::DestroyBindGroupLayout(m_BindGroup0Layout);
 		ResourceManager::DestroyBindGroup(m_BindGroup1);
 		ResourceManager::DestroyBindGroupLayout(m_BindGroup1Layout);
+		ResourceManager::DestroyBindGroup(m_RT_BindGroup);
+		ResourceManager::DestroyBindGroupLayout(m_RT_BindGroupLayout);
 	}
 
 	void PathTracerSceneRenderer::BeginScene(const SceneRendererCamera& sceneRendererCamera)
@@ -488,4 +497,3 @@ namespace cerberus
 		return imgViewHandle;
 	}
 }
-

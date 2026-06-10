@@ -90,7 +90,7 @@ namespace cerberus
 
 		void SetIndexBuffer(const Handle<GPUBuffer> indexBuffer)
 		{
-			if (indexBuffer != m_Draw.VertexBuffer)
+			if (indexBuffer != m_Draw.IndexBuffer)
 			{
 				m_DirtyFlags |= DrawStreamFlags::INDEX_BUFFER;
 				m_Draw.IndexBuffer = indexBuffer;
