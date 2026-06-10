@@ -6,6 +6,8 @@
 #include "Renderer/Backend/BindGroup.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Framebuffer.h"
+#include "Renderer/ShaderBindingTable.h"
+#include "Renderer/StorageBufferSet.h"
 #include <span>
 namespace cerberus
 {
@@ -38,6 +40,21 @@ namespace cerberus
 		void UpdateUBOData();
 		void FlushRenderPasses();
 	private:
+		// CPU-side mirror of the ObjDesc struct used in ray tracing shaders.
+		// One entry per mesh instance / submesh instance.
+		struct RayTracingObjectDesc
+		{
+			uint64_t VertexBufferAddress;        // Device address of the mesh vertex buffer
+			uint64_t IndexBufferAddress;         // Device address of the mesh index buffer
+			uint64_t MaterialBufferAddress;      // Optional: device address of material buffer
+			uint64_t MaterialIndexBufferAddress; // Optional: device address of per-primitive material indices
+
+			uint32_t FirstIndex;                 // First triangle index for this submesh (in triangles, not bytes)
+			int32_t  BaseVertex;                 // Base vertex offset for this submesh
+			uint32_t TextureArrayOffset;         // Offset into bindless texture array (if used)
+			uint32_t Reserved;                   // Padding / reserved for future use
+		};
+
 		struct SceneData
 		{
 			SceneRendererCamera SceneRendererCamera;
@@ -48,6 +65,14 @@ namespace cerberus
 			glm::mat4 ViewProjection, View, Projection;
 			glm::mat4 InverseViewReverseProjection, InverseView, InverseProjection;
 		};
+		// Mesh Shader
+		struct ShaderVertex  // See ObjLoader, copy of VertexObj, could be compressed for device
+		{
+			glm::vec3 pos;
+			glm::vec3 nrm;
+			glm::vec3 color;
+			glm::vec2 texCoord;
+		};
 	private:
 		SceneRendererSpecification m_Specification;
 
@@ -56,7 +81,7 @@ namespace cerberus
 		CommandBuffer* m_CommandBuffer;
 
 		Ref<Scene> m_Scene;
-		
+
 		Handle<ImageView> m_FinalPassImage;
 
 		Handle<Framebuffer> m_Framebuffer;
@@ -65,6 +90,7 @@ namespace cerberus
 
 		Ref<UniformBufferSet> m_UniformBufferSet;
 		Ref<UniformBufferSet> m_UniformBufferSetCamera;
+		Ref<StorageBufferSet> m_RayTracingObjectDescSet; // SSBO for ObjDesc (set = 1, binding = eObjDescs)
 
 		// Texture test
 		Scope<TextureAsset> m_TextureAsset;
@@ -94,12 +120,25 @@ namespace cerberus
 
 		Handle<BindGroupLayout> m_BindGroup0Layout;
 		Handle<BindGroup> m_BindGroup0;
-		
+
 		Handle<BindGroupLayout> m_BindGroup1Layout;
 		Handle<BindGroup> m_BindGroup1;
 
-		VkDescriptorPool                                m_rtDescPool;
-		VkDescriptorSetLayout                           m_rtDescSetLayout;
-		VkDescriptorSet                                 m_rtDescSet;
+		Handle<BindGroupLayout> m_RT_BindGroupLayout;
+		Handle<BindGroup> m_RT_BindGroup;
+
+		Handle<RayTracingPipeline> m_RT_Pipeline;
+
+		Scope<ShaderBindingTable> m_ShaderBindingTable;
+
+
+		// Push constant structure for the ray tracer
+		struct PushConstantRay
+		{
+			glm::vec4  ClearColor;
+			glm::vec3  LightPosition;
+			float LightIntensity;
+			int   LightType;
+		} m_RT_PushConstant;
 	};
 }

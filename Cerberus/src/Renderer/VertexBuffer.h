@@ -119,6 +119,7 @@ namespace cerberus
 
 		void Invalidate();
 
+		const Buffer& GetLocalData() const { return m_LocalData; }
 	private:
 		Handle<GPUBuffer> m_VertexBuffer;
 		Buffer m_LocalData;

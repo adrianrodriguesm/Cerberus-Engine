@@ -98,6 +98,7 @@ namespace cerberus
 
 	void MaterialPanel::Render()
 	{
+#if OLD_RENDERER
 		const auto& material = m_Material->GetMaterial();
 		ImGui::Text("Shader: %s", material->GetShader()->GetName().c_str());
 		bool needsSerialize = false;
@@ -352,6 +353,7 @@ namespace cerberus
 			NV_CORE_WARN("Serializing...");
 			AssetImporter::Serialize(m_Material);
 		}
+#endif
 
 	}
 	void MaterialPanel::OnClose()

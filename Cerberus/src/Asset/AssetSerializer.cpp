@@ -22,11 +22,13 @@ namespace cerberus
 				const auto& submeshes = meshSource->GetSubmeshes();
 				for (size_t i = 0; i < submeshes.size(); i++)
 				{
+#if OLD_RENDERER
 					out << YAML::BeginMap;
 					out << YAML::Key << "SubmeshIndex" << YAML::Value << i;
 					AssetHandle materialHandle = materialAsset[submeshes[i].MaterialIndex]->Handle;
 					out << YAML::Key << "MaterialHandle" << YAML::Value << (uint64_t)materialHandle;
-					out << YAML::EndMap;
+					out << YAML::EndMap;7
+#endif
 				}
 			
 			out << YAML::EndSeq;
@@ -298,12 +300,14 @@ namespace cerberus
 				auto skyLightComponent = entity["SkyLightComponent"];
 				if (skyLightComponent)
 				{
+#if OLD_RENDERER
 					auto& slc = deserializedEntity.AddComponent<SkyLightComponent>();
 					
 					AssetHandle assetHandle = skyLightComponent["AssetHandle"].as<AssetHandle>();
 					slc.EnvironmentHandle = AssetManager::GetAsset<EnvironmentMap>(assetHandle)->Handle;
 					slc.Intensity = skyLightComponent["Intensity"].as<float>();
 					slc.SampleLOD = skyLightComponent["SampleLOD"].as<uint32_t>();
+#endif
 				}
 
 				auto directionalLightComponent = entity["DirectionalLightComponent"];
@@ -325,6 +329,7 @@ namespace cerberus
 
 	bool EnvironmentMapSerializer::TryToLoadData(const AssetMetadata& metadata, Ref<Asset>& asset)
 	{
+#if OLD_RENDERER
 		auto& filepath = metadata.FilePath;
 
 		Ref<EnvironmentMap> environment = Renderer::CreateEnvironmentMap(filepath.string());
@@ -332,6 +337,10 @@ namespace cerberus
 		asset = environment;
 
 		return true;
+#else
+		return false;
+
+#endif
 	}
 	void MaterialSerializer::Serialize(const AssetMetadata& metadata, const Ref<Asset>& asset)
 	{
@@ -347,6 +356,7 @@ namespace cerberus
 			out << YAML::Key << "UseNormalMap" << YAML::Value << material->IsUsingNormalMap();
 			out << YAML::Key << "Metalness" << YAML::Value << material->GetMetalness();
 			out << YAML::Key << "Roughness" << YAML::Value << material->GetRoughness();
+#if OLD_RENDERER
 			// Textures
 			{
 				Ref<Texture2D> albedoMap = material->GetAlbedoMap();
@@ -380,6 +390,8 @@ namespace cerberus
 				AssetHandle roughnessMapHandle = AssetHandle();
 				out << YAML::Key << "RoughnessMapHandle" << YAML::Value << (uint64_t)roughnessMapHandle;
 			}
+
+#endif
 
 			out << YAML::EndMap;
 		}

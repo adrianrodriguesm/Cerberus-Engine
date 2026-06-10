@@ -60,6 +60,10 @@ namespace cerberus
 		static void DestroyTexture2D(const Handle<Texture2D> handle);
 		static Texture2D* GetTexture2D(const Handle<Texture2D> handle);
 
+		static Handle<TextureCube> CreateTextureCube(ImageFormat format, uint32_t width, uint32_t height, TextureProperties properties = TextureProperties(), const void* data = nullptr);
+		static void DestroyTextureCube(const Handle<TextureCube> handle);
+		static TextureCube* GetTextureCube(const Handle<TextureCube> handle);
+
 		static Handle<RenderTargetTexture> CreateRenderTarget(const RenderTargetProperties& prop);
 		static void DestroyRenderTarget(const Handle<RenderTargetTexture> handle);
 		static RenderTargetTexture* GetRenderTarget(const Handle<RenderTargetTexture> handle);
@@ -85,6 +89,10 @@ namespace cerberus
 		static Handle<GraphicsPipeline> CreateGraphicsPipeline(const PipelineSpecification& pipelineSpec);
 		static void DestroyGraphicsPipeline(const Handle<GraphicsPipeline> handle);
 		static GraphicsPipeline* GetGraphicsPipeline(const Handle<GraphicsPipeline> handle);
+
+		static Handle<RayTracingPipeline> CreateRayTracingPipeline(const PipelineSpecification& pipelineSpec);
+		static void DestroyRayTracingPipeline(const Handle<RayTracingPipeline> handle);
+		static RayTracingPipeline* GetRayTracingPipeline(const Handle<RayTracingPipeline> handle);
 	
 		static const RendererConfiguration& GetRendererConfig();
 

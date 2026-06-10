@@ -3,7 +3,6 @@
 #include "Renderer/CommandBuffer.h"
 #include "Renderer/GPUBuffer.h"
 #include "Core/Handle.h"
-#include "Renderer/Backend/MeshProxy.h"
 namespace cerberus
 {
 	enum class AccelerationStructureType

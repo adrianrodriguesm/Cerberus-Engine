@@ -11,10 +11,10 @@ namespace cerberus
 			switch (usage)
 			{
 			case GPUBufferUsage::IndexBufferUsage:
-				return VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+				return VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
 					VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
 			case GPUBufferUsage::VertexBufferUsage:
-				return VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+				return VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | 
 					VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
 			case GPUBufferUsage::ASBufferUsage:
 				return VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
@@ -22,6 +22,10 @@ namespace cerberus
 				return VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 			case GPUBufferUsage::UniformBufferUsage:
 				return VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+			case GPUBufferUsage::StorageBufferUsage:
+				return VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+			case GPUBufferUsage::ShaderBindingTableUsage:
+				return VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR;
 			default:
 				CORE_ASSERT(false, "Unknow buffer usage type");
 				break;
@@ -61,5 +65,12 @@ namespace cerberus
 		});
 		
 		Buffer = nullptr;
+	}
+
+	VkDeviceAddress GPUBuffer::GetDeviceAddress() const
+	{
+		VkBufferDeviceAddressInfo info{ VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO };
+		info.buffer = Buffer;
+		return vkGetBufferDeviceAddress(RendererContext::GetCurrentDevice()->GetVulkanDevice(), &info);
 	}
 }

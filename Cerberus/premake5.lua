@@ -37,6 +37,8 @@ project "Cerberus"
 		"%{IncludeDir.assimp}",
 		"%{IncludeDir.entt}",
 		"%{IncludeDir.stb}",
+		"%{IncludeDir.shaderc_util}",
+		"%{IncludeDir.shaderc}"
 	}
 		
 	links

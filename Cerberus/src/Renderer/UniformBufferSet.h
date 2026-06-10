@@ -1,7 +1,5 @@
 #pragma once
-
 #include "Renderer/UniformBuffer.h"
-#include <map>
 namespace cerberus
 {
 	struct UniformBufferSetSpecification
@@ -38,4 +36,3 @@ namespace cerberus
 		std::vector<Ref<UniformBuffer>> m_UniformBuffers; 
 	};
 }
-

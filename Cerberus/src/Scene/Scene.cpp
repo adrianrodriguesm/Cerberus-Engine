@@ -24,9 +24,10 @@ namespace cerberus
 				Ref<Mesh> mesh = AssetManager::GetAsset<Mesh>(assetHandle);
 				sceneRenderer->UnregisterMesh(mesh);
 			}
+			m_MeshToRemoved.clear();
 		}
 		m_LightEnvironment = {};
-		// Enviornment
+		// Environment
 		{
 			// Sky Light - Environment Map
 			{

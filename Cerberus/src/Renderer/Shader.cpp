@@ -6,8 +6,9 @@
 #include "Renderer/RenderQueueManager.h"
 #include <spirv_cross/spirv_glsl.hpp>
 #include <shaderc/shaderc.hpp>
-
+#include <libshaderc_util/file_finder.h>
 #include <filesystem>
+#include "GLSLIncludeProcessor.h"
 
 namespace cerberus
 {
@@ -58,6 +59,11 @@ namespace cerberus
 			if (type == "vertex")                       return VK_SHADER_STAGE_VERTEX_BIT;
 			if (type == "fragment" || type == "pixel")  return VK_SHADER_STAGE_FRAGMENT_BIT;
 			if (type == "compute")                      return VK_SHADER_STAGE_COMPUTE_BIT;
+			if (type == "rayGen")						return VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+			if (type == "closestHit")                   return VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+			if (type == "anyHit")						return VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+			if (type == "missHit")                      return VK_SHADER_STAGE_MISS_BIT_KHR;
+			if (type == "intersection")                 return VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
 
 			return VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
 		}
@@ -85,9 +91,14 @@ namespace cerberus
 		{
 			switch (stage)
 			{
-			case VK_SHADER_STAGE_VERTEX_BIT:    return ".cached_vulkan.vert";
-			case VK_SHADER_STAGE_FRAGMENT_BIT:  return ".cached_vulkan.frag";
-			case VK_SHADER_STAGE_COMPUTE_BIT:   return ".cached_vulkan.comp";
+			case VK_SHADER_STAGE_VERTEX_BIT:			return ".cached_vulkan.vert";
+			case VK_SHADER_STAGE_FRAGMENT_BIT:			return ".cached_vulkan.frag";
+			case VK_SHADER_STAGE_COMPUTE_BIT:			return ".cached_vulkan.comp";
+			case VK_SHADER_STAGE_RAYGEN_BIT_KHR:		return ".cached_vulkan.rayGen";
+			case VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR:   return ".cached_vulkan.closestHit";
+			case VK_SHADER_STAGE_ANY_HIT_BIT_KHR:		return ".cached_vulkan.anyHit";
+			case VK_SHADER_STAGE_MISS_BIT_KHR:			return ".cached_vulkan.missHit";
+			case VK_SHADER_STAGE_INTERSECTION_BIT_KHR:  return ".cached_vulkan.intersection";
 			}
 			CORE_ASSERT(false, "");
 			return "";
@@ -97,9 +108,14 @@ namespace cerberus
 		{
 			switch (stage)
 			{
-			case VK_SHADER_STAGE_VERTEX_BIT:    return shaderc_vertex_shader;
-			case VK_SHADER_STAGE_FRAGMENT_BIT:  return shaderc_fragment_shader;
-			case VK_SHADER_STAGE_COMPUTE_BIT:   return shaderc_compute_shader;
+			case VK_SHADER_STAGE_VERTEX_BIT:			return shaderc_vertex_shader;
+			case VK_SHADER_STAGE_FRAGMENT_BIT:			return shaderc_fragment_shader;
+			case VK_SHADER_STAGE_COMPUTE_BIT:			return shaderc_compute_shader;
+			case VK_SHADER_STAGE_RAYGEN_BIT_KHR:		return shaderc_raygen_shader;
+			case VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR:   return shaderc_closesthit_shader;
+			case VK_SHADER_STAGE_ANY_HIT_BIT_KHR:		return shaderc_anyhit_shader;
+			case VK_SHADER_STAGE_MISS_BIT_KHR:			return shaderc_miss_shader;
+			case VK_SHADER_STAGE_INTERSECTION_BIT_KHR:  return shaderc_intersection_shader;
 			}
 			CORE_ASSERT(false, "");
 			return (shaderc_shader_kind)0;
@@ -107,9 +123,10 @@ namespace cerberus
 
 	}
 
-	static bool s_PrintShaders = false;
+	static bool s_PrintShaders = true;
 	static std::unordered_map<uint32_t, std::unordered_map<uint32_t, Shader::UniformBuffer*>> s_UniformBuffers; // set -> binding point -> buffer
-	//static std::unordered_map<uint32_t, std::unordered_map<uint32_t, VulkanShader::StorageBuffer*>> s_StorageBuffers; // set -> binding point -> buffer
+	static std::unordered_map<uint32_t, std::unordered_map<uint32_t, Shader::StorageBuffer*>> s_StorageBuffers; // set -> binding point -> buffer
+	static std::unordered_map<uint32_t, std::unordered_map<uint32_t, Shader::AccelerationStructure*>> s_AccelerationStructure; // set -> binding point -> AS
 
     Shader::Shader(const std::string& path, bool forceCompile)
         : m_AssetPath(path)
@@ -136,7 +153,8 @@ namespace cerberus
 	void Shader::ClearUniformBuffers()
 	{
 		s_UniformBuffers.clear();
-		//s_StorageBuffers.clear();
+		s_StorageBuffers.clear();
+		s_AccelerationStructure.clear();
 	}
 
 
@@ -364,7 +382,7 @@ namespace cerberus
 			NV_CORE_TRACE("  Size: {0}", size);
 			NV_CORE_TRACE("-------------------");
 		}
-		/** /
+		/**/
 		NV_CORE_TRACE("Storage Buffers:");
 		for (const auto& resource : resources.storage_buffers)
 		{
@@ -381,7 +399,7 @@ namespace cerberus
 			ShaderDescriptorSet& shaderDescriptorSet = m_ShaderDescriptorSets[descriptorSet];
 			if (s_StorageBuffers[descriptorSet].find(binding) == s_StorageBuffers[descriptorSet].end())
 			{
-				StorageBuffer* storageBuffer = new StorageBuffer();
+				Shader::StorageBuffer* storageBuffer = new Shader::StorageBuffer();
 				storageBuffer->BindingPoint = binding;
 				storageBuffer->Size = size;
 				storageBuffer->Name = name;
@@ -390,7 +408,7 @@ namespace cerberus
 			}
 			else
 			{
-				StorageBuffer* storageBuffer = s_StorageBuffers.at(descriptorSet).at(binding);
+				Shader::StorageBuffer* storageBuffer = s_StorageBuffers.at(descriptorSet).at(binding);
 				if (size > storageBuffer->Size)
 					storageBuffer->Size = size;
 			}
@@ -402,7 +420,36 @@ namespace cerberus
 			NV_CORE_TRACE("  Size: {0}", size);
 			NV_CORE_TRACE("-------------------");
 		}
-		/**/
+
+		NV_CORE_TRACE("Acceleration Structures:");
+		for (const auto& resource : resources.acceleration_structures)
+		{
+			const auto& name = resource.name;
+			auto& bufferType = compiler.get_type(resource.base_type_id);
+			uint32_t memberCount = (uint32_t)bufferType.member_types.size();
+			uint32_t binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
+			uint32_t descriptorSet = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+
+			if (descriptorSet >= m_ShaderDescriptorSets.size())
+				m_ShaderDescriptorSets.resize(descriptorSet + 1);
+
+			ShaderDescriptorSet& shaderDescriptorSet = m_ShaderDescriptorSets[descriptorSet];
+			if (s_AccelerationStructure[descriptorSet].find(binding) == s_AccelerationStructure[descriptorSet].end())
+			{
+				Shader::AccelerationStructure* as = new Shader::AccelerationStructure();
+				as->BindingPoint = binding;
+				as->Name = name;
+				as->ShaderStage = VK_SHADER_STAGE_ALL;
+				s_AccelerationStructure.at(descriptorSet)[binding] = as;
+			}
+
+			shaderDescriptorSet.AccelerationStructures[binding] = s_AccelerationStructure.at(descriptorSet).at(binding);
+
+			NV_CORE_TRACE("  {0} ({1}, {2})", name, descriptorSet, binding);
+			NV_CORE_TRACE("  Member Count: {0}", memberCount);
+			NV_CORE_TRACE("-------------------");
+		}
+		
 		NV_CORE_TRACE("Push Constant Buffers:");
 		for (const auto& resource : resources.push_constant_buffers)
 		{
@@ -494,7 +541,31 @@ namespace cerberus
 
 			NV_CORE_TRACE("  {0} ({1}, {2})", name, descriptorSet, binding);
 		}
-		/**/
+
+		NV_CORE_TRACE("Acceleration Structures:");
+		for (const auto& resource : resources.acceleration_structures)
+		{
+			const auto& name = resource.name;
+			auto& type = compiler.get_type(resource.base_type_id);
+			uint32_t binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
+			uint32_t descriptorSet = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+			uint32_t dimension = type.image.dim;
+
+			if (descriptorSet >= m_ShaderDescriptorSets.size())
+				m_ShaderDescriptorSets.resize(descriptorSet + 1);
+
+			auto& shaderDescriptorSet = m_ShaderDescriptorSets[descriptorSet];
+			auto& as = *shaderDescriptorSet.AccelerationStructures[binding];
+			as.BindingPoint = binding;
+			as.DescriptorSet = descriptorSet;
+			as.Name = name;
+			as.ShaderStage = shaderStage;
+
+			m_Resources[name] = ShaderResourceDeclaration(name, binding, 1);
+
+			NV_CORE_TRACE("  {0} ({1}, {2})", name, descriptorSet, binding);
+		}
+		
 		NV_CORE_TRACE("===========================");
 
 
@@ -545,7 +616,7 @@ namespace cerberus
 				}
 				
 			}
-			/** /
+			/**/
 			if (shaderDescriptorSet.StorageBuffers.size())
 			{
 				VkDescriptorPoolSize& typeCount = m_TypeCounts[set].emplace_back();
@@ -586,7 +657,7 @@ namespace cerberus
 				set.descriptorCount = 1;
 				set.dstBinding = layoutBinding.binding;
 			}
-			/** /
+			/**/
 			for (auto& [binding, strorageBuffer] : shaderDescriptorSet.StorageBuffers)
 			{
 				VkDescriptorSetLayoutBinding& layoutBinding = layoutBindings.emplace_back();
@@ -597,6 +668,22 @@ namespace cerberus
 				layoutBinding.binding = binding;
 
 				VkWriteDescriptorSet& set = shaderDescriptorSet.WriteDescriptorSets[strorageBuffer->Name];
+				set = {};
+				set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				set.descriptorType = layoutBinding.descriptorType;
+				set.descriptorCount = 1;
+				set.dstBinding = layoutBinding.binding;
+			}
+			for (auto& [binding, accelerationStructure] : shaderDescriptorSet.AccelerationStructures)
+			{
+				VkDescriptorSetLayoutBinding& layoutBinding = layoutBindings.emplace_back();
+				layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+				layoutBinding.descriptorCount = 1;
+				layoutBinding.stageFlags = accelerationStructure->ShaderStage;
+				layoutBinding.pImmutableSamplers = nullptr;
+				layoutBinding.binding = binding;
+
+				VkWriteDescriptorSet& set = shaderDescriptorSet.WriteDescriptorSets[accelerationStructure->Name];
 				set = {};
 				set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				set.descriptorType = layoutBinding.descriptorType;
@@ -647,18 +734,17 @@ namespace cerberus
 				set.descriptorCount = 1;
 				set.dstBinding = layoutBinding.binding;
 			}
+
 			/**/
 			VkDescriptorSetLayoutCreateInfo descriptorLayout = {};
 			descriptorLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 			descriptorLayout.pNext = nullptr;
 			descriptorLayout.bindingCount = (uint32_t)(layoutBindings.size());
 			descriptorLayout.pBindings = layoutBindings.data();
-			NV_CORE_INFO("Creating descriptor set {0} with {1} ubo's, {2} samplers and {3} storage images", set,
-				shaderDescriptorSet.UniformBuffers.size(),
-				shaderDescriptorSet.ImageSamplers.size(),
-				shaderDescriptorSet.StorageImages.size());
-			/** /
-			NV_CORE_INFO("Creating descriptor set {0} with {1} ubo's, {2} ssbo's, {3} samplers and {4} storage images", set,
+			
+			NV_CORE_INFO("Creating descriptor set {0} with {0} acceleration structures, {1} ubo's, {2} ssbo's, {3} samplers and {4} storage images", 
+				set,
+				shaderDescriptorSet.AccelerationStructures.size(),
 				shaderDescriptorSet.UniformBuffers.size(),
 				shaderDescriptorSet.StorageBuffers.size(),
 				shaderDescriptorSet.ImageSamplers.size(),
@@ -685,12 +771,31 @@ namespace cerberus
 			CORE_ASSERT(eol != std::string::npos, "Syntax error");
 			size_t begin = pos + typeTokenLength + 1;
 			std::string type = source.substr(begin, eol - begin);
-			CORE_ASSERT(type == "vertex" || type == "fragment" || type == "pixel" || type == "compute", "Invalid shader type specified");
+			CORE_ASSERT(type == "vertex" || type == "fragment" || type == "pixel" || type == "compute" || type == "rayGen"
+				|| type == "closestHit" || type == "missHit" || type == "intersection" || type == "anyHit",
+				"Invalid shader type specified");
 
 			size_t nextLinePos = source.find_first_not_of("\r\n", eol);
 			pos = source.find(typeToken, nextLinePos);
 			auto shaderType = utils::ShaderTypeFromString(type);
 			shaderSources[shaderType] = source.substr(nextLinePos, pos - (nextLinePos == std::string::npos ? source.size() - 1 : nextLinePos));
+		}
+
+		shaderc_util::FileFinder fileFinder;
+		static shaderc::Compiler compiler;
+		fileFinder.search_path().emplace_back("Resources/Shaders/Include/Common/"); //Shared include directory
+		for (auto& [stage, shaderSource] : shaderSources)
+		{
+			shaderc::CompileOptions options;
+
+
+			// Deleted by shaderc and created per stage
+			GLSLIncludeProcessor* includer = new GLSLIncludeProcessor(&fileFinder);
+
+			options.SetIncluder(std::unique_ptr<GLSLIncludeProcessor>(includer));
+			const auto preProcessingResult = compiler.PreprocessGlsl(shaderSource, utils::VkShaderStageToShaderC(stage), m_AssetPath.c_str(), options);
+
+			shaderSource = std::string(preProcessingResult.begin(), preProcessingResult.end());
 		}
 
 		return shaderSources;

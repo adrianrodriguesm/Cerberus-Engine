@@ -1,0 +1,57 @@
+
+#type rayGen
+#version 460
+#extension GL_EXT_ray_tracing : require
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+
+layout(rgba32f, set = 0, binding = 16) writeonly uniform image2D image;
+
+void main()
+{
+  // Just paint solid red; do not trace rays, do not use payload or uniforms
+  imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(1.0, 0.0, 0.0, 1.0));
+}
+
+#type closestHit
+#version 460
+#extension GL_EXT_ray_tracing : require
+#extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_GOOGLE_include_directive : enable
+
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_buffer_reference2 : require
+
+struct hitPayload
+{
+  vec3 hitValue;
+};
+
+layout(location = 0) rayPayloadInEXT hitPayload prd;
+
+void main()
+{
+  // Ignore geometry and materials for now, just write a solid color to the payload.
+  prd.hitValue = vec3(1.0, 0.0, 0.0); // pure red
+}
+
+#type missHit
+#version 460
+#extension GL_EXT_ray_tracing : require
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : 
+
+struct hitPayload
+{
+  vec3 hitValue;
+};
+
+layout(location = 0) rayPayloadInEXT hitPayload prd;
+
+
+void main()
+{
+  // Solid green for miss
+  prd.hitValue = vec3(0.0, 1.0, 0.0);
+}

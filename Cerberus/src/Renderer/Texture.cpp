@@ -848,7 +848,7 @@ namespace cerberus
 		return result;
 	}
 
-	Ref<Texture2D> TextureFactory::CreateBRDF()
+	Handle<Texture2D> TextureFactory::CreateBRDF()
 	{
 #if OLD_RENDERER
 		uint32_t brdfSize = Renderer::GetRendererConfig().BrdfLutSize;
@@ -889,20 +889,22 @@ namespace cerberus
 
 		return brdfTex;
 #endif
-		return nullptr;
+		return Handle<Texture2D>();
 	}
-	Ref<Texture2D> TextureFactory::CreateTexture2DWithColor(const glm::ivec4& color)
+
+	Handle<Texture2D> TextureFactory::CreateTexture2DWithColor(const glm::ivec4& color)
 	{
 		uint32_t textureData = ConvertRGBtoHex(color.r, color.g, color.b, color.a);
-		return CreateRef<Texture2D>(ImageFormat::RGBA, 1, 1, &textureData);
+		return ResourceManager::CreateTexture2D(ImageFormat::RGBA, 1, 1, &textureData);
 	}
-	Ref<TextureCube> TextureFactory::CreateTextureCubeWithColor(const glm::vec4& color)
+
+	Handle<TextureCube> TextureFactory::CreateTextureCubeWithColor(const glm::vec4& color)
 	{
 		uint32_t textureData = ConvertRGBtoHex((float)color.r, (float)color.g, (float)color.b, (float)color.a);
 		uint32_t cubeTextureData[6] = { textureData, textureData, textureData, textureData, textureData, textureData };
 		TextureProperties prop;
 		prop.DebugName = "Colored Texture Cube";
-		return CreateRef<TextureCube>(ImageFormat::RGBA, 1, 1, prop, &cubeTextureData);
+		return ResourceManager::CreateTextureCube(ImageFormat::RGBA, 1, 1, prop, &cubeTextureData);
 	}
 
 	RenderTargetTexture::RenderTargetTexture(const RenderTargetProperties& rtProp)

@@ -3,6 +3,11 @@
 
 namespace cerberus 
 {
+	enum class BufferUsageType
+	{
+		Default = 0, Static = Default, Dynamic = 1
+	};
+
 	enum class GPUBufferUsage
 	{
 		None = 0,
@@ -13,6 +18,8 @@ namespace cerberus
 		TLASBufferUsage,
 		StagingUsage,
 		UniformBufferUsage,
+		ShaderBindingTableUsage,
+		StorageBufferUsage,
 	};
 
 	struct GPUBufferSpecification
@@ -32,6 +39,8 @@ namespace cerberus
 
 		GPUBuffer(const GPUBufferSpecification& bufferSpec);
 		~GPUBuffer();
+
+		VkDeviceAddress GetDeviceAddress() const;
 	};
 
 

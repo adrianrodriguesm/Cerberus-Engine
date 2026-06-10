@@ -5,9 +5,17 @@
 #include "Renderer/Image.h"
 namespace cerberus
 {
+	class AccelerationStructure;
 	class BindGroupLayout
 	{
 	public:
+		struct ASBinding
+		{
+			std::string Name = "";
+			uint32_t BindingPoint = 0;
+			VkShaderStageFlagBits ShaderStage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+		};
+
 		struct BufferBinding
 		{
 			std::string Name = "";
@@ -28,8 +36,9 @@ namespace cerberus
 		{
 			std::vector<BufferBinding> UniformBuffers;
 			std::vector<BufferBinding> StorageBuffers;
-			std::vector<ImageBinding> ImageSamplers;
-			std::vector<ImageBinding> ImageStorages;
+			std::vector<ASBinding>     AccelerationStructures;
+			std::vector<ImageBinding>  ImageSamplers;
+			std::vector<ImageBinding>  ImageStorages;
 			uint32_t Set = 0;
 
 			bool operator==(const BindGroupLayoutInfo& other) const;
@@ -65,6 +74,7 @@ namespace cerberus
 
 		void SetUniformBuffer(const Ref<UniformBufferSet> uboSet, uint32_t bindingPoint);
 		void SetImageView(const Handle<ImageView> imgView, uint32_t bindingPoint);
+		void SetAccelerationStructure(const Handle<AccelerationStructure> as, uint32_t bindingPoint);
 
 		void Update(uint32_t frameIndex);
 		void Update();

@@ -59,6 +59,7 @@ namespace cerberus
 		Buffer m_ImageData;
 		Handle<Image> m_Image;
 		Handle<ImageView> m_ImageView;
+		AssetHandle m_TextureAsset;
 	};
 	////////////////////////////////////////////////
 	////// TextureCube
@@ -97,6 +98,7 @@ namespace cerberus
 
 		Handle<Image> m_Image;
 		Handle<ImageView> m_ImageView;
+		AssetHandle m_TextureAsset;
 
 		// 6 sides of the cube
 		Buffer m_ImageData;
@@ -160,10 +162,10 @@ namespace cerberus
 	class TextureFactory
 	{
 	public:
-		static Ref<Texture2D> CreateBRDF();
+		static Handle<Texture2D> CreateBRDF();
 		// color - each component in a range between 0 to 255
-		static Ref<Texture2D> CreateTexture2DWithColor(const glm::ivec4& color);
+		static Handle<Texture2D> CreateTexture2DWithColor(const glm::ivec4& color);
 		// color - each component in a range between 0 to 255
-		static Ref<TextureCube> CreateTextureCubeWithColor(const glm::vec4& color);
+		static Handle<TextureCube> CreateTextureCubeWithColor(const glm::vec4& color);
 	};
 }

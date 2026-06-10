@@ -22,16 +22,18 @@ namespace cerberus
 {
 	struct RendererData
 	{
-		// Render Command Pool (This pool is mootly is by the transfer queue but in Vulkan 
+		// Render Command Pool (This pool is mostly is by the transfer queue but in Vulkan 
 		// by default the graphics queue already includes the transfer queue)
 		VkCommandPool CommandPool;
 		VkCommandPool ComputeCommandPool;
 		// Renderer Textures
-		Ref<TextureCube> BlackCubeTexture;
-		Ref<Texture2D> BlackTexture;
-		Ref<Texture2D> WhiteTexture;
-		Ref<Texture2D> BrdfLutTexture;
+		Handle<TextureCube> BlackCubeTexture;
+		Handle<Texture2D> BlackTexture;
+		Handle<Texture2D> WhiteTexture;
+		Handle<Texture2D> BrdfLutTexture;
+		// TODO: Switch to Bind group
 		Ref<MaterialAsset> DefaultMaterial;
+		// TODO: Move to Scene renderer class
 		Ref<EnvironmentMap> EmptyEnvironment;
 
 		std::unordered_map<SceneRenderer*, std::vector<std::vector<VkDescriptorSet>>> RendererDescriptorSetCache;
@@ -71,6 +73,9 @@ namespace cerberus
 		
 
 		s_Data->DeviceLimits = vulkanDevice->GetPhysicalDeviceLimits();
+
+		ResourceManager::Init();
+		RenderQueueManager::Init();
 
 		//////////////////////////////////
 		// Create Compute Pool
@@ -113,15 +118,15 @@ namespace cerberus
 		// SHADERS
 		s_Data->ShaderLibrary = CreateRef<ShaderLibrary>();
 		s_Data->ShaderLibrary->Load("Resources/Shaders/PBR.glsl", false);
-		s_Data->ShaderLibrary->Load("Resources/Shaders/SceneComposite.glsl", false);
-		s_Data->ShaderLibrary->Load("Resources/Shaders/EquirectangularToCubeMap.glsl", false);
-		s_Data->ShaderLibrary->Load("Resources/Shaders/EnvironmentMipFilter.glsl", false);
-		s_Data->ShaderLibrary->Load("Resources/Shaders/EnvironmentIrradiance.glsl", false);
-		s_Data->ShaderLibrary->Load("Resources/Shaders/BRDF.glsl", false);
-		s_Data->ShaderLibrary->Load("Resources/Shaders/Skybox.glsl", false);
-		s_Data->ShaderLibrary->Load("Resources/Shaders/PreDepth.glsl", false);
-		s_Data->ShaderLibrary->Load("Resources/Shaders/ShadowMap.glsl", false);
-		s_Data->ShaderLibrary->Load("Resources/Shaders/RayTraceTest.glsl", true);
+		//s_Data->ShaderLibrary->Load("Resources/Shaders/SceneComposite.glsl", false);
+		//s_Data->ShaderLibrary->Load("Resources/Shaders/EquirectangularToCubeMap.glsl", false);
+		//s_Data->ShaderLibrary->Load("Resources/Shaders/EnvironmentMipFilter.glsl", false);
+		//s_Data->ShaderLibrary->Load("Resources/Shaders/EnvironmentIrradiance.glsl", false);
+		//s_Data->ShaderLibrary->Load("Resources/Shaders/BRDF.glsl", false);
+		//s_Data->ShaderLibrary->Load("Resources/Shaders/Skybox.glsl", false);
+		//s_Data->ShaderLibrary->Load("Resources/Shaders/PreDepth.glsl", false);
+		//s_Data->ShaderLibrary->Load("Resources/Shaders/ShadowMap.glsl", false);
+		s_Data->ShaderLibrary->Load("Resources/Shaders/RayTraceTest.glsl", false);
 
 
 		// Textures
@@ -130,14 +135,16 @@ namespace cerberus
 		s_Data->WhiteTexture = TextureFactory::CreateTexture2DWithColor({ 255, 255, 255, 255 });
 		s_Data->BrdfLutTexture = TextureFactory::CreateBRDF();
 		// EmptyEnvironment
+#if OLD_RENDERER
 		s_Data->EmptyEnvironment = CreateRef<EnvironmentMap>();
 		s_Data->EmptyEnvironment->EquirectangularTex = s_Data->BlackTexture;
 		s_Data->EmptyEnvironment->IrradianceMap = s_Data->BlackCubeTexture;
 		s_Data->EmptyEnvironment->RadianceMap = s_Data->BlackCubeTexture;
 		s_Data->EmptyEnvironment->DebugName = "Empty Environment";
-
+#endif
 		s_Data->MainCommandBuffer = new CommandBuffer(ResourceManager::GetFramesInFlight(), "Main Command Buffer");
 		s_Data->SwapchainCommandBuffer = new CommandBuffer(true, "Swapchain");
+	
 		// Compile Shader and Create default textures
 		RenderQueueManager::ExecuteRenderQueue();
 		Renderer::InitImGui();
@@ -158,12 +165,19 @@ namespace cerberus
 		s_Data->BlackTexture->GetImage()->Release();
 		s_Data->EmptyEnvironment = nullptr;
 #endif	
+		ResourceManager::DestroyTextureCube(s_Data->BlackCubeTexture);
+		ResourceManager::DestroyTexture2D(s_Data->BlackTexture);
+		ResourceManager::DestroyTexture2D(s_Data->WhiteTexture);
+		ResourceManager::DestroyTexture2D(s_Data->BrdfLutTexture);
+		ResourceManager::Shutdown();
+
+		RenderQueueManager::FreeAllSubmittedResources();
 		ComputePipeline::ReleaseComputeFence();
-		RenderQueueManager::ExecuteRenderQueue();
 		
 		auto vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 		// Wait until no actions being run on the device before destroyed
 		vkDeviceWaitIdle(vulkanDevice);
+
 
 		RenderQueueManager::ExecuteRenderQueue();
 
@@ -185,8 +199,10 @@ namespace cerberus
 		s_Data->RendererDescriptorSetCache.clear();
 
 		// Release All Queues
-		//RenderQueueManager::FreeAllSubmittedResources();
-
+		
+		RenderQueueManager::ExecuteRenderQueue();
+		RenderQueueManager::FreeAllSubmittedResources();
+		RenderQueueManager::ShutDown();
 		delete s_Data;
 	}
 
@@ -1071,12 +1087,8 @@ namespace cerberus
 		environment->DebugName = utils::GetFilename(filepath);
 		return environment;
 #endif
-		Ref<EnvironmentMap> environment = CreateRef<EnvironmentMap>();
-		environment->EquirectangularTex = s_Data->BlackTexture;
-		environment->RadianceMap = s_Data->BlackCubeTexture;
-		environment->IrradianceMap = s_Data->BlackCubeTexture;
-		environment->DebugName = utils::GetFilename(filepath);
-		return environment;
+
+		return nullptr;
 	}
 
 	void Renderer::SetSceneEnvironment(SceneRenderer* sceneRenderer, const Ref<EnvironmentMap>& environment, const Ref<Image>& shadowImage)
@@ -1481,7 +1493,7 @@ namespace cerberus
 		return s_Data->DeviceLimits;
 	}
 
-	Ref<Texture2D> Renderer::GetWhiteTexture()
+	Handle<Texture2D> Renderer::GetWhiteTexture()
 	{
 		return s_Data->WhiteTexture;
 	}

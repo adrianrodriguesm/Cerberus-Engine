@@ -5,10 +5,6 @@
 #include "Core/Handle.h"
 namespace cerberus
 {
-	enum class BufferUsageType
-	{
-		Default = 0, Static = Default, Dynamic = 1
-	};
 
 	class UniformBuffer
 	{
@@ -34,4 +30,3 @@ namespace cerberus
 		uint64_t m_AligmentData;
 	};
 };
-

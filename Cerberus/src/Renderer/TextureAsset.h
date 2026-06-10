@@ -24,7 +24,7 @@ namespace cerberus
 		bool Anisotropy = false;
 	};
 
-	// Asset size texture that cotains all the disk data and metadata to load the texture "resource"
+	// Asset size texture that contains all the disk data and metadata to load the texture "resource"
 	class TextureAsset : public Asset
 	{
 	public:

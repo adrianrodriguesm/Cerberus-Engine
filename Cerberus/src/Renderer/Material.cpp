@@ -150,7 +150,7 @@ namespace cerberus
 		m_ResidentDescriptors[binding]->WriteDescriptorSet.pImageInfo = &image->GetVulkanDescriptorInfo();
 #endif
 	}
-	void Material::Set(const std::string& name, const Ref<Texture2D>& texture)
+	void Material::Set(const std::string& name, const Handle<Texture2D>& texture)
 	{
 #if OLD_RENDERER
 		const ShaderResourceDeclaration* resource = FindResourceDeclaration(name);
@@ -173,7 +173,7 @@ namespace cerberus
 #endif
 	}
 
-	void Material::Set(const std::string& name, const Ref<TextureCube>& texture)
+	void Material::Set(const std::string& name, const Handle<TextureCube>& texture)
 	{
 #if OLD_RENDERER
 		const ShaderResourceDeclaration* resource = FindResourceDeclaration(name);
@@ -305,10 +305,13 @@ namespace cerberus
 		SetRoughness(0.4f);
 
 		// Maps
+#if OLD_RENDERER
 		SetAlbedoMap(Renderer::GetWhiteTexture());
 		SetNormalMap(Renderer::GetWhiteTexture());
 		SetMetalnessMap(Renderer::GetWhiteTexture());
 		SetRoughnessMap(Renderer::GetWhiteTexture());
+#endif
+
 	}
 
 	MaterialAsset::MaterialAsset(Ref<Material> material)
@@ -367,7 +370,11 @@ namespace cerberus
 
 	Ref<Texture2D> MaterialAsset::GetAlbedoMap()
 	{
+#if OLD_RENDERER
+
 		return m_Material->TryGetTexture2D(s_AlbedoMapUniform);
+#endif
+		return nullptr;
 	}
 
 	void MaterialAsset::SetAlbedoMap(Ref<Texture2D> texture)
@@ -377,7 +384,7 @@ namespace cerberus
 
 	bool MaterialAsset::IsUsingAlbedoMap()
 	{
-		return Renderer::GetWhiteTexture() != GetAlbedoMap();
+		return nullptr != GetAlbedoMap();
 	}
 
 	void MaterialAsset::ClearAlbedoMap()
@@ -387,7 +394,10 @@ namespace cerberus
 
 	Ref<Texture2D> MaterialAsset::GetNormalMap()
 	{
+#if OLD_RENDERER
 		return m_Material->TryGetTexture2D(s_NormalMapUniform);
+#endif
+			return nullptr;
 	}
 
 	void MaterialAsset::SetNormalMap(Ref<Texture2D> texture)
@@ -412,7 +422,10 @@ namespace cerberus
 
 	Ref<Texture2D> MaterialAsset::GetMetalnessMap()
 	{
+#if OLD_RENDERER
 		return m_Material->TryGetTexture2D(s_MetalnessMapUniform);
+#endif
+		return nullptr;
 	}
 
 	void MaterialAsset::SetMetalnessMap(Ref<Texture2D> texture)
@@ -422,7 +435,7 @@ namespace cerberus
 
 	bool MaterialAsset::IsUsingMetalnessMap()
 	{
-		return Renderer::GetWhiteTexture() != GetMetalnessMap();
+		return nullptr != GetMetalnessMap();
 	}
 
 	void MaterialAsset::ClearMetalnessMap()
@@ -432,7 +445,10 @@ namespace cerberus
 
 	Ref<Texture2D> MaterialAsset::GetRoughnessMap()
 	{
+#if OLD_RENDERER
 		return m_Material->TryGetTexture2D(s_RoughnessMapUniform);
+#endif
+		return nullptr;
 	}
 
 	void MaterialAsset::SetRoughnessMap(Ref<Texture2D> texture)
@@ -442,7 +458,10 @@ namespace cerberus
 
 	bool MaterialAsset::IsUsingRoughnessMap()
 	{
+#if OLD_RENDERER
 		return Renderer::GetWhiteTexture() != GetRoughnessMap();
+#endif
+		return false;
 	}
 
 	void MaterialAsset::ClearRoughnessMap()

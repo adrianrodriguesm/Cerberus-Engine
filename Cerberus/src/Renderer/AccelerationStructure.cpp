@@ -8,12 +8,6 @@ namespace cerberus
 {
 #define AS_LOG_INFO(...) NV_CORE_INFO(__VA_ARGS__)
 
-	uint64_t RoundUp(uint64_t size, uint64_t granularity)
-	{
-		const auto divUp = (size + granularity - 1) / granularity;
-		return divUp * granularity;
-	}
-
 	namespace utils
 	{
 		VkAccelerationStructureTypeKHR CerberusASTypeToVulkanASType(AccelerationStructureType type)
@@ -516,8 +510,8 @@ namespace cerberus
 		const uint64_t AccelerationStructureAlignment = 256;
 		const uint64_t ScratchAlignment = acProperties.minAccelerationStructureScratchOffsetAlignment;
 
-		sizeInfo.accelerationStructureSize = RoundUp(sizeInfo.accelerationStructureSize, AccelerationStructureAlignment);
-		sizeInfo.buildScratchSize = RoundUp(sizeInfo.buildScratchSize, ScratchAlignment);
+		sizeInfo.accelerationStructureSize = utils::RoundUp(sizeInfo.accelerationStructureSize, AccelerationStructureAlignment);
+		sizeInfo.buildScratchSize = utils::RoundUp(sizeInfo.buildScratchSize, ScratchAlignment);
 		
 		// Create TLAS
 		if (update == false || !outTLAS.IsValid())

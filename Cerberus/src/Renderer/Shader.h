@@ -84,6 +84,16 @@ namespace cerberus
 			BufferUsageType UsageType = BufferUsageType::Default;
 		};
 
+		struct StorageBuffer
+		{
+			VkDescriptorBufferInfo Descriptor;
+			uint32_t Size = 0;
+			uint32_t BindingPoint = 0;
+			std::string Name;
+			VkShaderStageFlagBits ShaderStage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+			BufferUsageType UsageType = BufferUsageType::Default;
+		};
+
 		struct ImageSampler
 		{
 			uint32_t BindingPoint = 0;
@@ -92,17 +102,28 @@ namespace cerberus
 			std::string Name;
 			VkShaderStageFlagBits ShaderStage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
 		};
+
+		struct AccelerationStructure
+		{
+			uint32_t BindingPoint = 0;
+			uint32_t DescriptorSet = 0;
+			std::string Name;
+			VkShaderStageFlagBits ShaderStage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+		};
+
 		struct ShaderDescriptorSet
 		{
-			std::unordered_map<uint32_t, UniformBuffer*> UniformBuffers;
-			//std::unordered_map<uint32_t, StorageBuffer*> StorageBuffers;
-			std::unordered_map<uint32_t, ImageSampler> ImageSamplers;
-			std::unordered_map<uint32_t, ImageSampler> StorageImages;
+			std::unordered_map<uint32_t, Shader::UniformBuffer*> UniformBuffers;
+			std::unordered_map<uint32_t, Shader::StorageBuffer*> StorageBuffers;
+			std::unordered_map<uint32_t, Shader::AccelerationStructure*> AccelerationStructures;
+			
+			std::unordered_map<uint32_t, Shader::ImageSampler> ImageSamplers;
+			std::unordered_map<uint32_t, Shader::ImageSampler> StorageImages;
 			
 			// VkWriteDescriptorSet descripte how the buffer write to the descriptor set
 			std::unordered_map<std::string, VkWriteDescriptorSet> WriteDescriptorSets;
 
-			operator bool() const { return !(UniformBuffers.empty() && ImageSamplers.empty() && StorageImages.empty()); }
+			operator bool() const { return !(UniformBuffers.empty() && StorageBuffers.empty() && ImageSamplers.empty() && StorageImages.empty() && AccelerationStructures.empty()); }
 		};
 	public:
 		Shader(const std::string& path, bool forceCompile = false);

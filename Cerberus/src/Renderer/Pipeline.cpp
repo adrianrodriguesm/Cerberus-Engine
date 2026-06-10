@@ -3,6 +3,7 @@
 #include "Core/Window.h"
 #include "Renderer/ResourceManager.h"
 #include "Renderer/RenderQueueManager.h"
+#include "Renderer/VulkanExtensions.h"
 namespace cerberus
 {
 	namespace utils
@@ -318,4 +319,133 @@ namespace cerberus
 		
 
 	}	
+
+	RayTracingPipeline::RayTracingPipeline(const PipelineSpecification& spec)
+		: m_Specification(spec)
+	{
+		Invalidate();
+	}
+
+	RayTracingPipeline::~RayTracingPipeline()
+	{
+
+	}
+
+
+
+	void RayTracingPipeline::Invalidate()
+	{
+		if (m_rtPipeline)
+		{
+			RenderQueueManager::SubmitResourceFree([this]() mutable
+				{
+					VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+					vkDestroyPipeline(vulkanDevice, m_rtPipeline, nullptr);
+					vkDestroyPipelineCache(vulkanDevice, m_rtPipelineCache, nullptr);
+					vkDestroyPipelineLayout(vulkanDevice, m_rtPipelineLayout, nullptr);
+				});
+		}
+
+
+
+		VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+
+		// TODO: get rid of this....
+		// Push constant structure for the ray tracer
+		struct PushConstantRay
+		{
+			glm::vec4  ClearColor;
+			glm::vec3  LightPosition;
+			float LightIntensity;
+			int   LightType;
+		};
+
+		// -- PUSH CONSTANT --
+		//const std::vector<VkPushConstantRange>& pushConstantRanges = m_Specification.Shader->GetVulkanPushConstantRanges();
+		// Push constant: we want to be able to update constants used by the shaders
+		VkPushConstantRange pushConstant{ VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR,
+										 0, sizeof(PushConstantRay) };
+
+
+		// -- PIPELINE LAYOUT --
+		auto& descriptorSetLayout = m_Specification.Shader->GetDescriptorSetLayouts();
+		VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
+		pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pipelineLayoutCreateInfo.setLayoutCount = (uint32_t)descriptorSetLayout.size();
+		pipelineLayoutCreateInfo.pSetLayouts = descriptorSetLayout.data();
+		//pipelineLayoutCreateInfo.pushConstantRangeCount = (uint32_t)pushConstantRanges.size();
+		//pipelineLayoutCreateInfo.pPushConstantRanges = pushConstantRanges.data();
+		pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
+		pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstant;
+
+
+		VK_CHECK_RESULT(vkCreatePipelineLayout(vulkanDevice, &pipelineLayoutCreateInfo, nullptr, &m_rtPipelineLayout));
+
+		std::vector<VkPipelineShaderStageCreateInfo> pipelineShaderStageInfo = m_Specification.Shader->GetPipelineShaderModules();
+
+		// TODO: MOVE this to Shader Land and abstracted
+		// Shader groups
+		m_RayGenIndex = 0;
+		VkRayTracingShaderGroupCreateInfoKHR rayGenGroupInfo = {};
+		rayGenGroupInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+		rayGenGroupInfo.pNext = nullptr;
+		rayGenGroupInfo.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+		rayGenGroupInfo.generalShader = m_RayGenIndex;
+		rayGenGroupInfo.closestHitShader = VK_SHADER_UNUSED_KHR;
+		rayGenGroupInfo.anyHitShader = VK_SHADER_UNUSED_KHR;
+		rayGenGroupInfo.intersectionShader = VK_SHADER_UNUSED_KHR;
+
+		m_MissHitIndex = 1;
+		VkRayTracingShaderGroupCreateInfoKHR missGroupInfo = {};
+		missGroupInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+		missGroupInfo.pNext = nullptr;
+		missGroupInfo.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+		missGroupInfo.generalShader = m_MissHitIndex;
+		missGroupInfo.closestHitShader = VK_SHADER_UNUSED_KHR;
+		missGroupInfo.anyHitShader = VK_SHADER_UNUSED_KHR;
+		missGroupInfo.intersectionShader = VK_SHADER_UNUSED_KHR;
+
+		m_TriangleHitIndex = 2;
+		VkRayTracingShaderGroupCreateInfoKHR triangleHitGroupInfo = {};
+		triangleHitGroupInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+		triangleHitGroupInfo.pNext = nullptr;
+		triangleHitGroupInfo.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+		triangleHitGroupInfo.generalShader = VK_SHADER_UNUSED_KHR;
+		triangleHitGroupInfo.closestHitShader = 2;
+		triangleHitGroupInfo.anyHitShader = VK_SHADER_UNUSED_KHR;
+		triangleHitGroupInfo.intersectionShader = VK_SHADER_UNUSED_KHR;
+
+		std::vector<VkRayTracingShaderGroupCreateInfoKHR> groups =
+		{
+			rayGenGroupInfo,
+			missGroupInfo,
+			triangleHitGroupInfo,
+		};
+
+
+		VkPipelineCacheCreateInfo pipelineCacheCreateInfo = {};
+		pipelineCacheCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+		VK_CHECK_RESULT(vkCreatePipelineCache(vulkanDevice, &pipelineCacheCreateInfo, nullptr, &m_rtPipelineCache));
+
+
+		// Create ray tracing pipeline info
+		VkRayTracingPipelineCreateInfoKHR pipelineInfo = {};
+		pipelineInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+		pipelineInfo.pNext = nullptr;
+		pipelineInfo.flags = 0;
+		pipelineInfo.stageCount = static_cast<uint32_t>(pipelineShaderStageInfo.size());
+		pipelineInfo.pStages = pipelineShaderStageInfo.data();
+		pipelineInfo.groupCount = static_cast<uint32_t>(groups.size());
+		pipelineInfo.pGroups = groups.data();
+		pipelineInfo.maxPipelineRayRecursionDepth = 1;
+		pipelineInfo.layout = m_rtPipelineLayout;
+		pipelineInfo.basePipelineHandle = nullptr;
+		pipelineInfo.basePipelineIndex = 0;
+		pipelineInfo.maxPipelineRayRecursionDepth = 1;  // Ray depth
+
+		// Create ray tracing pipeline
+		VK_CHECK_RESULT(ext::vkCreateRayTracingPipelinesKHR(vulkanDevice, nullptr, nullptr, 1, &pipelineInfo, nullptr, &m_rtPipeline));
+
+	}
+
 }

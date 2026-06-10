@@ -123,6 +123,23 @@ namespace cerberus
 			outLayoutInfo.ImageStorages.push_back(imgBinding);
 		}
 
+
+		NV_CORE_TRACE("Acceleration Structures:");
+		for (const auto& resource : resources.acceleration_structures)
+		{
+			uint32_t descriptorSet = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
+			if (descriptorSet != outLayoutInfo.Set)
+				continue;
+
+			BindGroupLayout::ASBinding asBinding;
+			asBinding.Name = resource.name;
+			asBinding.BindingPoint = compiler.get_decoration(resource.id, spv::DecorationBinding);
+			asBinding.ShaderStage = shaderStage;
+
+			NV_CORE_TRACE("  {0} ({1}, {2})", asBinding.Name, descriptorSet, asBinding.BindingPoint);
+			outLayoutInfo.AccelerationStructures.push_back(asBinding);
+		}
+
 		NV_CORE_TRACE("===========================");
 	}
 }

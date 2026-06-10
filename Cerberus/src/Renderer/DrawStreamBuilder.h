@@ -28,6 +28,7 @@ namespace cerberus
 	struct DrawArea
 	{
 		Handle<GraphicsPipeline> GraphicsPipeline;
+		Handle<RayTracingPipeline> RayTracingPipeline;
 		Handle<Framebuffer> Framebuffer;
 
 		Handle<BindGroup> BindGroup0;

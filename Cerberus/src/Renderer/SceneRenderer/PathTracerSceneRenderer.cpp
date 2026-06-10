@@ -19,6 +19,10 @@ namespace cerberus
 	/**/
 	PathTracerSceneRenderer::PathTracerSceneRenderer(Ref<Scene> scene, const SceneRendererSpecification& spec)
 	{
+		auto& shaderLibrary = Renderer::GetShaderLibrary();
+		shaderLibrary.Load("Resources/Shaders/Ray Tracing/Raytrace.rgen", true);
+
+		RenderQueueManager::ExecuteRenderQueue();
 		// Pipeline, RenderPass, Framebuffer, and BindGroup/BindGroupLayout creation
 		{
 			// Render Pass
@@ -33,6 +37,7 @@ namespace cerberus
 
 			m_RenderPass = ResourceManager::CreateRenderPass(renderPassSpec);
 
+
 			// Pipeline
 			PipelineSpecification pipelineSpec;
 			pipelineSpec.DebugName = "RayTraceTest";
@@ -41,6 +46,7 @@ namespace cerberus
 			pipelineSpec.Layout = { { ShaderDataType::Float3, "a_Position"	},
 									{ ShaderDataType::Float3, "a_Normal"	},
 									{ ShaderDataType::Float3, "a_Tangent"	},
+
 									{ ShaderDataType::Float3, "a_Binormal"	},
 									{ ShaderDataType::Float2, "a_TexCoord"	}, };
 			pipelineSpec.CullMode = CullMode::Back;
@@ -49,6 +55,7 @@ namespace cerberus
 			pipelineSpec.RenderPass = m_RenderPass;
 			m_Pipeline = ResourceManager::CreateGraphicsPipeline(pipelineSpec);
 
+			// SET 0
 			// BindGroup/BindGroupLayout
 			BindGroupLayout::BindGroupLayoutInfo layoutInfo0 = ShaderReflection::ReflectLayoutInfo(shader, 0);
 			m_BindGroup0Layout = ResourceManager::CreateBindGroupLayout(layoutInfo0);
@@ -59,6 +66,7 @@ namespace cerberus
 			bindGroup0Spec.Persistent = false;
 			m_BindGroup0 = ResourceManager::CreateBindGroup(bindGroup0Spec);
 
+			// SET 1
 			// BindGroup/BindGroupLayout
 			BindGroupLayout::BindGroupLayoutInfo layoutInfo1 = ShaderReflection::ReflectLayoutInfo(shader, 1);
 			m_BindGroup1Layout = ResourceManager::CreateBindGroupLayout(layoutInfo1);
@@ -67,6 +75,34 @@ namespace cerberus
 			bindGroup1Spec.BindGroupLayout = m_BindGroup1Layout;
 			bindGroup1Spec.Persistent = false;
 			m_BindGroup1 = ResourceManager::CreateBindGroup(bindGroup1Spec);
+
+			// SET 2
+			// Ray Tracing
+			BindGroupLayout::BindGroupLayoutInfo layoutInfoRT = ShaderReflection::ReflectLayoutInfo(shader, 2);
+			m_RT_BindGroupLayout = ResourceManager::CreateBindGroupLayout(layoutInfoRT);
+
+			BindGroupSpecification bindGroupRTSpec;
+			bindGroupRTSpec.BindGroupLayout = m_RT_BindGroupLayout;
+			bindGroupRTSpec.Persistent = false;
+			m_RT_BindGroup = ResourceManager::CreateBindGroup(bindGroupRTSpec);
+
+
+			// Pipeline
+			PipelineSpecification rt_pipelineSpec;
+			rt_pipelineSpec.DebugName = "RayTrace";
+			rt_pipelineSpec.Shader = Renderer::GetShaderLibrary().Get("Raytracer");
+			rt_pipelineSpec.CullMode = CullMode::Back;
+			rt_pipelineSpec.DepthOperator = DepthCompareOperator::LessOrEqual;
+			// -- Render to the same target texture as the geometry pass
+			rt_pipelineSpec.RenderPass = m_RenderPass;
+			m_RT_Pipeline = ResourceManager::CreateRayTracingPipeline(rt_pipelineSpec);
+
+			ShaderBindingTableSpecification sbtSpec;
+			sbtSpec.RayGenPrograms = { {0 , {}} };
+			sbtSpec.MissPrograms = { {1 , {}} };
+			sbtSpec.HitPrograms = { {2 , {}} };
+			sbtSpec.Pipeline = m_RT_Pipeline;
+			m_ShaderBindingTable = CreateScope<ShaderBindingTable>(sbtSpec);
 
 			// Framebuffer
 			FramebufferSpecification preDepthFramebufferSpec;
@@ -154,7 +190,8 @@ namespace cerberus
 			uboSetCamSpec.BindingPoint = 0;
 			m_UniformBufferSetCamera = CreateRef<UniformBufferSet>(uboSetCamSpec);
 
-			// Apply to bind group
+
+			// SSBO
 			BindGroup* bindGroup1 = ResourceManager::GetBindGroup(m_BindGroup1);
 			bindGroup1->SetUniformBuffer(m_UniformBufferSetCamera, 0);
 		}
@@ -167,6 +204,7 @@ namespace cerberus
 		ResourceManager::DestroyTexture2D(m_TextureRonaldo);
 		ResourceManager::DestroyFramebuffer(m_Framebuffer);
 		ResourceManager::DestroyGraphicsPipeline(m_Pipeline);
+		ResourceManager::DestroyRayTracingPipeline(m_RT_Pipeline);
 		ResourceManager::DestroyRenderPass(m_RenderPass);
 		ResourceManager::DestroyBindGroup(m_BindGroup0);
 		ResourceManager::DestroyBindGroupLayout(m_BindGroup0Layout);
@@ -224,7 +262,6 @@ namespace cerberus
 			drawArea.BindGroup1 = m_BindGroup1;
 			drawArea.DrawCount = m_MeshRegister.MeshInstanceCount;
 			Renderer::BeginRenderPass(commnadBuffer, m_RenderPass, drawArea);
-
 			for (auto& [meshSourceHandle, submeshMap] : m_MeshRegister.MeshInstanceMap)
 			{
 				MeshSourceProxy* meshSource = ResourceManager::GetMeshSourceProxy(meshSourceHandle);
@@ -324,10 +361,10 @@ namespace cerberus
 		//Renderer::ExecuteRenderQueue();
 		// Build Bottom Level Acceleration Structure if needed
 #if 1
-		if (m_MeshRegister.ASRegisterInfo.BLASToBuild.size() > 0)
+ 		if (m_MeshRegister.ASRegisterInfo.BLASToBuild.size() > 0)
 		{
 			AccelerationStructureBuilder asBuilder;
-			asBuilder.BeginBLASBuild(VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+			asBuilder.BeginBLASBuild(VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR);
 			for (uint32_t i = 0; i < m_MeshRegister.ASRegisterInfo.BLASToBuild.size(); i++)
 			{
 				const auto& meshSourceProxy = m_MeshRegister.ASRegisterInfo.BLASToBuild[i];
@@ -340,7 +377,8 @@ namespace cerberus
 		if (!m_MeshRegister.ASRegisterInfo.TLAS.IsValid() || m_MeshRegister.ASRegisterInfo.UpdateTLAS)
 		{
 			AccelerationStructureBuilder asBuilder;
-			asBuilder.BeginTLASBuild(VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR);
+
+			asBuilder.BeginTLASBuild(VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR);
 			for (const auto& [meshAssetHandle, meshesInstances] : m_MeshRegister.MeshInstanceRegistered)
 			{
 				for (uint32_t i = 0; i < meshesInstances.size(); i++)

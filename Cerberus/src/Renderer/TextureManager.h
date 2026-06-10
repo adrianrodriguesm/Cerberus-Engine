@@ -6,7 +6,7 @@
 #include <span>
 namespace cerberus
 {
-	class TextureManager
+	class ResourceResgistry
 	{
 	public:
 		
@@ -22,6 +22,10 @@ namespace cerberus
 }
 
 /** /
+TextureAsset textureAsset;
+Handle<Texture2D> Texture2D;
+Texture2D->GetAssetA
+
 Material.SetAlbedo(TextureAsset);
 Material.isDirty
 

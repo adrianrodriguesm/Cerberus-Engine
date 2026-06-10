@@ -103,8 +103,15 @@ namespace cerberus
 
 		inline const VkPhysicalDeviceLimits GetPhysicalDeviceLimits() const { return m_PhysicalDevice->m_Properties.limits; }
 
-		inline const VkPhysicalDeviceAccelerationStructurePropertiesKHR& GetAccelerationStructureProperties() const {
+		inline const VkPhysicalDeviceAccelerationStructurePropertiesKHR& GetAccelerationStructureProperties() const
+		{
 			return m_AccelerationStructureProperties;
+		}
+
+
+		inline const VkPhysicalDeviceRayTracingPipelinePropertiesKHR& GetRayTracingProperties() const 
+		{
+			return m_RayTracingPipelineProperties;
 		}
 
 	private:

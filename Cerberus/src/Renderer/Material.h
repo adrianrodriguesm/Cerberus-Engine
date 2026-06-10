@@ -32,8 +32,8 @@ namespace cerberus
 		void Set(const std::string& name, const glm::mat3& value);
 		void Set(const std::string& name, const glm::mat4& value);
 
-		void Set(const std::string& name, const Ref<TextureCube>& texture);
-		void Set(const std::string& name, const Ref<Texture2D>& texture);
+		void Set(const std::string& name, const Handle<TextureCube>& texture);
+		void Set(const std::string& name, const Handle<Texture2D>& texture);
 		void Set(const std::string& name, const Ref<Image>& image);
 		//void Set(const std::string& name, const Ref<Texture2D>& texture, uint32_t arrayIndex);
 
@@ -127,6 +127,7 @@ namespace cerberus
 		bool m_Persistent = true;
 	};
 
+	// todo: Switch texture to material assets
 	class MaterialAsset : public Asset
 	{
 	public:

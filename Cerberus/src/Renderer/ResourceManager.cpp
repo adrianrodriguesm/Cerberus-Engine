@@ -16,10 +16,12 @@ namespace cerberus
 		Pool<Image> Images;
 		Pool<ImageView> ImageViews;
 		Pool<Texture2D> Textures2D;
+		Pool<TextureCube> TexturesCube;
 		Pool<RenderTargetTexture> RenderTargets;
 		Pool<RenderPass> RenderPasses;
 		Pool<Framebuffer> Framebuffers;
 		Pool<GraphicsPipeline> GraphicsPipelines;
+		Pool<RayTracingPipeline> RayTracingPipelines;
 
 		DescriptorAllocator* PersistentDescriptorAllocator;
 		DescriptorAllocator* DescriptorAllocator;
@@ -44,10 +46,8 @@ namespace cerberus
 	}
 	void ResourceManager::Shutdown()
 	{
-		s_RMData->AccelerationStructures.Clear();
-		s_RMData->MeshInstanceProxy.Clear();
-		s_RMData->MeshSourceProxy.Clear();
 		s_RMData->Textures2D.Clear();
+		s_RMData->TexturesCube.Clear();
 		s_RMData->RenderTargets.Clear();
 		s_RMData->GPUBuffers.Clear();
 		s_RMData->Images.Clear();
@@ -57,6 +57,10 @@ namespace cerberus
 		s_RMData->RenderPasses.Clear();
 		s_RMData->Framebuffers.Clear();
 		s_RMData->GraphicsPipelines.Clear();
+		s_RMData->MeshInstanceProxy.Clear();
+		s_RMData->MeshSourceProxy.Clear();
+		s_RMData->AccelerationStructures.Clear();
+		s_RMData->RayTracingPipelines.Clear();
 
 		delete s_RMData->PersistentDescriptorAllocator;
 		delete s_RMData->DescriptorAllocator;
@@ -190,6 +194,21 @@ namespace cerberus
 		return s_RMData->Textures2D.Get(handle);
 	}
 
+	Handle<TextureCube> ResourceManager::CreateTextureCube(ImageFormat format, uint32_t width, uint32_t height, TextureProperties properties, const void* data)
+	{
+		return s_RMData->TexturesCube.Emplace(format, width, height, properties, data);
+	}
+	
+	void ResourceManager::DestroyTextureCube(const Handle<TextureCube> handle)
+	{
+		s_RMData->TexturesCube.Remove(handle);
+	}
+	
+	TextureCube* ResourceManager::GetTextureCube(const Handle<TextureCube> handle)
+	{
+		return s_RMData->TexturesCube.Get(handle);
+	}
+
 	Handle<RenderTargetTexture> ResourceManager::CreateRenderTarget(const RenderTargetProperties& prop)
 	{
 		return s_RMData->RenderTargets.Emplace(prop);
@@ -273,6 +292,21 @@ namespace cerberus
 	GraphicsPipeline* ResourceManager::GetGraphicsPipeline(const Handle<GraphicsPipeline> handle)
 	{
 		return s_RMData->GraphicsPipelines.Get(handle);
+	}
+
+	Handle<RayTracingPipeline> ResourceManager::CreateRayTracingPipeline(const PipelineSpecification& pipelineSpec)
+	{
+		return s_RMData->RayTracingPipelines.Emplace(pipelineSpec);
+	}
+
+	void ResourceManager::DestroyRayTracingPipeline(const Handle<RayTracingPipeline> handle)
+	{
+		s_RMData->RayTracingPipelines.Remove(handle);
+	}
+
+	RayTracingPipeline* ResourceManager::GetRayTracingPipeline(const Handle<RayTracingPipeline> handle)
+	{
+		return s_RMData->RayTracingPipelines.Get(handle);
 	}
 
 	void ResourceManager::ResetDescriptorPool()

@@ -36,6 +36,8 @@ IncludeDir["VulkanSDK"] = "%{VULKAN_SDK}/Include"
 IncludeDir["assimp"] = "%{wks.location}/Cerberus/vendor/assimp/include"
 IncludeDir["entt"] = "%{wks.location}/Cerberus/vendor/entt/include"
 IncludeDir["stb"] = "%{wks.location}/Cerberus/vendor/stb/include"
+IncludeDir["shaderc_util"] = "%{wks.location}/Cerberus/vendor/shaderc/libshaderc_util/include"
+IncludeDir["shaderc"] = "%{wks.location}/Cerberus/vendor/shaderc/include"
 
 LibraryDir = {}
 

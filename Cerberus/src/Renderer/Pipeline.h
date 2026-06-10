@@ -72,4 +72,40 @@ namespace cerberus
 		VkPipelineCache m_PipelineCache = nullptr;
 		VkPipeline m_Pipeline = nullptr;
 	};
+
+	class RayTracingPipeline
+	{
+	public:
+		RayTracingPipeline(const PipelineSpecification& spec);
+		virtual ~RayTracingPipeline();
+
+		PipelineSpecification& GetSpecification() { return m_Specification; }
+		const PipelineSpecification& GetSpecification() const { return m_Specification; }
+
+		void Invalidate();
+
+		VkPipeline GetHandle() { return m_rtPipeline; }
+		VkPipelineLayout GetVulkanPipelineLayout() { return m_rtPipelineLayout; }
+
+		uint32_t RayGenShaderIndex() const { return m_RayGenIndex; }
+		uint32_t MissShaderIndex() const { return m_MissHitIndex; }
+		uint32_t TriangleHitGroupIndex() const { return m_TriangleHitIndex; }
+	private:
+		PipelineSpecification m_Specification;
+
+		VkPipelineLayout m_rtPipelineLayout = nullptr;
+		VkPipelineCache m_rtPipelineCache = nullptr;
+		VkPipeline m_rtPipeline = nullptr;
+
+		uint32_t m_RayGenIndex, m_MissHitIndex, m_TriangleHitIndex;
+	};
+
+
+
+
+
+
+
+
+
 }

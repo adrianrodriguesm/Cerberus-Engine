@@ -3,6 +3,7 @@
 #include "Renderer/ResourceManager.h"
 #include "Renderer/RendererContext.h"
 #include "Renderer/RenderQueueManager.h"
+#include "Renderer/AccelerationStructure.h"
 namespace cerberus
 {
 	bool BindGroupLayout::BindGroupLayoutInfo::operator==(const BindGroupLayoutInfo& other) const
@@ -60,6 +61,16 @@ namespace cerberus
 		const uint32_t framesInFlight = ResourceManager::GetFramesInFlight();
 		m_WriteDescriptors.resize(framesInFlight);
         std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
+		// Acceleration Structures
+		for (const auto& as : info.AccelerationStructures)
+		{
+			VkDescriptorSetLayoutBinding& layoutBinding = layoutBindings.emplace_back();
+			layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+			layoutBinding.descriptorCount = 1;
+			layoutBinding.stageFlags = as.ShaderStage;
+			layoutBinding.pImmutableSamplers = nullptr;
+			layoutBinding.binding = as.BindingPoint;
+		}
 		// Uniform Buffers
 		for (const auto& uniformBuffer : info.UniformBuffers)
 		{
@@ -120,12 +131,13 @@ namespace cerberus
 		layoutInfo.bindingCount = (uint32_t)(layoutBindings.size());
 		layoutInfo.pBindings = layoutBindings.data();
 
-		NV_CORE_INFO("Creating descriptor set {0} with {1} ubo's, {2} ssbo's, {3} samplers and {4} storage images", 
+		NV_CORE_INFO("Creating descriptor set {0} with {1} ubo's, {2} ssbo's, {3} samplers, {4} storage images, and {5} acceleration structures", 
 			info.Set,
 			info.UniformBuffers.size(),
 			info.StorageBuffers.size(),
 			info.ImageSamplers.size(),
-			info.ImageStorages.size());
+			info.ImageStorages.size(),
+			info.AccelerationStructures.size());
 
 		// Otherwise create a new one (not found)
 		VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
@@ -232,6 +244,29 @@ namespace cerberus
 				if (writeDescriptor.dstBinding == bindingPoint)
 				{
 					writeDescriptor.pImageInfo = &imgView->GetImageDescriptorInfo();
+				}
+			}
+		}
+	}
+
+	void BindGroup::SetAccelerationStructure(const Handle<AccelerationStructure> asHandle, uint32_t bindingPoint)
+	{
+		AccelerationStructure* accelerationStructure = ResourceManager::GetAccelerationStructure(asHandle);
+		uint32_t framesInFlight = ResourceManager::GetRendererConfig().FramesInFlight;
+
+		for (uint32_t frameIndex = 0; frameIndex < framesInFlight; frameIndex++)
+		{
+			auto& writeDescriptors = m_WriteDescriptors[frameIndex];
+			for (auto& writeDescriptor : writeDescriptors)
+			{
+				if (writeDescriptor.dstBinding == bindingPoint)
+				{
+					VkAccelerationStructureKHR vulkanAS = accelerationStructure->GetVulkanAStructure();
+					VkWriteDescriptorSetAccelerationStructureKHR asWriteDescriptor{ VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR };
+					asWriteDescriptor.pAccelerationStructures = &vulkanAS;
+					asWriteDescriptor.accelerationStructureCount = 1;
+					writeDescriptor.pNext = &asWriteDescriptor;
+
 				}
 			}
 		}

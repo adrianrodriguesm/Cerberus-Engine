@@ -169,6 +169,7 @@ namespace cerberus
 
 	void MeshSource::LoadMaterials()
 	{
+#if OLD_RENDERER
 		if (!m_Properties.SubmeshMaterials.empty())
 		{
 			for (uint32_t submeshIndex = 0; submeshIndex < m_Properties.SubmeshMaterials.size(); submeshIndex++)
@@ -178,7 +179,7 @@ namespace cerberus
 				Ref<MaterialAsset> materialAsset = AssetManager::GetAsset<MaterialAsset>(materialHandle);
 				if (materialAsset)
 				{
-					if(materialIndex >= m_MaterialsAsset.size())
+					if (materialIndex >= m_MaterialsAsset.size())
 						m_MaterialsAsset.resize(materialIndex + 1);
 
 					m_MaterialsAsset[materialIndex] = materialAsset;
@@ -195,7 +196,7 @@ namespace cerberus
 		}
 		else
 		{
-			Ref<Texture2D> whiteTexture = Renderer::GetWhiteTexture();
+			Handle<Texture2D> whiteTexture = Renderer::GetWhiteTexture();
 			if (m_Scene->HasMaterials())
 			{
 				m_MaterialsAsset.resize(m_Scene->mNumMaterials);
@@ -203,7 +204,7 @@ namespace cerberus
 				for (uint32_t i = 0; i < m_Scene->mNumMaterials; i++)
 				{
 					auto aiMaterial = m_Scene->mMaterials[i];
-					std::string aiMaterialName = aiMaterial->GetName().C_Str(); 
+					std::string aiMaterialName = aiMaterial->GetName().C_Str();
 					aiMaterialName = (aiMaterialName == "") ? std::to_string(i) : aiMaterialName;
 					std::string filename = meshSourceName + "_" + aiMaterialName;
 					Ref<Material> material = CreateRef<Material>(m_MeshShader, filename);
@@ -386,6 +387,8 @@ namespace cerberus
 				}
 			}
 		}
+#endif
+
 	}
 
 	////////////////////////////////////////////////////////

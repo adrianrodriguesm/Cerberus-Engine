@@ -26,11 +26,10 @@ namespace cerberus
 		m_Window->SetEventCallback(BIND_EVENT_FN(Application::OnEvent));
 		Log::Init();
 		m_Window->Init();
-		RenderQueueManager::Init();
-		ResourceManager::Init();
 		Renderer::Init();
 		AssetManager::Init();
 	}
+
 	Application::~Application()
 	{
 		for (Layer* layer : m_LayerStack)
@@ -39,9 +38,7 @@ namespace cerberus
 			delete layer;
 		}
 
-		ResourceManager::Shutdown();
 		Renderer::Shutdown();
-		RenderQueueManager::ShutDown();
 		AssetManager::Shutdown();
 		m_Window->Shutdown();
 		

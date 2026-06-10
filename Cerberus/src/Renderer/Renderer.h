@@ -77,7 +77,7 @@ namespace cerberus
 		static ShaderLibrary& GetShaderLibrary();
 		static Ref<RendererContext> GetRenderContext();
 		static VkPhysicalDeviceLimits GetDeviceLimits();
-		static Ref<Texture2D> GetWhiteTexture();
+		static Handle<Texture2D> GetWhiteTexture();
 		static Ref<MaterialAsset> GetDefaultPBRMaterial();
 		static Ref<EnvironmentMap> GetEmptyEnvironmentMap();
 		static VkDescriptorSetLayout CreateDescriptorSetLayout(VkDescriptorSetLayoutCreateInfo* info);
