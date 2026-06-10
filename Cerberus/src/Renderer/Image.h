@@ -57,6 +57,10 @@ namespace cerberus
 	{
 	public:
 		Image(const ImageSpecification& specification);
+		Image(Image&& other) noexcept;
+		Image(const Image&) = delete;
+		Image& operator=(const Image&) = delete;
+		Image& operator=(Image&&) = delete;
 		~Image();
 
 		void Invalidate();
@@ -175,6 +179,10 @@ namespace cerberus
 	{
 	public:
 		ImageView(const ImageViewProperties& imgViewProp);
+		ImageView(ImageView&& other) noexcept;
+		ImageView(const ImageView&) = delete;
+		ImageView& operator=(const ImageView&) = delete;
+		ImageView& operator=(ImageView&&) = delete;
 		~ImageView();
 
 		void Release();
