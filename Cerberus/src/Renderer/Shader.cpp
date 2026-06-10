@@ -787,7 +787,7 @@ namespace cerberus
 		for (auto& [stage, shaderSource] : shaderSources)
 		{
 			shaderc::CompileOptions options;
-
+			options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_2);
 
 			// Deleted by shaderc and created per stage
 			GLSLIncludeProcessor* includer = new GLSLIncludeProcessor(&fileFinder);
