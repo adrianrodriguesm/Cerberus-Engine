@@ -46,6 +46,10 @@ namespace cerberus
 
 	public:
 		BindGroupLayout(const BindGroupLayoutInfo& info);
+		BindGroupLayout(BindGroupLayout&& other) noexcept;
+		BindGroupLayout(const BindGroupLayout&) = delete;
+		BindGroupLayout& operator=(const BindGroupLayout&) = delete;
+		BindGroupLayout& operator=(BindGroupLayout&&) = delete;
 		~BindGroupLayout();
 
 		const BindGroupLayoutInfo& GetLayoutInfo() const { return m_Info; }

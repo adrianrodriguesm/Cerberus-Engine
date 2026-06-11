@@ -56,6 +56,10 @@ namespace cerberus
 	{
 	public:
 		GraphicsPipeline(PipelineSpecification spec);
+		GraphicsPipeline(GraphicsPipeline&& other) noexcept;
+		GraphicsPipeline(const GraphicsPipeline&) = delete;
+		GraphicsPipeline& operator=(const GraphicsPipeline&) = delete;
+		GraphicsPipeline& operator=(GraphicsPipeline&&) = delete;
 		virtual ~GraphicsPipeline();
 
 		PipelineSpecification& GetSpecification() { return m_Specification; }

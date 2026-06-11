@@ -111,6 +111,18 @@ namespace cerberus
 			m_ImageData.Release();
 	}
 
+	Texture2D::Texture2D(Texture2D&& other) noexcept
+		: m_Properties(std::move(other.m_Properties))
+		, m_ImageData(other.m_ImageData)
+		, m_Image(other.m_Image)
+		, m_ImageView(other.m_ImageView)
+		, m_TextureAsset(other.m_TextureAsset)
+	{
+		other.m_ImageData = Buffer{};
+		other.m_Image = Handle<Image>{};
+		other.m_ImageView = Handle<ImageView>{};
+	}
+
 
 	ImageFormat Texture2D::GetFormat() const
 	{
@@ -422,6 +434,22 @@ namespace cerberus
 		Release();
 	}
 
+	TextureCube::TextureCube(TextureCube&& other) noexcept
+		: m_Format(other.m_Format)
+		, m_Width(other.m_Width)
+		, m_Height(other.m_Height)
+		, m_Properties(std::move(other.m_Properties))
+		, m_MipsLevels(other.m_MipsLevels)
+		, m_Image(other.m_Image)
+		, m_ImageView(other.m_ImageView)
+		, m_TextureAsset(other.m_TextureAsset)
+		, m_ImageData(other.m_ImageData)
+	{
+		other.m_Image = Handle<Image>{};
+		other.m_ImageView = Handle<ImageView>{};
+		other.m_ImageData = Buffer{};
+	}
+
 	void TextureCube::Release()
 	{
 		NV_CORE_WARN("TextureCube::Release ImageView ({1})", m_Properties.DebugName);
@@ -619,7 +647,7 @@ namespace cerberus
 		/////////////////////////////////////////////////
 		////// Create Image View
 		/////////////////////////////////////////////////
-		//  Cube map is in Vulkan – a 2D image with 6 different layers interpreted 
+		//  Cube map is in Vulkan ï¿½ a 2D image with 6 different layers interpreted 
 		//							as a cube through an image view.
 		VkImageViewCreateInfo imageViewCreateInfo = {};
 		imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -911,6 +939,15 @@ namespace cerberus
 		: m_Properties(rtProp)
 	{
 		Invalidate();
+	}
+
+	RenderTargetTexture::RenderTargetTexture(RenderTargetTexture&& other) noexcept
+		: m_Image(other.m_Image)
+		, m_ImageView(other.m_ImageView)
+		, m_Properties(std::move(other.m_Properties))
+	{
+		other.m_Image = Handle<Image>{};
+		other.m_ImageView = Handle<ImageView>{};
 	}
 
 	RenderTargetTexture::~RenderTargetTexture()

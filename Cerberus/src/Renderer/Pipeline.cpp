@@ -74,6 +74,17 @@ namespace cerberus
 		Invalidate();
 	}
 
+	GraphicsPipeline::GraphicsPipeline(GraphicsPipeline&& other) noexcept
+		: m_Specification(std::move(other.m_Specification))
+		, m_PipelineLayout(other.m_PipelineLayout)
+		, m_PipelineCache(other.m_PipelineCache)
+		, m_Pipeline(other.m_Pipeline)
+	{
+		other.m_Pipeline = nullptr;
+		other.m_PipelineLayout = nullptr;
+		other.m_PipelineCache = nullptr;
+	}
+
 	GraphicsPipeline::~GraphicsPipeline()
 	{
 		VkPipeline pipeline = m_Pipeline;
