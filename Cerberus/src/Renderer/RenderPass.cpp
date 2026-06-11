@@ -62,6 +62,12 @@ namespace cerberus
 	{
 		Invalidate();
 	}
+	RenderPass::RenderPass(RenderPass&& other) noexcept
+		: m_Specification(std::move(other.m_Specification))
+		, m_RenderPass(other.m_RenderPass)
+	{
+		other.m_RenderPass = VK_NULL_HANDLE;
+	}
 	RenderPass::~RenderPass()
 	{
 		RenderQueueManager::SubmitResourceFree([renderPass = m_RenderPass]()

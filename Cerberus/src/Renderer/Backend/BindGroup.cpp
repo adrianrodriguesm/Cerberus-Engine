@@ -154,6 +154,14 @@ namespace cerberus
 		
     }
 
+	BindGroupLayout::BindGroupLayout(BindGroupLayout&& other) noexcept
+		: m_Info(std::move(other.m_Info))
+		, m_WriteDescriptors(std::move(other.m_WriteDescriptors))
+		, m_DescriptorSetLayout(other.m_DescriptorSetLayout)
+	{
+		other.m_DescriptorSetLayout = VK_NULL_HANDLE;
+	}
+
 	BindGroup::BindGroup(const BindGroupSpecification& spec)
 		: m_BindGroupLayout(spec.BindGroupLayout), m_Persistent(spec.Persistent)
 	{

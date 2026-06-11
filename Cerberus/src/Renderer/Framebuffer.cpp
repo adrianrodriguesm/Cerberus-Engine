@@ -44,6 +44,18 @@ namespace cerberus
 
 		Invalidate();
 	}
+	Framebuffer::Framebuffer(Framebuffer&& other) noexcept
+		: m_Specification(std::move(other.m_Specification))
+		, m_Width(other.m_Width)
+		, m_Height(other.m_Height)
+		, m_RenderTargets(std::move(other.m_RenderTargets))
+		, m_DepthRenderTargets(other.m_DepthRenderTargets)
+		, m_ClearValues(std::move(other.m_ClearValues))
+		, m_Framebuffer(other.m_Framebuffer)
+	{
+		other.m_DepthRenderTargets = Handle<RenderTargetTexture>{};
+		other.m_Framebuffer = nullptr;
+	}
 	Framebuffer::~Framebuffer()
 	{
 		// RenderTargets

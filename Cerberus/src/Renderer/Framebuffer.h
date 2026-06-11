@@ -17,6 +17,10 @@ namespace cerberus
 	{
 	public:
 		Framebuffer(const FramebufferSpecification& spec);
+		Framebuffer(Framebuffer&& other) noexcept;
+		Framebuffer(const Framebuffer&) = delete;
+		Framebuffer& operator=(const Framebuffer&) = delete;
+		Framebuffer& operator=(Framebuffer&&) = delete;
 		~Framebuffer();
 
 		void Resize(uint32_t width, uint32_t height, bool forceRecreate = false);

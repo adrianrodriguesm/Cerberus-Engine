@@ -582,6 +582,15 @@ namespace cerberus
 		ext::vkCreateAccelerationStructureKHR(RendererContext::GetCurrentVulkanDevice(), &createInfo, nullptr, &m_AStructure);
 	}
 
+	AccelerationStructure::AccelerationStructure(AccelerationStructure&& other) noexcept
+		: m_ASType(other.m_ASType)
+		, m_ASBuffer(other.m_ASBuffer)
+		, m_AStructure(other.m_AStructure)
+	{
+		other.m_ASBuffer = Handle<GPUBuffer>{};
+		other.m_AStructure = VK_NULL_HANDLE;
+	}
+
 	AccelerationStructure::~AccelerationStructure()
 	{
 		VkDevice device = RendererContext::GetCurrentVulkanDevice();

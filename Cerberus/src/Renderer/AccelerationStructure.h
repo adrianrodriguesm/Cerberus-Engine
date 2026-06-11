@@ -29,6 +29,10 @@ namespace cerberus
 	{
 	public:
 		AccelerationStructure(const AccelerationStructureSpecification& asSpecification);
+		AccelerationStructure(AccelerationStructure&& other) noexcept;
+		AccelerationStructure(const AccelerationStructure&) = delete;
+		AccelerationStructure& operator=(const AccelerationStructure&) = delete;
+		AccelerationStructure& operator=(AccelerationStructure&&) = delete;
 		~AccelerationStructure();
 
 		VkDeviceAddress GetDeviceAddress() const;

@@ -34,6 +34,10 @@ namespace cerberus
 	{
 	public:
 		Texture2D(ImageFormat format, const uint32_t width, const uint32_t height, const void* data, TextureProperties properties = {});
+		Texture2D(Texture2D&& other) noexcept;
+		Texture2D(const Texture2D&) = delete;
+		Texture2D& operator=(const Texture2D&) = delete;
+		Texture2D& operator=(Texture2D&&) = delete;
 		virtual ~Texture2D();
 
 
@@ -68,6 +72,10 @@ namespace cerberus
 	{
 	public:
 		TextureCube(ImageFormat format, uint32_t width, uint32_t height, TextureProperties properties = TextureProperties(), const void* data = nullptr);
+		TextureCube(TextureCube&& other) noexcept;
+		TextureCube(const TextureCube&) = delete;
+		TextureCube& operator=(const TextureCube&) = delete;
+		TextureCube& operator=(TextureCube&&) = delete;
 		virtual ~TextureCube();
 
 		void Release();
@@ -126,6 +134,10 @@ namespace cerberus
 	{
 	public:
 		RenderTargetTexture(const RenderTargetProperties& rtProp);
+		RenderTargetTexture(RenderTargetTexture&& other) noexcept;
+		RenderTargetTexture(const RenderTargetTexture&) = delete;
+		RenderTargetTexture& operator=(const RenderTargetTexture&) = delete;
+		RenderTargetTexture& operator=(RenderTargetTexture&&) = delete;
 		virtual ~RenderTargetTexture();
 
 		void Release();

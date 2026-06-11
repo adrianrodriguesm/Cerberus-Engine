@@ -28,6 +28,15 @@ namespace cerberus
 		IndexBuffer*  IndexBuffer;
 		std::vector<SubmeshSourceProxy> Submeshes;
 
+		MeshSourceProxy(MeshSourceProxy&& other) noexcept
+			: VertexBuffer(other.VertexBuffer)
+			, IndexBuffer(other.IndexBuffer)
+			, Submeshes(std::move(other.Submeshes))
+		{
+			other.VertexBuffer = nullptr;
+			other.IndexBuffer = nullptr;
+		}
+
 		MeshSourceProxy(const void* vertexData, uint32_t vertexSize, const void* indexData, uint32_t indexSize, const std::vector<Submesh> submeshes)
 		{
 			VertexBuffer = new cerberus::VertexBuffer(vertexData, vertexSize);
