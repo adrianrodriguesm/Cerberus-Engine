@@ -51,6 +51,16 @@ namespace cerberus
 		Allocation = allocator.AllocateBuffer(bufferCreateInfo, bufferSpec.MemoryUsage, Buffer);
 	}
 
+	GPUBuffer::GPUBuffer(GPUBuffer&& other) noexcept
+		: Buffer(other.Buffer)
+		, Size(other.Size)
+		, Allocation(other.Allocation)
+		, DebugName(std::move(other.DebugName))
+	{
+		other.Buffer = VK_NULL_HANDLE;
+		other.Allocation = VK_NULL_HANDLE;
+	}
+
 	GPUBuffer::~GPUBuffer()
 	{
 		if (!Buffer || !Allocation)
@@ -64,7 +74,8 @@ namespace cerberus
 			allocator.DestroyBuffer(buffer, allocation);
 		});
 		
-		Buffer = nullptr;
+		Buffer = VK_NULL_HANDLE;
+		Allocation = VK_NULL_HANDLE;
 	}
 
 	VkDeviceAddress GPUBuffer::GetDeviceAddress() const

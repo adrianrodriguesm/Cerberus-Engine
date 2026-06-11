@@ -66,6 +66,16 @@ namespace cerberus
 	{
 	}
 
+	Image::Image(Image&& other) noexcept
+		: m_Specification(std::move(other.m_Specification))
+		, m_Image(other.m_Image)
+		, m_MemoryAlloc(other.m_MemoryAlloc)
+		, m_CurrentImgLayout(other.m_CurrentImgLayout)
+	{
+		other.m_Image = VK_NULL_HANDLE;
+		other.m_MemoryAlloc = VK_NULL_HANDLE;
+	}
+
 	Image::~Image()
 	{
 		if (!m_Image || !m_MemoryAlloc)
@@ -78,7 +88,8 @@ namespace cerberus
 			allocator.DestroyImage(image, memoryAlloc);
 		});
 
-		m_Image = nullptr;
+		m_Image = VK_NULL_HANDLE;
+		m_MemoryAlloc = VK_NULL_HANDLE;
 	}
 
 
@@ -289,6 +300,16 @@ namespace cerberus
 
 	}
 
+	ImageView::ImageView(ImageView&& other) noexcept
+		: m_Properties(std::move(other.m_Properties))
+		, m_ImageView(other.m_ImageView)
+		, m_Sampler(other.m_Sampler)
+		, m_DescriptorImageInfo(other.m_DescriptorImageInfo)
+	{
+		other.m_ImageView = VK_NULL_HANDLE;
+		other.m_Sampler = VK_NULL_HANDLE;
+	}
+
 	ImageView::~ImageView()
 	{
 		if (!m_ImageView)
@@ -303,8 +324,8 @@ namespace cerberus
 			if (sampler)
 				vkDestroySampler(vulkanDevice, sampler, nullptr);
 		});
-		m_ImageView = nullptr;
-		m_Sampler = nullptr;
+		m_ImageView = VK_NULL_HANDLE;
+		m_Sampler = VK_NULL_HANDLE;
 	}
 
 	void ImageView::UpdateDescriptor()

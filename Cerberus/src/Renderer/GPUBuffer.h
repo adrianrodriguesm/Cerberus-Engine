@@ -38,6 +38,10 @@ namespace cerberus
 		std::string DebugName = "None";
 
 		GPUBuffer(const GPUBufferSpecification& bufferSpec);
+		GPUBuffer(GPUBuffer&& other) noexcept;
+		GPUBuffer(const GPUBuffer&) = delete;
+		GPUBuffer& operator=(const GPUBuffer&) = delete;
+		GPUBuffer& operator=(GPUBuffer&&) = delete;
 		~GPUBuffer();
 
 		VkDeviceAddress GetDeviceAddress() const;
