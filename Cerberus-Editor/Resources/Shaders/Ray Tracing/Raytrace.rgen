@@ -9,8 +9,10 @@ layout(rgba32f, set = 0, binding = 16) writeonly uniform image2D image;
 
 void main()
 {
-  // Just paint solid red; do not trace rays, do not use payload or uniforms
-  imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(1.0, 0.0, 0.0, 1.0));
+    ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
+    vec2 uv = vec2(gl_LaunchIDEXT.xy) / vec2(gl_LaunchSizeEXT.xy);
+
+    imageStore(image, pixel, vec4(uv.x, uv.y, 0.0, 1.0));
 }
 
 #type closestHit

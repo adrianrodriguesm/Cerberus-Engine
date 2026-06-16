@@ -84,6 +84,14 @@ namespace cerberus
 		void Update();
 
 		VkDescriptorSet GetHandle(uint32_t frameIndex);
+	private: 
+		struct AccelerationStructureDescriptorState
+		{
+			VkAccelerationStructureKHR AccelerationStructure = VK_NULL_HANDLE;
+			VkWriteDescriptorSetAccelerationStructureKHR WriteInfo{};
+		};
+
+		std::vector<std::vector<AccelerationStructureDescriptorState>> m_AccelerationStructureDescriptorStates;
 	private:
 		Handle<BindGroupLayout> m_BindGroupLayout;
 		std::vector<VkDescriptorSet> m_Descriptors;

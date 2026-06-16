@@ -10,6 +10,20 @@
 // TODO: Remove these to (only for test)
 #include "Renderer/ShaderCompiler.h"
 #include "Renderer/TextureAsset.h"
+namespace
+{
+	// Temporary mode used to isolate the Vulkan RT smoke test.
+	// Keep the old raster/mesh/AS mechanisms in the file, but do not execute them
+	// while we validate the minimal RT path.
+	static constexpr bool RT_SMOKE_TEST = true;
+	static constexpr bool ENABLE_RASTER_TEST_PATH = !RT_SMOKE_TEST;
+	static constexpr bool ENABLE_ACCELERATION_STRUCTURES = false;
+
+	// Current Raytrace.rgen was using binding 16.
+	// If you simplify the shader to binding 0, change this constant to 0.
+	static constexpr uint32_t RT_OUTPUT_BINDING = 16;
+	static constexpr bool RT_RAYGEN_ONLY = true;
+}
 namespace cerberus
 {
 	/** /
@@ -21,191 +35,68 @@ namespace cerberus
 	/**/
 	PathTracerSceneRenderer::PathTracerSceneRenderer(Ref<Scene> scene, const SceneRendererSpecification& spec)
 	{
+		(void)scene;
+
 		m_Specification = spec;
 		m_ViewportResolution = spec.Resolution;
 		if (m_ViewportResolution.x <= 0 || m_ViewportResolution.y <= 0)
 			m_ViewportResolution = { 1920, 1080 };
 
+		// ---------------------------------------------------------------------
+		// RT SMOKE TEST PATH
+		// ---------------------------------------------------------------------
+		// Goal: keep only the data required to validate that Vulkan RT can write
+		// to a storage image and expose that image as the final renderer output.
+		//
+		// Intentionally disabled while RT_SMOKE_TEST is true:
+		// - raster test pass
+		// - Ronaldo texture test
+		// - camera/material UBOs for the raster path
+		// - BLAS/TLAS builds
+		// - mesh rendering
+		// ---------------------------------------------------------------------
+
 		auto& shaderLibrary = Renderer::GetShaderLibrary();
 		shaderLibrary.Load("Resources/Shaders/Ray Tracing/Raytrace.rgen", true);
 
 		RenderQueueManager::ExecuteRenderQueue();
-		// Pipeline, RenderPass, Framebuffer, and BindGroup/BindGroupLayout creation
+
+		// RT bind group layout reflected from Raytrace.rgen set 0.
 		{
-			// Render Pass
-			RenderPassSpecification renderPassSpec;
-			renderPassSpec.DebugName = "RayTraceTest";
-			renderPassSpec.Attachments = { {.DebugName = "ColorAttachment", .Format = ImageFormat::RGBA,
-											.LoadOP = LOAD_OP::CLEAR, .StoreOP = STORE_OP::STORE,
-											.BlendEnabled = false, .IsRenderTarget = true }, 
-											{.DebugName = "DepthAttachment", .Format = ImageFormat::DEPTH24STENCIL8,
-											.LoadOP = LOAD_OP::CLEAR, .StoreOP = STORE_OP::STORE,
-											.BlendEnabled = false, .IsRenderTarget = true } };
+			Ref<Shader> rtShader = Renderer::GetShaderLibrary().Get("Raytrace");
+			BindGroupLayout::BindGroupLayoutInfo layoutInfoRT = ShaderReflection::ReflectLayoutInfo(rtShader, 0);
+			m_RT_BindGroupLayout = ResourceManager::CreateBindGroupLayout(layoutInfoRT);
 
-			m_RenderPass = ResourceManager::CreateRenderPass(renderPassSpec);
+			BindGroupSpecification bindGroupRTSpec;
+			bindGroupRTSpec.BindGroupLayout = m_RT_BindGroupLayout;
+			bindGroupRTSpec.Persistent = false;
+			m_RT_BindGroup = ResourceManager::CreateBindGroup(bindGroupRTSpec);
+		}
 
+		// RT pipeline.
+		{
+			PipelineSpecification rtPipelineSpec;
+			rtPipelineSpec.DebugName = "RayTrace";
+			rtPipelineSpec.Shader = Renderer::GetShaderLibrary().Get("Raytrace");
+			rtPipelineSpec.CullMode = CullMode::Back;
+			rtPipelineSpec.DepthOperator = DepthCompareOperator::LessOrEqual;
+			m_RT_Pipeline = ResourceManager::CreateRayTracingPipeline(rtPipelineSpec);
+		}
 
-			// Pipeline
-			PipelineSpecification pipelineSpec;
-			pipelineSpec.DebugName = "RayTraceTest";
-			Ref<Shader> shader = Renderer::GetShaderLibrary().Get("RayTraceTest");
-			pipelineSpec.Shader = shader;
-			pipelineSpec.Layout = { { ShaderDataType::Float3, "a_Position"	},
-									{ ShaderDataType::Float3, "a_Normal"	},
-									{ ShaderDataType::Float3, "a_Tangent"	},
-
-									{ ShaderDataType::Float3, "a_Binormal"	},
-									{ ShaderDataType::Float2, "a_TexCoord"	}, };
-			pipelineSpec.CullMode = CullMode::Back;
-			pipelineSpec.DepthOperator = DepthCompareOperator::LessOrEqual;
-			// -- Render to the same target texture as the geometry pass
-			pipelineSpec.RenderPass = m_RenderPass;
-			m_Pipeline = ResourceManager::CreateGraphicsPipeline(pipelineSpec);
-
-			// SET 0
-			// BindGroup/BindGroupLayout
-			BindGroupLayout::BindGroupLayoutInfo layoutInfo0 = ShaderReflection::ReflectLayoutInfo(shader, 0);
-			m_BindGroup0Layout = ResourceManager::CreateBindGroupLayout(layoutInfo0);
-
-
-			BindGroupSpecification bindGroup0Spec;
-			bindGroup0Spec.BindGroupLayout = m_BindGroup0Layout;
-			bindGroup0Spec.Persistent = false;
-			m_BindGroup0 = ResourceManager::CreateBindGroup(bindGroup0Spec);
-
-			// SET 1
-			// BindGroup/BindGroupLayout
-			BindGroupLayout::BindGroupLayoutInfo layoutInfo1 = ShaderReflection::ReflectLayoutInfo(shader, 1);
-			m_BindGroup1Layout = ResourceManager::CreateBindGroupLayout(layoutInfo1);
-
-			BindGroupSpecification bindGroup1Spec;
-			bindGroup1Spec.BindGroupLayout = m_BindGroup1Layout;
-			bindGroup1Spec.Persistent = false;
-			m_BindGroup1 = ResourceManager::CreateBindGroup(bindGroup1Spec);
-
-			// SET 2 – RT output image + bind group reflected from the Raytrace shader (set 0)
-			{
-				Ref<Shader> rtShader = Renderer::GetShaderLibrary().Get("Raytrace");
-
-				BindGroupLayout::BindGroupLayoutInfo layoutInfoRT = ShaderReflection::ReflectLayoutInfo(rtShader, 0);
-				m_RT_BindGroupLayout = ResourceManager::CreateBindGroupLayout(layoutInfoRT);
-
-				BindGroupSpecification bindGroupRTSpec;
-				bindGroupRTSpec.BindGroupLayout = m_RT_BindGroupLayout;
-				bindGroupRTSpec.Persistent = false;
-				m_RT_BindGroup = ResourceManager::CreateBindGroup(bindGroupRTSpec);
-			}
-
-			// RT Pipeline
-			PipelineSpecification rt_pipelineSpec;
-			rt_pipelineSpec.DebugName = "RayTrace";
-			rt_pipelineSpec.Shader = Renderer::GetShaderLibrary().Get("Raytrace");
-			rt_pipelineSpec.CullMode = CullMode::Back;
-			rt_pipelineSpec.DepthOperator = DepthCompareOperator::LessOrEqual;
-			m_RT_Pipeline = ResourceManager::CreateRayTracingPipeline(rt_pipelineSpec);
-
+		// Shader Binding Table.
+		// For the smoke test the shader should only use raygen. Miss/hit groups can
+		// stay allocated by the existing SBT system, but FlushRenderPasses can pass
+		// empty miss/hit regions while RT_RAYGEN_ONLY is enabled.
+		{
 			ShaderBindingTableSpecification sbtSpec;
-			sbtSpec.RayGenPrograms = { {0 , {}} };
-			sbtSpec.MissPrograms = { {1 , {}} };
-			sbtSpec.HitPrograms = { {2 , {}} };
+			sbtSpec.RayGenPrograms = { { 0, {} } };
+			sbtSpec.MissPrograms = { { 1, {} } };
+			sbtSpec.HitPrograms = { { 2, {} } };
 			sbtSpec.Pipeline = m_RT_Pipeline;
 			m_ShaderBindingTable = CreateScope<ShaderBindingTable>(sbtSpec);
-
-			// Framebuffer
-			FramebufferSpecification preDepthFramebufferSpec;
-			preDepthFramebufferSpec.DebugName = "RayTrace Framebuffer";
-			preDepthFramebufferSpec.RenderPass = m_RenderPass;
-			preDepthFramebufferSpec.Width = m_ViewportResolution.x;
-			preDepthFramebufferSpec.Height = m_ViewportResolution.y;
-
-			RenderTargetProperties rtPropertiesColor;
-			rtPropertiesColor.DebugName = "Color Target";
-			rtPropertiesColor.Format = ImageFormat::RGBA;
-			rtPropertiesColor.ShaderResource = true;
-			rtPropertiesColor.BaseMip = 0;
-			rtPropertiesColor.MipCount = 1;
-			rtPropertiesColor.BaseLayer = 0;
-			rtPropertiesColor.LayerCount = 1;
-			rtPropertiesColor.Resizable = true;
-			rtPropertiesColor.Height = m_ViewportResolution.y;
-			rtPropertiesColor.Width = m_ViewportResolution.x;
-
-			RenderTargetProperties rtPropertiesDepth;
-			rtPropertiesDepth.DebugName = "Depth Target";
-			rtPropertiesDepth.Format = ImageFormat::DEPTH24STENCIL8;
-			rtPropertiesDepth.ShaderResource = true;
-			rtPropertiesDepth.BaseMip = 0;
-			rtPropertiesDepth.MipCount = 1;
-			rtPropertiesDepth.BaseLayer = 0;
-			rtPropertiesDepth.LayerCount = 1;
-			rtPropertiesDepth.Resizable = true;
-			rtPropertiesDepth.Height = m_ViewportResolution.y;
-			rtPropertiesDepth.Width = m_ViewportResolution.x;
-
-			preDepthFramebufferSpec.RenderTargetsInfo = { rtPropertiesColor, rtPropertiesDepth };
-
-			m_Framebuffer = ResourceManager::CreateFramebuffer(preDepthFramebufferSpec);
 		}
 
-		// Bing group Test
-		{
-			// Texture
-			TextureMetadata texMetadata;
-			texMetadata.FilePath = "Resources/Textures/Ronaldo.jpg";
-
-			m_TextureAsset = CreateScope<TextureAsset>(texMetadata);
-
-			TextureProperties texProp;
-			texProp.GenerateMips = true;
-			m_TextureRonaldo = ResourceManager::CreateTexture2D(m_TextureAsset->GetFormat(), m_TextureAsset->GetWidth(),
-				m_TextureAsset->GetHeight(), m_TextureAsset->GetWriteableBuffer().Data, texProp);
-
-			Texture2D* texture = ResourceManager::GetTexture2D(m_TextureRonaldo);
-
-			// UBO
-			UniformBufferSetSpecification uboSetSpec;
-			uboSetSpec.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
-			uboSetSpec.Size = 100;
-			uboSetSpec.BindingPoint = 2;
-			m_UniformBufferSet = CreateRef<UniformBufferSet>(uboSetSpec);
-
-			uint32_t framesInFlights = ResourceManager::GetFramesInFlight();
-
-			struct RendererData
-			{
-				glm::vec4 Color = glm::vec4(1.f, 1.f, 1.f, 1.f);
-			};
-
-			RendererData data;
-			data.Color = glm::vec4(1.f, 0.f, 0.f, 1.f);
-
-			for (uint32_t frameIndex = 0; frameIndex < framesInFlights; frameIndex++)
-			{
-				Ref<UniformBuffer> ubo = m_UniformBufferSet->Get(frameIndex);
-				ubo->SetData(&data, sizeof(RendererData), 0);
-			}
-
-			// Apply to bind group
-			BindGroup* bindGroup0 = ResourceManager::GetBindGroup(m_BindGroup0);
-			bindGroup0->SetImageView(texture->GetImageView(), 0);
-			bindGroup0->SetUniformBuffer(m_UniformBufferSet, 2);
-
-			// UBO
-			UniformBufferSetSpecification uboSetCamSpec;
-			uboSetCamSpec.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
-			uboSetCamSpec.Size = sizeof(CameraUB);
-			uboSetCamSpec.BindingPoint = 0;
-			m_UniformBufferSetCamera = CreateRef<UniformBufferSet>(uboSetCamSpec);
-
-
-			// SSBO
-			BindGroup* bindGroup1 = ResourceManager::GetBindGroup(m_BindGroup1);
-			bindGroup1->SetUniformBuffer(m_UniformBufferSetCamera, 0);
-		}
-
-		RenderQueueManager::ExecuteRenderQueue();
-
-		// Create the RT output image (storage image, RGBA32F, SAMPLE_COMPATIBLE for ImGui display)
+		// RT output image.
 		{
 			ImageSpecification imgSpec;
 			imgSpec.DebugName = "RT Output";
@@ -216,10 +107,16 @@ namespace cerberus
 			imgSpec.Flags = SAMPLE_COMPATIBLE;
 			imgSpec.Mips = 1;
 			imgSpec.Layers = 1;
+
 			m_RT_OutputImage = ResourceManager::CreateImage(imgSpec);
 			Image* rtImg = ResourceManager::GetImage(m_RT_OutputImage);
+			CORE_ASSERT(rtImg, "Failed to create RT output image");
+
 			rtImg->Invalidate();
-			rtImg->SetLayout(VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
+			rtImg->SetLayout(
+				VK_IMAGE_LAYOUT_GENERAL,
+				VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+				VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
 
 			ImageViewProperties viewProp;
 			viewProp.Image = m_RT_OutputImage;
@@ -228,43 +125,80 @@ namespace cerberus
 			viewProp.BaseLayer = 0;
 			viewProp.LayerCount = 1;
 			viewProp.ViewType = ImageViewType::Image2D;
+
 			SamplerSpecification samplerSpec;
 			samplerSpec.SamplerWrap = SamplerWrap::Clamp;
 			samplerSpec.SamplerFilter = SamplerFilter::Linear;
 			samplerSpec.Anisotropy = false;
-			samplerSpec.MinLOD = 0.f;
-			samplerSpec.MaxLOD = 1.f;
+			samplerSpec.MinLOD = 0.0f;
+			samplerSpec.MaxLOD = 1.0f;
 			samplerSpec.ShaderResource = true;
 			viewProp.SamplerSpec = samplerSpec;
+
 			m_RT_OutputImageView = ResourceManager::CreateImageView(viewProp);
 			ImageView* rtImgView = ResourceManager::GetImageView(m_RT_OutputImageView);
+			CORE_ASSERT(rtImgView, "Failed to create RT output image view");
+
 			rtImgView->Invalidate();
 			rtImgView->UpdateDescriptor();
 
-			// Bind the storage image to the RT bind group at binding point 16
-			// (matches `layout(rgba32f, set=0, binding=16) writeonly uniform image2D image` in Raytrace.rgen)
 			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
-			rtBindGroup->SetImageView(m_RT_OutputImageView, 16);
+			CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
+			rtBindGroup->SetImageView(m_RT_OutputImageView, RT_OUTPUT_BINDING);
 		}
+
+		if constexpr (ENABLE_RASTER_TEST_PATH)
+		{
+			// The old raster test path is intentionally disabled during the RT smoke test.
+			// Re-enable this block later when the minimal RT path is stable.
+			// Keep the existing RegisterMesh/UnregisterMesh/UpdateMeshTransform mechanisms;
+			// they are not deleted, only not used by this isolated path.
+		}
+
+		RenderQueueManager::ExecuteRenderQueue();
 	}
 
 	PathTracerSceneRenderer::~PathTracerSceneRenderer()
 	{
 		if (m_MeshRegister.ASRegisterInfo.TLAS.IsValid())
 			ResourceManager::DestroyAccelerationStructure(m_MeshRegister.ASRegisterInfo.TLAS);
-		ResourceManager::DestroyTexture2D(m_TextureRonaldo);
-		ResourceManager::DestroyFramebuffer(m_Framebuffer);
-		ResourceManager::DestroyGraphicsPipeline(m_Pipeline);
-		ResourceManager::DestroyRayTracingPipeline(m_RT_Pipeline);
-		ResourceManager::DestroyRenderPass(m_RenderPass);
-		ResourceManager::DestroyBindGroup(m_BindGroup0);
-		ResourceManager::DestroyBindGroupLayout(m_BindGroup0Layout);
-		ResourceManager::DestroyBindGroup(m_BindGroup1);
-		ResourceManager::DestroyBindGroupLayout(m_BindGroup1Layout);
-		ResourceManager::DestroyBindGroup(m_RT_BindGroup);
-		ResourceManager::DestroyBindGroupLayout(m_RT_BindGroupLayout);
+
+		if (m_TextureRonaldo.IsValid())
+			ResourceManager::DestroyTexture2D(m_TextureRonaldo);
+
+		if (m_Framebuffer.IsValid())
+			ResourceManager::DestroyFramebuffer(m_Framebuffer);
+
+		if (m_Pipeline.IsValid())
+			ResourceManager::DestroyGraphicsPipeline(m_Pipeline);
+
+		if (m_RT_Pipeline.IsValid())
+			ResourceManager::DestroyRayTracingPipeline(m_RT_Pipeline);
+
+		if (m_RenderPass.IsValid())
+			ResourceManager::DestroyRenderPass(m_RenderPass);
+
+		if (m_BindGroup0.IsValid())
+			ResourceManager::DestroyBindGroup(m_BindGroup0);
+
+		if (m_BindGroup0Layout.IsValid())
+			ResourceManager::DestroyBindGroupLayout(m_BindGroup0Layout);
+
+		if (m_BindGroup1.IsValid())
+			ResourceManager::DestroyBindGroup(m_BindGroup1);
+
+		if (m_BindGroup1Layout.IsValid())
+			ResourceManager::DestroyBindGroupLayout(m_BindGroup1Layout);
+
+		if (m_RT_BindGroup.IsValid())
+			ResourceManager::DestroyBindGroup(m_RT_BindGroup);
+
+		if (m_RT_BindGroupLayout.IsValid())
+			ResourceManager::DestroyBindGroupLayout(m_RT_BindGroupLayout);
+
 		if (m_RT_OutputImageView.IsValid())
 			ResourceManager::DestroyImageView(m_RT_OutputImageView);
+
 		if (m_RT_OutputImage.IsValid())
 			ResourceManager::DestroyImage(m_RT_OutputImage);
 	}
@@ -281,6 +215,8 @@ namespace cerberus
 	void PathTracerSceneRenderer::UpdateUBOData()
 	{
 		uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+
+		if constexpr (ENABLE_RASTER_TEST_PATH)
 		{
 			CameraUB cameraUBO;
 			cameraUBO.Projection = m_SceneData.SceneRendererCamera.Camera.GetProjection();
@@ -288,112 +224,198 @@ namespace cerberus
 			cameraUBO.ViewProjection = cameraUBO.Projection * cameraUBO.View;
 			cameraUBO.InverseView = glm::inverse(cameraUBO.View);
 			cameraUBO.InverseProjection = glm::inverse(cameraUBO.Projection);
-			glm::mat4 inverseViewProjection = cameraUBO.InverseView * cameraUBO.InverseProjection;
-			cameraUBO.InverseViewReverseProjection = cameraUBO.InverseView * glm::inverse(m_SceneData.SceneRendererCamera.Camera.GetReverseProjection());
+			cameraUBO.InverseViewReverseProjection =
+				cameraUBO.InverseView * glm::inverse(m_SceneData.SceneRendererCamera.Camera.GetReverseProjection());
+
 			Ref<UniformBuffer> ubo = m_UniformBufferSetCamera->Get(frameIndex);
 			ubo->SetData(&cameraUBO, sizeof(CameraUB), 0);
+
+			BindGroup* bindGroup1 = ResourceManager::GetBindGroup(m_BindGroup1);
+			bindGroup1->Update(frameIndex);
+
+			BindGroup* bindGroup0 = ResourceManager::GetBindGroup(m_BindGroup0);
+			bindGroup0->Update(frameIndex);
 		}
 
-		// Apply to bind group
-		BindGroup* bindGroup1 = ResourceManager::GetBindGroup(m_BindGroup1);
-		bindGroup1->Update(frameIndex);
-
-		// TODO: This shouldn't be necessary (at least every frame) for set 0
-		BindGroup* bindGroup0 = ResourceManager::GetBindGroup(m_BindGroup0);
-		bindGroup0->Update(frameIndex);
-
 		BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
+		CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
 		rtBindGroup->Update(frameIndex);
-
 	}
 
 	void PathTracerSceneRenderer::FlushRenderPasses()
 	{
-		// Render Frame
 		ResourceManager::ResetDescriptorPool();
-		UpdateUBOData();
+
 		uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
-		CommandBuffer* commnadBuffer = Renderer::GetMainCommandBuffer(m_Specification.SwapChainTarget);
-		commnadBuffer->RT_Begin();
+		UpdateUBOData();
+
+		CommandBuffer* commandBuffer = Renderer::GetMainCommandBuffer(m_Specification.SwapChainTarget);
+		CORE_ASSERT(commandBuffer, "Invalid main command buffer");
+
+		commandBuffer->RT_Begin();
+
+		if constexpr (ENABLE_RASTER_TEST_PATH)
 		{
-			DrawArea drawArea;
-			drawArea.GraphicsPipeline = m_Pipeline;
-			drawArea.Framebuffer = m_Framebuffer;
-			drawArea.BindGroup0 = m_BindGroup0;
-			drawArea.BindGroup1 = m_BindGroup1;
-			drawArea.DrawCount = m_MeshRegister.MeshInstanceCount;
-			Renderer::BeginRenderPass(commnadBuffer, m_RenderPass, drawArea);
-			for (auto& [meshSourceHandle, submeshMap] : m_MeshRegister.MeshInstanceMap)
-			{
-				MeshSourceProxy* meshSource = ResourceManager::GetMeshSourceProxy(meshSourceHandle);
-				Handle<GPUBuffer> hVertexBuffer = meshSource->VertexBuffer->GetGPUBuffer();
-				Handle<GPUBuffer> hIndexBuffer = meshSource->IndexBuffer->GetGPUBuffer();
-				Renderer::SetActiveVertexAndIndexBuffer(commnadBuffer, hVertexBuffer, hIndexBuffer);
-				for (auto& [submeshIndex, meshIntanceList] : submeshMap)
-				{
-					Renderer::RenderMeshInstances(commnadBuffer, drawArea, meshIntanceList);
-				}
-			}
-			Renderer::EndRenderPass(commnadBuffer);
+			// Raster test path intentionally disabled while RT_SMOKE_TEST is true.
 		}
 
-		// Ray tracing dispatch
+		// Ray tracing dispatch: minimal raygen -> storage image smoke test.
 		{
-			VkCommandBuffer cmd = commnadBuffer->GetCommandBuffer(frameIndex);
+			VkCommandBuffer cmd = commandBuffer->GetCommandBuffer(frameIndex);
+
 			RayTracingPipeline* rtPipeline = ResourceManager::GetRayTracingPipeline(m_RT_Pipeline);
 			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
+			GPUBuffer* sbtBuffer = ResourceManager::GetBuffer(m_ShaderBindingTable->GetGPUBuffer());
+
+			CORE_ASSERT(rtPipeline, "Invalid RT pipeline");
+			CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
+			CORE_ASSERT(sbtBuffer, "Invalid SBT buffer");
 
 			const auto& rtProps = RendererContext::GetCurrentDevice()->GetRayTracingProperties();
-			const uint32_t handleSize = rtProps.shaderGroupHandleSize;
 
-			GPUBuffer* sbtBuffer = ResourceManager::GetBuffer(m_ShaderBindingTable->GetGPUBuffer());
+			auto AlignUp = [](VkDeviceSize value, VkDeviceSize alignment)
+				{
+					return (value + alignment - 1) & ~(alignment - 1);
+				};
+
+			const uint32_t handleSize = rtProps.shaderGroupHandleSize;
+			const uint32_t handleAlignment = rtProps.shaderGroupHandleAlignment;
+			const uint32_t baseAlignment = rtProps.shaderGroupBaseAlignment;
+
+			const VkDeviceSize handleSizeAligned = AlignUp(handleSize, handleAlignment);
+
 			VkDeviceAddress sbtBase = sbtBuffer->GetDeviceAddress();
+			CORE_ASSERT(sbtBase != 0, "Invalid SBT device address");
 
 			VkStridedDeviceAddressRegionKHR raygenRegion{};
 			raygenRegion.deviceAddress = sbtBase;
-			raygenRegion.stride = handleSize;
-			raygenRegion.size = handleSize;
+			raygenRegion.stride = AlignUp(handleSizeAligned, baseAlignment);
+			raygenRegion.size = raygenRegion.stride;
 
 			VkStridedDeviceAddressRegionKHR missRegion{};
-			missRegion.deviceAddress = sbtBase + handleSize;
-			missRegion.stride = handleSize;
-			missRegion.size = handleSize;
-
 			VkStridedDeviceAddressRegionKHR hitRegion{};
-			hitRegion.deviceAddress = sbtBase + 2 * handleSize;
-			hitRegion.stride = handleSize;
-			hitRegion.size = handleSize;
-
 			VkStridedDeviceAddressRegionKHR callableRegion{};
+
+			if constexpr (!RT_RAYGEN_ONLY)
+			{
+				const VkDeviceSize raygenSize = raygenRegion.size;
+				const VkDeviceSize missOffset = raygenSize;
+				const VkDeviceSize missSize = AlignUp(handleSizeAligned, baseAlignment);
+				const VkDeviceSize hitOffset = missOffset + missSize;
+				const VkDeviceSize hitSize = AlignUp(handleSizeAligned, baseAlignment);
+
+				missRegion.deviceAddress = sbtBase + missOffset;
+				missRegion.stride = handleSizeAligned;
+				missRegion.size = missSize;
+
+				hitRegion.deviceAddress = sbtBase + hitOffset;
+				hitRegion.stride = handleSizeAligned;
+				hitRegion.size = hitSize;
+			}
 
 			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, rtPipeline->GetHandle());
 
 			VkDescriptorSet rtDescriptorSet = rtBindGroup->GetHandle(frameIndex);
-			vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
-				rtPipeline->GetVulkanPipelineLayout(), 0, 1, &rtDescriptorSet, 0, nullptr);
+			CORE_ASSERT(rtDescriptorSet != VK_NULL_HANDLE, "Invalid RT descriptor set");
 
-			ext::vkCmdTraceRaysKHR(cmd, &raygenRegion, &missRegion, &hitRegion, &callableRegion,
-				(uint32_t)m_ViewportResolution.x, (uint32_t)m_ViewportResolution.y, 1);
+			vkCmdBindDescriptorSets(
+				cmd,
+				VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+				rtPipeline->GetVulkanPipelineLayout(),
+				0,
+				1,
+				&rtDescriptorSet,
+				0,
+				nullptr);
+
+			ext::vkCmdTraceRaysKHR(
+				cmd,
+				&raygenRegion,
+				&missRegion,
+				&hitRegion,
+				&callableRegion,
+				(uint32_t)m_ViewportResolution.x,
+				(uint32_t)m_ViewportResolution.y,
+				1);
 		}
 
-		commnadBuffer->RT_End();
-		commnadBuffer->RT_Submit();
+		commandBuffer->RT_End();
+		commandBuffer->RT_Submit();
 	}
 
-	void PathTracerSceneRenderer::SubmitMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4 & transform)
+	void PathTracerSceneRenderer::SubmitMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform)
 	{
 	}
 
 	void PathTracerSceneRenderer::SetViewportSize(uint32_t width, uint32_t height)
 	{
-		if (m_ViewportResolution.x != width || m_ViewportResolution.y != height)
-		{
-			m_ViewportResolution.x = width;
-			m_ViewportResolution.y = height;
+		if (m_ViewportResolution.x == width && m_ViewportResolution.y == height)
+			return;
 
-			Framebuffer* framebuffer = ResourceManager::GetFramebuffer(m_Framebuffer);
-			framebuffer->Resize(width, height);
+		m_ViewportResolution.x = width;
+		m_ViewportResolution.y = height;
+
+		if constexpr (ENABLE_RASTER_TEST_PATH)
+		{
+			if (m_Framebuffer.IsValid())
+			{
+				Framebuffer* framebuffer = ResourceManager::GetFramebuffer(m_Framebuffer);
+				framebuffer->Resize(width, height);
+			}
 		}
+
+		if (m_RT_OutputImageView.IsValid())
+			ResourceManager::DestroyImageView(m_RT_OutputImageView);
+
+		if (m_RT_OutputImage.IsValid())
+			ResourceManager::DestroyImage(m_RT_OutputImage);
+
+		ImageSpecification imgSpec;
+		imgSpec.DebugName = "RT Output";
+		imgSpec.Width = (uint32_t)m_ViewportResolution.x;
+		imgSpec.Height = (uint32_t)m_ViewportResolution.y;
+		imgSpec.Format = ImageFormat::RGBA32F;
+		imgSpec.Usage = ImageUsage::Storage;
+		imgSpec.Flags = SAMPLE_COMPATIBLE;
+		imgSpec.Mips = 1;
+		imgSpec.Layers = 1;
+
+		m_RT_OutputImage = ResourceManager::CreateImage(imgSpec);
+		Image* rtImg = ResourceManager::GetImage(m_RT_OutputImage);
+		CORE_ASSERT(rtImg, "Failed to recreate RT output image");
+
+		rtImg->Invalidate();
+		rtImg->SetLayout(
+			VK_IMAGE_LAYOUT_GENERAL,
+			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
+
+		ImageViewProperties viewProp;
+		viewProp.Image = m_RT_OutputImage;
+		viewProp.BaseMip = 0;
+		viewProp.MipCount = 1;
+		viewProp.BaseLayer = 0;
+		viewProp.LayerCount = 1;
+		viewProp.ViewType = ImageViewType::Image2D;
+
+		SamplerSpecification samplerSpec;
+		samplerSpec.SamplerWrap = SamplerWrap::Clamp;
+		samplerSpec.SamplerFilter = SamplerFilter::Linear;
+		samplerSpec.Anisotropy = false;
+		samplerSpec.MinLOD = 0.0f;
+		samplerSpec.MaxLOD = 1.0f;
+		samplerSpec.ShaderResource = true;
+		viewProp.SamplerSpec = samplerSpec;
+
+		m_RT_OutputImageView = ResourceManager::CreateImageView(viewProp);
+		ImageView* rtImgView = ResourceManager::GetImageView(m_RT_OutputImageView);
+		CORE_ASSERT(rtImgView, "Failed to recreate RT output image view");
+		rtImgView->Invalidate();
+		rtImgView->UpdateDescriptor();
+
+		BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
+		CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
+		rtBindGroup->SetImageView(m_RT_OutputImageView, RT_OUTPUT_BINDING);
 	}
 
 	bool PathTracerSceneRenderer::RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform)
@@ -405,7 +427,7 @@ namespace cerberus
 		Ref<MeshSource> meshSource = mesh->GetMeshSource();
 		MeshSourceHandle meshSourceAssetHandle = mesh->GetMeshSource()->Handle;
 		Handle<MeshSourceProxy> meshProxyHandle;
-		
+
 		if (m_MeshRegister.MeshSourceRegistered.find(meshSourceAssetHandle) == m_MeshRegister.MeshSourceRegistered.end())
 		{
 			const auto& indices = meshSource->GetIndices();
@@ -439,7 +461,7 @@ namespace cerberus
 		const auto& submeshesProxy = meshSourceProxy->Submeshes;
 
 		auto& meshInstanceProxies = m_MeshRegister.MeshInstanceRegistered[mesh->Handle];
-		
+
 		m_MeshRegister.ASRegisterInfo.UpdateTLAS = true;
 		for (uint32_t submeshIndex = 0; submeshIndex < submeshesProxy.size(); submeshIndex++)
 		{
@@ -452,47 +474,57 @@ namespace cerberus
 			m_MeshRegister.MeshInstanceMap[meshProxyHandle][submeshIndex].push_back(meshInstanceHandle);
 			m_MeshRegister.MeshInstanceCount++;
 		}
-		
+
 		return true;
 	}
 
 	void PathTracerSceneRenderer::Render(const SceneRendererCamera& sceneRendererCamera)
 	{
 		m_SceneData.SceneRendererCamera = sceneRendererCamera;
-		//Renderer::ExecuteRenderQueue();
-		// Build Bottom Level Acceleration Structure if needed
-#if 1
- 		if (m_MeshRegister.ASRegisterInfo.BLASToBuild.size() > 0)
-		{
-			AccelerationStructureBuilder asBuilder;
-			asBuilder.BeginBLASBuild(VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR);
-			for (uint32_t i = 0; i < m_MeshRegister.ASRegisterInfo.BLASToBuild.size(); i++)
-			{
-				const auto& meshSourceProxy = m_MeshRegister.ASRegisterInfo.BLASToBuild[i];
-				asBuilder.SummitMesh(meshSourceProxy);
-			}
-			asBuilder.EndBLASBuild();
-			m_MeshRegister.ASRegisterInfo.BLASToBuild.clear();
-		}
-		// Build or rebuild the Top Level Acceleration Structure if needed
-		if (!m_MeshRegister.ASRegisterInfo.TLAS.IsValid() || m_MeshRegister.ASRegisterInfo.UpdateTLAS)
-		{
-			AccelerationStructureBuilder asBuilder;
 
-			asBuilder.BeginTLASBuild(VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR);
-			for (const auto& [meshAssetHandle, meshesInstances] : m_MeshRegister.MeshInstanceRegistered)
+		if constexpr (ENABLE_ACCELERATION_STRUCTURES)
+		{
+			// Build Bottom Level Acceleration Structure if needed.
+			if (m_MeshRegister.ASRegisterInfo.BLASToBuild.size() > 0)
 			{
-				for (uint32_t i = 0; i < meshesInstances.size(); i++)
+				AccelerationStructureBuilder asBuilder;
+				asBuilder.BeginBLASBuild(
+					VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR |
+					VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR |
+					VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR);
+
+				for (uint32_t i = 0; i < m_MeshRegister.ASRegisterInfo.BLASToBuild.size(); i++)
 				{
-					const auto& meshInstance = meshesInstances[i];
-					asBuilder.SubmitMeshInstance(meshInstance);
+					const auto& meshSourceProxy = m_MeshRegister.ASRegisterInfo.BLASToBuild[i];
+					asBuilder.SummitMesh(meshSourceProxy);
 				}
+
+				asBuilder.EndBLASBuild();
+				m_MeshRegister.ASRegisterInfo.BLASToBuild.clear();
 			}
-			
-			asBuilder.EndTLASBuild(m_MeshRegister.ASRegisterInfo.TLAS);
-			m_MeshRegister.ASRegisterInfo.UpdateTLAS = false;
+
+			// Build or rebuild the Top Level Acceleration Structure if needed.
+			if (!m_MeshRegister.ASRegisterInfo.TLAS.IsValid() || m_MeshRegister.ASRegisterInfo.UpdateTLAS)
+			{
+				AccelerationStructureBuilder asBuilder;
+				asBuilder.BeginTLASBuild(
+					VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR |
+					VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR);
+
+				for (const auto& [meshAssetHandle, meshesInstances] : m_MeshRegister.MeshInstanceRegistered)
+				{
+					for (uint32_t i = 0; i < meshesInstances.size(); i++)
+					{
+						const auto& meshInstance = meshesInstances[i];
+						asBuilder.SubmitMeshInstance(meshInstance);
+					}
+				}
+
+				asBuilder.EndTLASBuild(m_MeshRegister.ASRegisterInfo.TLAS);
+				m_MeshRegister.ASRegisterInfo.UpdateTLAS = false;
+			}
 		}
-#endif
+
 		FlushRenderPasses();
 	}
 
@@ -545,7 +577,7 @@ namespace cerberus
 				m_MeshRegister.MeshInstanceMap.erase(hMeshSource);
 				m_MeshRegister.InstancePerMeshSourceRegistered.erase(meshSourceAsset->Handle);
 				m_MeshRegister.MeshSourceRegistered.erase(meshSourceAsset->Handle);
-				
+
 				ResourceManager::DestroyMeshSourceProxy(hMeshSource);
 			}
 
@@ -554,7 +586,7 @@ namespace cerberus
 		{
 			return false;
 		}
-		
+
 
 		return true;
 	}
@@ -573,7 +605,7 @@ namespace cerberus
 			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstances[submeshIndex]);
 			meshInstance->WorldTransform = transform * submeshProxy.Transform;
 		}
-		
+
 	}
 
 	void PathTracerSceneRenderer::OnImGuiRender()
