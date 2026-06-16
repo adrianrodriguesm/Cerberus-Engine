@@ -126,7 +126,6 @@ namespace cerberus
 		//s_Data->ShaderLibrary->Load("Resources/Shaders/Skybox.glsl", false);
 		//s_Data->ShaderLibrary->Load("Resources/Shaders/PreDepth.glsl", false);
 		//s_Data->ShaderLibrary->Load("Resources/Shaders/ShadowMap.glsl", false);
-		s_Data->ShaderLibrary->Load("Resources/Shaders/RayTraceTest.glsl", false);
 
 
 		// Textures
@@ -199,7 +198,6 @@ namespace cerberus
 		s_Data->RendererDescriptorSetCache.clear();
 
 		// Release All Queues
-		
 		RenderQueueManager::ExecuteRenderQueue();
 		RenderQueueManager::FreeAllSubmittedResources();
 		RenderQueueManager::ShutDown();

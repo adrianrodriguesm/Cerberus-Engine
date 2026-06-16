@@ -10,22 +10,23 @@
 // TODO: Remove these to (only for test)
 #include "Renderer/ShaderCompiler.h"
 #include "Renderer/TextureAsset.h"
-namespace
+
+namespace cerberus
 {
 	// Temporary mode used to isolate the Vulkan RT smoke test.
 	// Keep the old raster/mesh/AS mechanisms in the file, but do not execute them
 	// while we validate the minimal RT path.
 	static constexpr bool RT_SMOKE_TEST = true;
 	static constexpr bool ENABLE_RASTER_TEST_PATH = !RT_SMOKE_TEST;
-	static constexpr bool ENABLE_ACCELERATION_STRUCTURES = false;
 
-	// Current Raytrace.rgen was using binding 16.
-	// If you simplify the shader to binding 0, change this constant to 0.
+	static constexpr bool ENABLE_ACCELERATION_STRUCTURES = true;
+	static constexpr bool ENABLE_TLAS_BIND_TEST = true;
+
 	static constexpr uint32_t RT_OUTPUT_BINDING = 16;
+	static constexpr uint32_t RT_TLAS_BINDING = 1;
+
 	static constexpr bool RT_RAYGEN_ONLY = true;
-}
-namespace cerberus
-{
+
 	/** /
 	* Bind groups / DescriptorSets
 	* Set 0 = Fully static data (e.g Enviroment Maps)
@@ -154,6 +155,9 @@ namespace cerberus
 			// Keep the existing RegisterMesh/UnregisterMesh/UpdateMeshTransform mechanisms;
 			// they are not deleted, only not used by this isolated path.
 		}
+
+
+		Renderer::GetShaderLibrary().Load("Resources/Shaders/RayTraceTest.glsl", true);
 
 		RenderQueueManager::ExecuteRenderQueue();
 	}
@@ -523,6 +527,22 @@ namespace cerberus
 				asBuilder.EndTLASBuild(m_MeshRegister.ASRegisterInfo.TLAS);
 				m_MeshRegister.ASRegisterInfo.UpdateTLAS = false;
 			}
+		}
+
+		if constexpr (ENABLE_TLAS_BIND_TEST)
+		{
+			CORE_ASSERT(
+				m_MeshRegister.ASRegisterInfo.TLAS.IsValid(),
+				"TLAS bind test is enabled, but TLAS is invalid. Make sure at least one mesh is registered and acceleration structures are built."
+			);
+
+			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
+			CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
+
+			rtBindGroup->SetAccelerationStructure(
+				m_MeshRegister.ASRegisterInfo.TLAS,
+				RT_TLAS_BINDING
+			);
 		}
 
 		FlushRenderPasses();
