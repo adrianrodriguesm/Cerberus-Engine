@@ -5,38 +5,92 @@
 #extension GL_GOOGLE_include_directive : enable
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
+struct HitPayload
+{
+    vec3 hitValue;
+};
+
+layout(location = 0) rayPayloadEXT HitPayload prd;
+
 layout(set = 0, binding = 1) uniform accelerationStructureEXT TLAS;
+
+layout(set = 0, binding = 2) uniform CameraData
+{
+    mat4 Projection;
+    mat4 View;
+    mat4 ViewProjection;
+    mat4 InverseView;
+    mat4 InverseProjection;
+    mat4 InverseViewReverseProjection;
+
+    vec4 Position;
+    vec4 Forward;
+    vec4 Right;
+    vec4 Up;
+    vec4 Params;
+} Camera;
+
 layout(rgba32f, set = 0, binding = 16) writeonly uniform image2D image;
 
 void main()
 {
     ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
-    vec2 uv = vec2(gl_LaunchIDEXT.xy) / vec2(gl_LaunchSizeEXT.xy);
 
-    imageStore(image, pixel, vec4(uv.x, uv.y, 0.0, 1.0));
+    vec2 uv = (vec2(gl_LaunchIDEXT.xy) + vec2(0.5)) / vec2(gl_LaunchSizeEXT.xy);
+    vec2 screen = uv * 2.0 - 1.0;
+
+    float tanHalfFovY = Camera.Params.x;
+    float aspect = Camera.Params.y;
+
+    vec3 origin = Camera.Position.xyz;
+
+    vec3 direction = normalize(
+        Camera.Forward.xyz +
+        Camera.Right.xyz * screen.x * aspect * tanHalfFovY +
+        Camera.Up.xyz * screen.y * tanHalfFovY
+    );
+
+    prd.hitValue = vec3(1.0, 0.0, 1.0);
+
+    traceRayEXT(
+        TLAS,
+        gl_RayFlagsOpaqueEXT,
+        0xFF,
+        0,
+        0,
+        0,
+        origin,
+        0.001,
+        direction,
+        10000.0,
+        0
+    );
+
+    imageStore(image, pixel, vec4(prd.hitValue, 1.0));
 }
 
 #type closestHit
 #version 460
 #extension GL_EXT_ray_tracing : require
-#extension GL_EXT_nonuniform_qualifier : enable
-#extension GL_EXT_scalar_block_layout : enable
-#extension GL_GOOGLE_include_directive : enable
 
-#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
-#extension GL_EXT_buffer_reference2 : require
-
-struct hitPayload
+struct HitPayload
 {
-  vec3 hitValue;
+    vec3 hitValue;
 };
 
-layout(location = 0) rayPayloadInEXT hitPayload prd;
+layout(location = 0) rayPayloadInEXT HitPayload prd;
+
+hitAttributeEXT vec2 attribs;
 
 void main()
 {
-  // Ignore geometry and materials for now, just write a solid color to the payload.
-  prd.hitValue = vec3(1.0, 0.0, 0.0); // pure red
+    vec3 barycentrics = vec3(
+        1.0 - attribs.x - attribs.y,
+        attribs.x,
+        attribs.y
+    );
+
+    prd.hitValue = barycentrics;
 }
 
 #type missHit

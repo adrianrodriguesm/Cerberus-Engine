@@ -62,8 +62,22 @@ namespace cerberus
 		// UBO structs
 		struct CameraUB
 		{
-			glm::mat4 ViewProjection, View, Projection;
-			glm::mat4 InverseViewReverseProjection, InverseView, InverseProjection;
+			glm::mat4 Projection;
+			glm::mat4 View;
+			glm::mat4 ViewProjection;
+			glm::mat4 InverseView;
+			glm::mat4 InverseProjection;
+			glm::mat4 InverseViewReverseProjection;
+
+			glm::vec4 Position;
+			glm::vec4 Forward;
+			glm::vec4 Right;
+			glm::vec4 Up;
+
+			// x = tanHalfFovY
+			// y = aspect
+			// z/w = unused
+			glm::vec4 Params;
 		};
 		// Mesh Shader
 		struct ShaderVertex  // See ObjLoader, copy of VertexObj, could be compressed for device

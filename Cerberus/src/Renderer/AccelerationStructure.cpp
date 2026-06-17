@@ -80,7 +80,7 @@ namespace cerberus
 
 		m_TLASInstances.emplace_back(instance);
 	}
-
+#if 0
 	void AccelerationStructureBuilder::EndTLASBuild(Handle<AccelerationStructure>& outTLAS)
 	{
 		m_UpdateTLAS = outTLAS.IsValid() ? true : false;
@@ -113,7 +113,70 @@ namespace cerberus
 		allocator.DestroyBuffer(scratchBuffer, scratchBufferAllocation);
 
 	}
+#else
+	void AccelerationStructureBuilder::EndTLASBuild(Handle<AccelerationStructure>& outTLAS)
+	{
+		// For now, always rebuild the TLAS from scratch.
+		// Updating is only safe once we track whether the instance count/capacity changed.
+		if (outTLAS.IsValid())
+		{
+			ResourceManager::DestroyAccelerationStructure(outTLAS);
+			outTLAS = Handle<AccelerationStructure>{};
+		}
 
+		m_UpdateTLAS = false;
+
+		uint32_t countInstance = static_cast<uint32_t>(m_TLASInstances.size());
+
+		CORE_ASSERT(countInstance > 0, "Trying to build a TLAS with 0 instances");
+
+		VkCommandBuffer cmdBuf = Renderer::GetCommandBuffer(true, false);
+
+		ResourceAllocator allocator("Top Level Acceleration Structure");
+
+		VkBuffer instancesBuffer;
+		VmaAllocation instBufferAllocation =
+			CreateInstanceBuffer(m_TLASInstances, allocator, instancesBuffer);
+
+		VkDeviceAddress instBufferAddr = utils::GetBufferDeviceAddress(instancesBuffer);
+
+		VkMemoryBarrier barrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER };
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		barrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
+
+		vkCmdPipelineBarrier(
+			cmdBuf,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+			0,
+			1,
+			&barrier,
+			0,
+			nullptr,
+			0,
+			nullptr
+		);
+
+		VkBuffer scratchBuffer;
+		VmaAllocation scratchBufferAllocation =
+			CreateTlas(
+				cmdBuf,
+				countInstance,
+				instBufferAddr,
+				m_Flags,
+				m_UpdateTLAS,
+				m_MotionTLAS,
+				allocator,
+				scratchBuffer,
+				outTLAS
+			);
+
+		Renderer::FlushCommandBuffer(cmdBuf, false, true);
+
+		allocator.DestroyBuffer(instancesBuffer, instBufferAllocation);
+		allocator.DestroyBuffer(scratchBuffer, scratchBufferAllocation);
+	}
+#endif
 	void AccelerationStructureBuilder::BeginBLASBuild(VkBuildAccelerationStructureFlagsKHR flags)
 	{
 		m_Flags = flags;
@@ -149,7 +212,8 @@ namespace cerberus
 		triangles.vertexStride = vertexBufferStride;
 		GPUBuffer* vertexBuffer = ResourceManager::GetBuffer(meshProxy->VertexBuffer->GetGPUBuffer());
 		CORE_ASSERT(vertexBuffer, "Invalid vertex buffer");
-		triangles.maxVertex = vertexBuffer->Size / vertexBufferStride;
+		const uint32_t vertexCount = static_cast<uint32_t>(vertexBuffer->Size / vertexBufferStride);
+		triangles.maxVertex = vertexCount > 0 ? vertexCount - 1 : 0;
 		// Describe index data (32-bit unsigned int)
 		triangles.indexType = VK_INDEX_TYPE_UINT32;
 		triangles.indexData.deviceAddress = indexAddress;
@@ -172,7 +236,7 @@ namespace cerberus
 			VkAccelerationStructureBuildRangeInfoKHR& rageBuildOffsetInfo = blas.ASBuildOffsetInfo;
 			rageBuildOffsetInfo.firstVertex = submesh.BaseVertex;
 			rageBuildOffsetInfo.primitiveCount = submesh.IndexCount / 3;
-			rageBuildOffsetInfo.primitiveOffset = submesh.BaseIndex;
+			rageBuildOffsetInfo.primitiveOffset = submesh.BaseIndex * sizeof(uint32_t);
 			rageBuildOffsetInfo.transformOffset = 0;
 
 			blasInputData.push_back(blas);
@@ -180,7 +244,7 @@ namespace cerberus
 		}
 		
 	}
-
+	
 	void AccelerationStructureBuilder::EndBLASBuild()
 	{
 		VkDevice device = RendererContext::GetCurrentVulkanDevice();

@@ -20,12 +20,12 @@ namespace cerberus
 	static constexpr bool ENABLE_RASTER_TEST_PATH = !RT_SMOKE_TEST;
 
 	static constexpr bool ENABLE_ACCELERATION_STRUCTURES = true;
-	static constexpr bool ENABLE_TLAS_BIND_TEST = true;
 
 	static constexpr uint32_t RT_OUTPUT_BINDING = 16;
 	static constexpr uint32_t RT_TLAS_BINDING = 1;
+	static constexpr uint32_t RT_CAMERA_BINDING = 2;
 
-	static constexpr bool RT_RAYGEN_ONLY = true;
+	static constexpr bool RT_RAYGEN_ONLY = false;
 
 	/** /
 	* Bind groups / DescriptorSets
@@ -146,6 +146,23 @@ namespace cerberus
 			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
 			CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
 			rtBindGroup->SetImageView(m_RT_OutputImageView, RT_OUTPUT_BINDING);
+
+
+		}
+
+		// Camera UBO for RT path.
+		{
+			UniformBufferSetSpecification uboSetCamSpec;
+			uboSetCamSpec.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
+			uboSetCamSpec.Size = sizeof(CameraUB);
+			uboSetCamSpec.BindingPoint = RT_CAMERA_BINDING;
+
+			m_UniformBufferSetCamera = CreateRef<UniformBufferSet>(uboSetCamSpec);
+
+			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
+			CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
+
+			rtBindGroup->SetUniformBuffer(m_UniformBufferSetCamera, RT_CAMERA_BINDING);
 		}
 
 		if constexpr (ENABLE_RASTER_TEST_PATH)
@@ -220,7 +237,6 @@ namespace cerberus
 	{
 		uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 
-		if constexpr (ENABLE_RASTER_TEST_PATH)
 		{
 			CameraUB cameraUBO;
 			cameraUBO.Projection = m_SceneData.SceneRendererCamera.Camera.GetProjection();
@@ -229,11 +245,37 @@ namespace cerberus
 			cameraUBO.InverseView = glm::inverse(cameraUBO.View);
 			cameraUBO.InverseProjection = glm::inverse(cameraUBO.Projection);
 			cameraUBO.InverseViewReverseProjection =
-				cameraUBO.InverseView * glm::inverse(m_SceneData.SceneRendererCamera.Camera.GetReverseProjection());
+			cameraUBO.InverseView * glm::inverse(m_SceneData.SceneRendererCamera.Camera.GetReverseProjection());
+			const glm::vec3 cameraPosition = glm::vec3(cameraUBO.InverseView[3]);
+
+			const glm::vec3 cameraRight =
+				glm::normalize(glm::vec3(cameraUBO.InverseView[0]));
+
+			const glm::vec3 cameraUp =
+				glm::normalize(glm::vec3(cameraUBO.InverseView[1]));
+
+			const glm::vec3 cameraForward =
+				glm::normalize(-glm::vec3(cameraUBO.InverseView[2]));
+
+			// Extract approximate FOV/aspect from projection matrix.
+			// abs() protects against projection conventions with negative Y.
+			const float tanHalfFovY = 1.0f / std::abs(cameraUBO.Projection[1][1]);
+			const float aspect = std::abs(cameraUBO.Projection[1][1] / cameraUBO.Projection[0][0]);
+
+			cameraUBO.Position = glm::vec4(cameraPosition, 1.0f);
+			cameraUBO.Forward = glm::vec4(cameraForward, 0.0f);
+			cameraUBO.Right = glm::vec4(cameraRight, 0.0f);
+			cameraUBO.Up = glm::vec4(cameraUp, 0.0f);
+			cameraUBO.Params = glm::vec4(tanHalfFovY, aspect, 0.0f, 0.0f);
 
 			Ref<UniformBuffer> ubo = m_UniformBufferSetCamera->Get(frameIndex);
-			ubo->SetData(&cameraUBO, sizeof(CameraUB), 0);
+			CORE_ASSERT(ubo, "Invalid RT camera UBO");
 
+			ubo->SetData(&cameraUBO, sizeof(CameraUB), 0);
+		}
+
+		if constexpr (ENABLE_RASTER_TEST_PATH)
+		{
 			BindGroup* bindGroup1 = ResourceManager::GetBindGroup(m_BindGroup1);
 			bindGroup1->Update(frameIndex);
 
@@ -491,6 +533,7 @@ namespace cerberus
 			// Build Bottom Level Acceleration Structure if needed.
 			if (m_MeshRegister.ASRegisterInfo.BLASToBuild.size() > 0)
 			{
+				NV_CORE_INFO("RT BLASToBuild: {}", m_MeshRegister.ASRegisterInfo.BLASToBuild.size());
 				AccelerationStructureBuilder asBuilder;
 				asBuilder.BeginBLASBuild(
 					VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR |
@@ -510,10 +553,17 @@ namespace cerberus
 			// Build or rebuild the Top Level Acceleration Structure if needed.
 			if (!m_MeshRegister.ASRegisterInfo.TLAS.IsValid() || m_MeshRegister.ASRegisterInfo.UpdateTLAS)
 			{
+				NV_CORE_INFO("RT MeshInstanceCount: {}", m_MeshRegister.MeshInstanceCount);
+				NV_CORE_INFO("RT MeshInstanceRegistered: {}", m_MeshRegister.MeshInstanceRegistered.size());
+				NV_CORE_INFO("RT TLAS valid before build: {}", m_MeshRegister.ASRegisterInfo.TLAS.IsValid());
+				NV_CORE_INFO("RT UpdateTLAS: {}", m_MeshRegister.ASRegisterInfo.UpdateTLAS);
+
 				AccelerationStructureBuilder asBuilder;
 				asBuilder.BeginTLASBuild(
 					VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR |
 					VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR);
+
+				uint32_t submittedTLASInstances = 0;
 
 				for (const auto& [meshAssetHandle, meshesInstances] : m_MeshRegister.MeshInstanceRegistered)
 				{
@@ -521,16 +571,17 @@ namespace cerberus
 					{
 						const auto& meshInstance = meshesInstances[i];
 						asBuilder.SubmitMeshInstance(meshInstance);
+						submittedTLASInstances++;
 					}
 				}
 
+				NV_CORE_INFO("RT submitted TLAS instances: {}", submittedTLASInstances);
+				
 				asBuilder.EndTLASBuild(m_MeshRegister.ASRegisterInfo.TLAS);
 				m_MeshRegister.ASRegisterInfo.UpdateTLAS = false;
-			}
-		}
 
-		if constexpr (ENABLE_TLAS_BIND_TEST)
-		{
+			}
+
 			CORE_ASSERT(
 				m_MeshRegister.ASRegisterInfo.TLAS.IsValid(),
 				"TLAS bind test is enabled, but TLAS is invalid. Make sure at least one mesh is registered and acceleration structures are built."
