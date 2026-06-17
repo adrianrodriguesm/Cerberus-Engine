@@ -181,6 +181,12 @@ namespace cerberus
 
 	PathTracerSceneRenderer::~PathTracerSceneRenderer()
 	{
+		// Debug-safe shutdown: make sure no submitted command buffer still references
+		// TLAS/BLAS resources before destroying them.
+		vkDeviceWaitIdle(RendererContext::GetCurrentVulkanDevice());
+		RenderQueueManager::FreeAllSubmittedResources();
+		FlushPendingRTASDeletes();
+
 		if (m_MeshRegister.ASRegisterInfo.TLAS.IsValid())
 			ResourceManager::DestroyAccelerationStructure(m_MeshRegister.ASRegisterInfo.TLAS);
 
@@ -233,6 +239,49 @@ namespace cerberus
 
 	}
 
+	void PathTracerSceneRenderer::FlushPendingRTASDeletes()
+	{
+		auto& asInfo = m_MeshRegister.ASRegisterInfo;
+
+		if (!asInfo.ASNeedsSafeRebuild &&
+			asInfo.PendingBLASToDestroy.empty() &&
+			asInfo.PendingMeshSourcesToDestroy.empty())
+		{
+			return;
+		}
+
+		// TODO: Debug-safe version. This guarantees that no command buffer still references
+		// the old TLAS/BLAS before we destroy them. Replace this later with a proper
+		// frame-fence deferred deletion queue.
+		vkDeviceWaitIdle(RendererContext::GetCurrentVulkanDevice());
+		RenderQueueManager::FreeAllSubmittedResources();
+
+		// If BLAS were invalidated by unregistering a mesh source, the current TLAS may
+		// still contain instance records pointing at those BLAS. Destroy the TLAS first,
+		// then rebuild it from the remaining live instances in Render().
+		if (asInfo.TLAS.IsValid())
+		{
+			ResourceManager::DestroyAccelerationStructure(asInfo.TLAS);
+			asInfo.TLAS = Handle<AccelerationStructure>{};
+		}
+
+		for (auto& blas : asInfo.PendingBLASToDestroy)
+		{
+			if (blas.IsValid())
+				ResourceManager::DestroyAccelerationStructure(blas);
+		}
+
+		for (auto& meshSource : asInfo.PendingMeshSourcesToDestroy)
+		{
+			if (meshSource.IsValid())
+				ResourceManager::DestroyMeshSourceProxy(meshSource);
+		}
+
+		asInfo.PendingBLASToDestroy.clear();
+		asInfo.PendingMeshSourcesToDestroy.clear();
+		asInfo.ASNeedsSafeRebuild = false;
+	}
+
 	void PathTracerSceneRenderer::UpdateUBOData()
 	{
 		uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
@@ -245,7 +294,7 @@ namespace cerberus
 			cameraUBO.InverseView = glm::inverse(cameraUBO.View);
 			cameraUBO.InverseProjection = glm::inverse(cameraUBO.Projection);
 			cameraUBO.InverseViewReverseProjection =
-			cameraUBO.InverseView * glm::inverse(m_SceneData.SceneRendererCamera.Camera.GetReverseProjection());
+				cameraUBO.InverseView * glm::inverse(m_SceneData.SceneRendererCamera.Camera.GetReverseProjection());
 			const glm::vec3 cameraPosition = glm::vec3(cameraUBO.InverseView[3]);
 
 			const glm::vec3 cameraRight =
@@ -509,6 +558,8 @@ namespace cerberus
 		auto& meshInstanceProxies = m_MeshRegister.MeshInstanceRegistered[mesh->Handle];
 
 		m_MeshRegister.ASRegisterInfo.UpdateTLAS = true;
+		m_MeshRegister.ASRegisterInfo.TLASNeedsSafeUpdate = true;
+
 		for (uint32_t submeshIndex = 0; submeshIndex < submeshesProxy.size(); submeshIndex++)
 		{
 			Handle<MeshInstanceProxy> meshInstanceHandle = ResourceManager::CreateMeshInstanceProxy(meshProxyHandle, submeshIndex);
@@ -558,6 +609,37 @@ namespace cerberus
 				NV_CORE_INFO("RT TLAS valid before build: {}", m_MeshRegister.ASRegisterInfo.TLAS.IsValid());
 				NV_CORE_INFO("RT UpdateTLAS: {}", m_MeshRegister.ASRegisterInfo.UpdateTLAS);
 
+				// Case 1:
+				// A mesh source was removed and some BLAS became invalid.
+				// This path waits, destroys the old TLAS, destroys pending BLAS,
+				// and destroys pending MeshSourceProxy objects.
+				if (m_MeshRegister.ASRegisterInfo.ASNeedsSafeRebuild)
+				{
+					FlushPendingRTASDeletes();
+				}
+				// Case 2:
+				// Only the TLAS needs to be touched, for example because an instance transform changed.
+				// BLAS are still valid, but the previous TLAS may still be referenced by an old command buffer.
+				else if (m_MeshRegister.ASRegisterInfo.TLASNeedsSafeUpdate &&
+					m_MeshRegister.ASRegisterInfo.TLAS.IsValid())
+				{
+					// TODO RT:
+					// Debug-safe only. This stalls the GPU.
+					// Replace with frame-fence based TLAS double/triple buffering later.
+					vkDeviceWaitIdle(RendererContext::GetCurrentVulkanDevice());
+					RenderQueueManager::FreeAllSubmittedResources();
+				}
+
+				// Nothing left to trace. Do not build a TLAS with zero instances and do not
+				// bind/trace an invalid TLAS.
+				if (m_MeshRegister.MeshInstanceCount == 0)
+				{
+					m_MeshRegister.ASRegisterInfo.UpdateTLAS = false;
+					m_MeshRegister.ASRegisterInfo.TLASNeedsSafeUpdate = false;
+					m_MeshRegister.ASRegisterInfo.ASNeedsSafeRebuild = false;
+					return;
+				}
+
 				AccelerationStructureBuilder asBuilder;
 				asBuilder.BeginTLASBuild(
 					VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR |
@@ -576,10 +658,12 @@ namespace cerberus
 				}
 
 				NV_CORE_INFO("RT submitted TLAS instances: {}", submittedTLASInstances);
-				
-				asBuilder.EndTLASBuild(m_MeshRegister.ASRegisterInfo.TLAS);
-				m_MeshRegister.ASRegisterInfo.UpdateTLAS = false;
 
+				asBuilder.EndTLASBuild(m_MeshRegister.ASRegisterInfo.TLAS);
+
+				m_MeshRegister.ASRegisterInfo.UpdateTLAS = false;
+				m_MeshRegister.ASRegisterInfo.TLASNeedsSafeUpdate = false;
+				m_MeshRegister.ASRegisterInfo.ASNeedsSafeRebuild = false;
 			}
 
 			CORE_ASSERT(
@@ -612,6 +696,7 @@ namespace cerberus
 		bool unregistered = false;
 		// Update TLAS
 		m_MeshRegister.ASRegisterInfo.UpdateTLAS = true;
+		m_MeshRegister.ASRegisterInfo.TLASNeedsSafeUpdate = true;
 		// Destroy Mesh Instance
 		if (m_MeshRegister.MeshInstanceRegistered.find(mesh->Handle) != m_MeshRegister.MeshInstanceRegistered.end())
 		{
@@ -642,14 +727,30 @@ namespace cerberus
 				ResourceManager::DestroyMeshInstanceProxy(hMeshInstance);
 			}
 
-			// Destory mesh source proxy
+			// Destroy mesh source proxy
 			if (m_MeshRegister.InstancePerMeshSourceRegistered[meshSourceAsset->Handle].size() == 0)
 			{
 				m_MeshRegister.MeshInstanceMap.erase(hMeshSource);
 				m_MeshRegister.InstancePerMeshSourceRegistered.erase(meshSourceAsset->Handle);
 				m_MeshRegister.MeshSourceRegistered.erase(meshSourceAsset->Handle);
 
-				ResourceManager::DestroyMeshSourceProxy(hMeshSource);
+				if (MeshSourceProxy* meshSourceProxy = ResourceManager::GetMeshSourceProxy(hMeshSource))
+				{
+					for (auto& submesh : meshSourceProxy->Submeshes)
+					{
+						if (submesh.BLAS.IsValid())
+						{
+							m_MeshRegister.ASRegisterInfo.PendingBLASToDestroy.push_back(submesh.BLAS);
+							submesh.BLAS = Handle<AccelerationStructure>{};
+						}
+					}
+				}
+
+				m_MeshRegister.ASRegisterInfo.PendingMeshSourcesToDestroy.push_back(hMeshSource);
+
+				// The previous TLAS may still reference the BLAS from this mesh source.
+				// The next TLAS rebuild must first safely retire the old TLAS/BLAS.
+				m_MeshRegister.ASRegisterInfo.ASNeedsSafeRebuild = true;
 			}
 
 		}
@@ -661,22 +762,25 @@ namespace cerberus
 
 		return true;
 	}
+
 	void PathTracerSceneRenderer::UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform)
 	{
 		if (!IsRegistered(mesh))
 			return;
 
 		m_MeshRegister.ASRegisterInfo.UpdateTLAS = true;
+		m_MeshRegister.ASRegisterInfo.TLASNeedsSafeUpdate = true;
+
 		std::vector<Handle<MeshInstanceProxy>> meshInstances = m_MeshRegister.MeshInstanceRegistered[mesh->Handle];
 		Handle<MeshSourceProxy> meshSourceHandle = m_MeshRegister.MeshSourceRegistered[mesh->GetMeshSource()->Handle];
 		MeshSourceProxy* meshSourceProxy = ResourceManager::GetMeshSourceProxy(meshSourceHandle);
+
 		for (uint32_t submeshIndex = 0; submeshIndex < meshSourceProxy->Submeshes.size(); submeshIndex++)
 		{
 			const SubmeshSourceProxy& submeshProxy = meshSourceProxy->Submeshes[submeshIndex];
 			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstances[submeshIndex]);
 			meshInstance->WorldTransform = transform * submeshProxy.Transform;
 		}
-
 	}
 
 	void PathTracerSceneRenderer::OnImGuiRender()

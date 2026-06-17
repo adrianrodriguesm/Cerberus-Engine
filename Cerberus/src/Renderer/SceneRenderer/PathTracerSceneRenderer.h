@@ -39,6 +39,7 @@ namespace cerberus
 	private:
 		void UpdateUBOData();
 		void FlushRenderPasses();
+		void FlushPendingRTASDeletes();
 	private:
 		// CPU-side mirror of the ObjDesc struct used in ray tracing shaders.
 		// One entry per mesh instance / submesh instance.
@@ -115,7 +116,18 @@ namespace cerberus
 			struct AccelerationStructureInfo
 			{
 				std::vector<Handle<MeshSourceProxy>> BLASToBuild;
+				std::vector<Handle<AccelerationStructure>> PendingBLASToDestroy;
+				std::vector<Handle<MeshSourceProxy>> PendingMeshSourcesToDestroy;
+
 				bool UpdateTLAS = false;
+
+				// BLAS/MeshSource invalidated. Requires safe rebuild + pending deletes.
+				bool ASNeedsSafeRebuild = false;
+
+				// Only TLAS contents changed, e.g. transform update.
+				// Does not destroy BLAS, but still cannot update/rebuild TLAS while GPU uses old TLAS.
+				bool TLASNeedsSafeUpdate = false;
+
 				Handle<AccelerationStructure> TLAS;
 			} ASRegisterInfo;
 
@@ -131,6 +143,8 @@ namespace cerberus
 			uint32_t MeshInstanceCount = 0;
 
 		} m_MeshRegister;
+
+
 
 		Handle<BindGroupLayout> m_BindGroup0Layout;
 		Handle<BindGroup> m_BindGroup0;
