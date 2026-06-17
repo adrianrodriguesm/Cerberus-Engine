@@ -90,26 +90,48 @@ namespace cerberus
 		VkPipeline pipeline = m_Pipeline;
 		VkPipelineLayout pipelineLayout = m_PipelineLayout;
 		VkPipelineCache pipelineCache = m_PipelineCache;
+
+		m_Pipeline = VK_NULL_HANDLE;
+		m_PipelineLayout = VK_NULL_HANDLE;
+		m_PipelineCache = VK_NULL_HANDLE;
+
+		if (!pipeline && !pipelineLayout && !pipelineCache)
+			return;
+
 		RenderQueueManager::SubmitResourceFree([pipeline, pipelineLayout, pipelineCache]() mutable
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 
-			vkDestroyPipeline(vulkanDevice, pipeline, nullptr);
-			vkDestroyPipelineCache(vulkanDevice, pipelineCache, nullptr);
-			vkDestroyPipelineLayout(vulkanDevice, pipelineLayout, nullptr);
+			if (pipeline)
+				vkDestroyPipeline(vulkanDevice, pipeline, nullptr);
+			if (pipelineCache)
+				vkDestroyPipelineCache(vulkanDevice, pipelineCache, nullptr);
+			if (pipelineLayout)
+				vkDestroyPipelineLayout(vulkanDevice, pipelineLayout, nullptr);
 		});
 	}
 
 	void GraphicsPipeline::Invalidate()
 	{
-		if (m_Pipeline)
+		if (m_Pipeline || m_PipelineCache || m_PipelineLayout)
 		{
-			RenderQueueManager::SubmitResourceFree([this]() mutable
+			VkPipeline pipeline = m_Pipeline;
+			VkPipelineCache pipelineCache = m_PipelineCache;
+			VkPipelineLayout pipelineLayout = m_PipelineLayout;
+
+			m_Pipeline = VK_NULL_HANDLE;
+			m_PipelineCache = VK_NULL_HANDLE;
+			m_PipelineLayout = VK_NULL_HANDLE;
+
+			RenderQueueManager::SubmitResourceFree([pipeline, pipelineCache, pipelineLayout]() mutable
 			{
 				VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-				vkDestroyPipeline(vulkanDevice, m_Pipeline, nullptr);
-				vkDestroyPipelineCache(vulkanDevice, m_PipelineCache, nullptr);
-				vkDestroyPipelineLayout(vulkanDevice, m_PipelineLayout, nullptr);
+				if (pipeline)
+					vkDestroyPipeline(vulkanDevice, pipeline, nullptr);
+				if (pipelineCache)
+					vkDestroyPipelineCache(vulkanDevice, pipelineCache, nullptr);
+				if (pipelineLayout)
+					vkDestroyPipelineLayout(vulkanDevice, pipelineLayout, nullptr);
 			});
 		}
 		// CREATE PIPELINE
@@ -339,22 +361,53 @@ namespace cerberus
 
 	RayTracingPipeline::~RayTracingPipeline()
 	{
+		VkPipeline pipeline = m_rtPipeline;
+		VkPipelineCache pipelineCache = m_rtPipelineCache;
+		VkPipelineLayout pipelineLayout = m_rtPipelineLayout;
 
+		m_rtPipeline = VK_NULL_HANDLE;
+		m_rtPipelineCache = VK_NULL_HANDLE;
+		m_rtPipelineLayout = VK_NULL_HANDLE;
+
+		if (!pipeline && !pipelineCache && !pipelineLayout)
+			return;
+
+		RenderQueueManager::SubmitResourceFree([pipeline, pipelineCache, pipelineLayout]() mutable
+		{
+			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+			if (pipeline)
+				vkDestroyPipeline(vulkanDevice, pipeline, nullptr);
+			if (pipelineCache)
+				vkDestroyPipelineCache(vulkanDevice, pipelineCache, nullptr);
+			if (pipelineLayout)
+				vkDestroyPipelineLayout(vulkanDevice, pipelineLayout, nullptr);
+		});
 	}
 
 
 
 	void RayTracingPipeline::Invalidate()
 	{
-		if (m_rtPipeline)
+		if (m_rtPipeline || m_rtPipelineCache || m_rtPipelineLayout)
 		{
-			RenderQueueManager::SubmitResourceFree([this]() mutable
-				{
-					VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-					vkDestroyPipeline(vulkanDevice, m_rtPipeline, nullptr);
-					vkDestroyPipelineCache(vulkanDevice, m_rtPipelineCache, nullptr);
-					vkDestroyPipelineLayout(vulkanDevice, m_rtPipelineLayout, nullptr);
-				});
+			VkPipeline pipeline = m_rtPipeline;
+			VkPipelineCache pipelineCache = m_rtPipelineCache;
+			VkPipelineLayout pipelineLayout = m_rtPipelineLayout;
+
+			m_rtPipeline = VK_NULL_HANDLE;
+			m_rtPipelineCache = VK_NULL_HANDLE;
+			m_rtPipelineLayout = VK_NULL_HANDLE;
+
+			RenderQueueManager::SubmitResourceFree([pipeline, pipelineCache, pipelineLayout]() mutable
+			{
+				VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+				if (pipeline)
+					vkDestroyPipeline(vulkanDevice, pipeline, nullptr);
+				if (pipelineCache)
+					vkDestroyPipelineCache(vulkanDevice, pipelineCache, nullptr);
+				if (pipelineLayout)
+					vkDestroyPipelineLayout(vulkanDevice, pipelineLayout, nullptr);
+			});
 		}
 
 

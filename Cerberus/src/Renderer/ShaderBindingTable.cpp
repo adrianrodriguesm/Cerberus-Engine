@@ -196,12 +196,12 @@ namespace cerberus
 
 	void ShaderBindingTable::Release()
 	{
-		if (GPUBuffer* stbBuffer = ResourceManager::GetBuffer(m_Buffer))
-		{
-			RenderQueueManager::SubmitResourceFree([this]() mutable
-				{
-					ResourceManager::DestroyBuffer(m_Buffer);
-				});
-		}
+		if (!m_Buffer.IsValid())
+			return;
+
+		Handle<GPUBuffer> bufferToDestroy = m_Buffer;
+		m_Buffer = Handle<GPUBuffer>{};
+
+		ResourceManager::DestroyBuffer(bufferToDestroy);
 	}
 }

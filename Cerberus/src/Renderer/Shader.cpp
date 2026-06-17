@@ -824,6 +824,11 @@ namespace cerberus
 	{
 	}
 
+	void ShaderLibrary::ReleaseAllShaders()
+	{
+		SubmitResourceFree();
+	}
+
 	void ShaderLibrary::Add(const Ref<Shader>& shader)
 	{
 		auto& name = shader->GetName();
@@ -850,6 +855,7 @@ namespace cerberus
 		CORE_ASSERT(m_Shaders.find(name) != m_Shaders.end(), "Shader does not exits");
 		return m_Shaders.at(name);
 	}
+
 	void ShaderLibrary::SubmitResourceFree()
 	{
 		for (auto [name, shader] : m_Shaders)

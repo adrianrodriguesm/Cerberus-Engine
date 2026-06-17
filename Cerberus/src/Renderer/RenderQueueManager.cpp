@@ -1,69 +1,59 @@
 #include "pch.h"
 #include "RenderQueueManager.h"
 
-
 namespace cerberus
 {
 	struct RenderCoreData
 	{
 		RenderQueue* CommandQueue = nullptr;
-		std::array<RenderQueue*, 3> ResourceFreeQueue;
 	};
 
-	static RenderCoreData* s_RenderCoreData;
+	static RenderCoreData* s_RenderCoreData = nullptr;
 
 	void RenderQueueManager::Init()
 	{
+		CORE_ASSERT(!s_RenderCoreData, "RenderQueueManager already initialized");
 		s_RenderCoreData = new RenderCoreData();
 		s_RenderCoreData->CommandQueue = new RenderQueue();
-
-		for (uint32_t i = 0; i < 3; i++)
-		{
-			s_RenderCoreData->ResourceFreeQueue[i] = new RenderQueue();
-		}
 	}
 
-	void RenderQueueManager::ShutDown()
+	void RenderQueueManager::Shutdown()
 	{
-		for (uint32_t i = 0; i < 3; i++)
-		{
-			s_RenderCoreData->ResourceFreeQueue[i]->Execute();
-			delete s_RenderCoreData->ResourceFreeQueue[i];
-		}
+		if (!s_RenderCoreData)
+			return;
 
-		s_RenderCoreData->CommandQueue->Execute();
+		// Renderer::Shutdown() must already have drained the command queue.
+		// Do not Execute() here: render commands may submit deferred deletions,
+		// and the deletion/resource systems may already be shutting down.
 		delete s_RenderCoreData->CommandQueue;
+		s_RenderCoreData->CommandQueue = nullptr;
 
 		delete s_RenderCoreData;
+		s_RenderCoreData = nullptr;
 	}
 
 	void RenderQueueManager::FreeAllSubmittedResources()
 	{
-		for (uint32_t i = 0; i < 3; i++)
-		{
-			s_RenderCoreData->ResourceFreeQueue[i]->Execute();
-		}
+		DeferredDeletionQueue::FlushAll();
 	}
 
 	void RenderQueueManager::FreeResourceFromQueue(const uint32_t frameIndex)
 	{
-		CORE_ASSERT(frameIndex < Renderer::GetRendererConfig().FramesInFlight, "Frame index out of bounds!");
-		s_RenderCoreData->ResourceFreeQueue[frameIndex]->Execute();
+		DeferredDeletionQueue::FlushFrame(frameIndex);
 	}
 
 	void RenderQueueManager::ExecuteRenderQueue()
 	{
+		if (!s_RenderCoreData || !s_RenderCoreData->CommandQueue)
+			return;
+
 		s_RenderCoreData->CommandQueue->Execute();
 	}
 
 	RenderQueue& RenderQueueManager::GetRenderCommandQueue()
 	{
+		CORE_ASSERT(s_RenderCoreData, "RenderQueueManager is not initialized");
+		CORE_ASSERT(s_RenderCoreData->CommandQueue, "Invalid render command queue");
 		return *s_RenderCoreData->CommandQueue;
 	}
-
-	RenderQueue& RenderQueueManager::GetRenderResourceReleaseQueue(uint32_t index)
-	{
-		return *s_RenderCoreData->ResourceFreeQueue[index];
-	}
-
 }

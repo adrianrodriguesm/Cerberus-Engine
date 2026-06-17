@@ -1,65 +1,49 @@
 #pragma once
 #include "Renderer/RenderQueue.h"
 #include "Renderer/Renderer.h"
-#include "Renderer/ResourceManager.h"
+#include "Renderer/DeferredDeletionQueue.h"
+#include <type_traits>
+
 namespace cerberus
 {
 	class RenderQueueManager
 	{
 	public:
 		static void Init();
-		static void ShutDown();
+		static void Shutdown();
 
-		// Submit Command to the RenderQueue
+		// Submit a render command to the render command queue.
 		template<typename FuncT>
 		static void Submit(FuncT&& func)
 		{
+			using CommandT = std::decay_t<FuncT>;
+
 			auto renderCommand = [](void* ptr)
 			{
-				auto pFunction = (FuncT*)ptr;
-				// Execute Function
+				auto pFunction = reinterpret_cast<CommandT*>(ptr);
 				(*pFunction)();
-
-				// NOTE: Instead of destroying we could try and enforce all items to be trivally destructible
-				// however some items like uniforms which contain std::strings still exist for now
-				// static_assert(std::is_trivially_destructible_v<FuncT>, "FuncT must be trivially destructible");
-				pFunction->~FuncT();
+				pFunction->~CommandT();
 			};
-			auto functionMemoryAllocation = GetRenderCommandQueue().Allocate(renderCommand, sizeof(func));
-			// Construct function (emplace new)
-			new (functionMemoryAllocation) FuncT(std::forward<FuncT>(func));
+
+			void* functionMemoryAllocation = GetRenderCommandQueue().Allocate(renderCommand, sizeof(CommandT));
+			new (functionMemoryAllocation) CommandT(std::forward<FuncT>(func));
 		}
 
+		// Compatibility wrapper. Resource lifetime now belongs to DeferredDeletionQueue,
+		// not to the render command queue.
 		template<typename FuncT>
 		static void SubmitResourceFree(FuncT&& func)
 		{
-			auto renderCommand = [](void* ptr)
-			{
-				auto pFunction = (FuncT*)ptr;
-				// Execute Function
-				(*pFunction)();
-
-				// NOTE: Instead of destroying we could try and enforce all items to be trivally destructible
-				// however some items like uniforms which contain std::strings still exist for now
-				// static_assert(std::is_trivially_destructible_v<FuncT>, "FuncT must be trivially destructible");
-				pFunction->~FuncT();
-			};
-
-			Submit([renderCommand, func]()
-				{
-					const uint32_t index = Renderer::GetCurrentFrameIndex();
-					auto functionMemoryAllocation = GetRenderResourceReleaseQueue(index).Allocate(renderCommand, sizeof(func));
-					// Construct function (emplace new)
-					new (functionMemoryAllocation) FuncT(std::forward<FuncT>((FuncT&&)func));
-				});
+			const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+			DeferredDeletionQueue::Submit(frameIndex, std::forward<FuncT>(func));
 		}
 
-
+		// Compatibility wrappers kept to avoid touching all call sites in phase 1.
 		static void FreeAllSubmittedResources();
 		static void FreeResourceFromQueue(const uint32_t frameIndex);
 		static void ExecuteRenderQueue();
+
 	private:
 		static RenderQueue& GetRenderCommandQueue();
-		static RenderQueue& GetRenderResourceReleaseQueue(uint32_t index);
 	};
 }

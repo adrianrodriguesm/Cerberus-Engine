@@ -48,10 +48,16 @@ namespace cerberus
 		{
 			for (size_t i = 0; i < m_Size; i++)
 			{
-				if (!m_FreeIndexes.HasElement(i))
+				const int16_t index = static_cast<int16_t>(i);
+
+				if (!m_FreeIndexes.HasElement(index))
 				{
 					m_Data[i].~T();
-					m_FreeIndexes.push(i);
+
+					// Invalidate stale handles.
+					m_Generations[i] = UUID_16();
+
+					m_FreeIndexes.push(index);
 				}
 			}
 
@@ -92,31 +98,41 @@ namespace cerberus
 
 		T* Get(const Handle<T> handle)
 		{
-			if (handle.IsValid())
-			{
-				if (handle.m_Index >= m_Capacity)
-					return nullptr;
-				if (m_Generations[handle.m_Index] != handle.m_ID)
-					return nullptr;
-				return &m_Data[handle.m_Index];
-			}
-			return nullptr;
+			if (!handle.IsValid())
+				return nullptr;
+
+			if (handle.m_Index >= m_Capacity)
+				return nullptr;
+
+			if (m_FreeIndexes.HasElement(handle.m_Index))
+				return nullptr;
+
+			if (m_Generations[handle.m_Index] != handle.m_ID)
+				return nullptr;
+
+			return &m_Data[handle.m_Index];
 		}
 
 		void Remove(const Handle<T> handle)
 		{
-			if (handle.IsValid())
-			{
-				if (handle.m_Index >= m_Capacity)
-					return;
-				if (m_Generations[handle.m_Index] != handle.m_ID)
-					return;
-				if (m_FreeIndexes.HasElement(handle.m_Index))
-					return;
-				m_FreeIndexes.push(handle.m_Index);
-				m_Data[handle.m_Index].~T();
-				//handle.Invalidate();
-			}
+			if (!handle.IsValid())
+				return;
+
+			if (handle.m_Index >= m_Capacity)
+				return;
+
+			if (m_Generations[handle.m_Index] != handle.m_ID)
+				return;
+
+			if (m_FreeIndexes.HasElement(handle.m_Index))
+				return;
+
+			m_Data[handle.m_Index].~T();
+
+			// Invalidate stale handles.
+			m_Generations[handle.m_Index] = UUID_16();
+
+			m_FreeIndexes.push(handle.m_Index);
 		}
 
 		/**/

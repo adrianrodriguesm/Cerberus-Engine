@@ -187,13 +187,14 @@ namespace cerberus
 		ShaderLibrary();
 		~ShaderLibrary();
 
+		void ReleaseAllShaders();
+
 		void Add(const Ref<Shader>& shader);
 		void Load(const std::string& path, bool forceCompile = false);
 		void Load(const std::string& name, const std::string& path);
 
 		const Ref<Shader>& Get(const std::string& name) const;
 	private:
-		friend class Renderer;
 		void SubmitResourceFree();
 	private:
 		std::unordered_map<std::string, Ref<Shader>> m_Shaders;

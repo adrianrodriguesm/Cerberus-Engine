@@ -3,6 +3,7 @@
 #include "ResourceAllocator.h"
 #include "Core/Pool.h"
 #include "Renderer/Descriptor.h"
+#include "Renderer/DeferredDeletionQueue.h"
 namespace cerberus
 {
 	struct ResourceManagerData
@@ -44,28 +45,55 @@ namespace cerberus
 		descriptorAllocatorSpec.IsPersistent = false;
 		s_RMData->DescriptorAllocator = new DescriptorAllocator(descriptorAllocatorSpec);
 	}
+
 	void ResourceManager::Shutdown()
 	{
+		if (!s_RMData)
+			return;
+
+		NV_CORE_WARN("ResourceManager shutdown: clearing live resources");
+
+		// High-level / dependent objects first.
+		s_RMData->Framebuffers.Clear();
+		s_RMData->RenderPasses.Clear();
+
+		s_RMData->GraphicsPipelines.Clear();
+		s_RMData->RayTracingPipelines.Clear();
+
+		s_RMData->BindGroups.Clear();
+		s_RMData->BindGroupLayouts.Clear();
+
 		s_RMData->Textures2D.Clear();
 		s_RMData->TexturesCube.Clear();
 		s_RMData->RenderTargets.Clear();
-		s_RMData->GPUBuffers.Clear();
-		s_RMData->Images.Clear();
-		s_RMData->ImageViews.Clear();
-		s_RMData->BindGroupLayouts.Clear();
-		s_RMData->BindGroups.Clear();
-		s_RMData->RenderPasses.Clear();
-		s_RMData->Framebuffers.Clear();
-		s_RMData->GraphicsPipelines.Clear();
+
+		// Scene proxy objects.
 		s_RMData->MeshInstanceProxy.Clear();
+
+		// MeshSourceProxy may own VertexBuffer / IndexBuffer wrappers.
 		s_RMData->MeshSourceProxy.Clear();
+
+		// Acceleration structures before raw GPU buffers,
+		// because AS may own or reference internal GPU buffers.
 		s_RMData->AccelerationStructures.Clear();
-		s_RMData->RayTracingPipelines.Clear();
+
+		// Views before images.
+		s_RMData->ImageViews.Clear();
+		s_RMData->Images.Clear();
+
+		// Raw buffers near the end.
+		s_RMData->GPUBuffers.Clear();
+
+		// Important:
+		// The destructors above may have submitted deferred Vulkan/VMA destroys.
+		// Flush them while VMA / RendererContext are still alive.
+		DeferredDeletionQueue::FlushAll();
 
 		delete s_RMData->PersistentDescriptorAllocator;
 		delete s_RMData->DescriptorAllocator;
 
 		delete s_RMData;
+		s_RMData = nullptr;
 	}
 
 	Handle<AccelerationStructure> ResourceManager::CreateAccelerationStructure(const AccelerationStructureSpecification& asSpecification)

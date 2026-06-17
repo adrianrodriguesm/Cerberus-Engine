@@ -5,6 +5,7 @@
 #include "Math/Matrix.h"
 #include "Renderer/ResourceManager.h"
 #include "Renderer/RenderQueueManager.h"
+#include "Renderer/DeferredDeletionQueue.h"
 #include "Renderer/RendererContext.h"
 #include "Renderer/VulkanExtensions.h"
 // TODO: Remove these to (only for test)
@@ -184,7 +185,7 @@ namespace cerberus
 		// Debug-safe shutdown: make sure no submitted command buffer still references
 		// TLAS/BLAS resources before destroying them.
 		vkDeviceWaitIdle(RendererContext::GetCurrentVulkanDevice());
-		RenderQueueManager::FreeAllSubmittedResources();
+		DeferredDeletionQueue::FlushAll();
 		FlushPendingRTASDeletes();
 
 		if (m_MeshRegister.ASRegisterInfo.TLAS.IsValid())
@@ -254,7 +255,7 @@ namespace cerberus
 		// the old TLAS/BLAS before we destroy them. Replace this later with a proper
 		// frame-fence deferred deletion queue.
 		vkDeviceWaitIdle(RendererContext::GetCurrentVulkanDevice());
-		RenderQueueManager::FreeAllSubmittedResources();
+		DeferredDeletionQueue::FlushAll();
 
 		// If BLAS were invalidated by unregistering a mesh source, the current TLAS may
 		// still contain instance records pointing at those BLAS. Destroy the TLAS first,
@@ -627,7 +628,7 @@ namespace cerberus
 					// Debug-safe only. This stalls the GPU.
 					// Replace with frame-fence based TLAS double/triple buffering later.
 					vkDeviceWaitIdle(RendererContext::GetCurrentVulkanDevice());
-					RenderQueueManager::FreeAllSubmittedResources();
+					DeferredDeletionQueue::FlushAll();
 				}
 
 				// Nothing left to trace. Do not build a TLAS with zero instances and do not
