@@ -1,5 +1,5 @@
 #pragma once
-#include "Renderer/Backend/MeshProxy.h"
+#include "Renderer/Resources/MeshProxy.h"
 #include "Renderer/CommandBuffer.h"
 #include "Renderer/GPUBuffer.h"
 #include "Core/Handle.h"

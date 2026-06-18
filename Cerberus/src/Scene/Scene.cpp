@@ -2,7 +2,7 @@
 #include "Scene.h"
 #include "Renderer/SceneRenderer/SceneRenderer.h"
 #include "Scene/Entity.h"
-#include "Renderer/Renderer.h"
+#include "Renderer/RendererResources.h"
 #include "Renderer/RenderQueueManager.h"
 #include "Asset/AssetManager.h"
 namespace cerberus
@@ -38,13 +38,13 @@ namespace cerberus
 					Entity cerberusEnt{ view[0], this };
 					auto& skyLight = cerberusEnt.GetComponent<SkyLightComponent>();
 					Ref<EnvironmentMap> environment = AssetManager::GetAsset<EnvironmentMap>(skyLight.EnvironmentHandle);
-					m_LightEnvironment.SkyLight.EnvironmentMap = environment ? environment : Renderer::GetEmptyEnvironmentMap();
+					m_LightEnvironment.SkyLight.EnvironmentMap = environment ? environment : RendererResources::GetEmptyEnvironmentMap();
 					m_LightEnvironment.SkyLight.Multiplier = skyLight.Intensity;
 					m_LightEnvironment.SkyLight.SampleLOD = skyLight.SampleLOD;
 				}
 				else
 				{
-					m_LightEnvironment.SkyLight.EnvironmentMap = Renderer::GetEmptyEnvironmentMap();
+					m_LightEnvironment.SkyLight.EnvironmentMap = RendererResources::GetEmptyEnvironmentMap();
 					m_LightEnvironment.SkyLight.Multiplier = 1.f;
 					m_LightEnvironment.SkyLight.SampleLOD = 1;
 				}

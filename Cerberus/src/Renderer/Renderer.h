@@ -9,7 +9,7 @@
 #include "Renderer/UniformBufferSet.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/SceneRenderer/SceneRenderer.h"
-#include "Renderer/Backend/BindGroup.h"
+#include "Renderer/Resources/BindGroup.h"
 #include "Renderer/DrawStreamBuilder.h"
 namespace cerberus
 {
@@ -80,13 +80,8 @@ namespace cerberus
 		// Getter's
 		static uint32_t GetCurrentFrameIndex();
 		static RendererConfig& GetRendererConfig();
-		static ShaderLibrary& GetShaderLibrary();
 		static Ref<RendererContext> GetRenderContext();
 		static VkPhysicalDeviceLimits GetDeviceLimits();
-		static Handle<Texture2D> GetWhiteTexture();
-		static Ref<MaterialAsset> GetDefaultPBRMaterial();
-		static Ref<EnvironmentMap> GetEmptyEnvironmentMap();
-		static VkDescriptorSetLayout CreateDescriptorSetLayout(VkDescriptorSetLayoutCreateInfo* info);
 	
 	};
 }

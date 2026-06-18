@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "Mesh.h"
-#include "Renderer/Renderer.h"
+#include "Renderer/RendererResources.h"
 #include "Asset/AssetManager.h"
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
@@ -70,7 +70,7 @@ namespace cerberus
 		}
 
 		m_Scene = scene;
-		m_MeshShader = Renderer::GetShaderLibrary().Get("PBR");
+		m_MeshShader = RendererResources::GetShaderLibrary().Get("PBR");
 
 		LoadGeometry();
 		TraverseNodes(scene->mRootNode);

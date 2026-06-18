@@ -1,5 +1,5 @@
 #pragma once
-#include "Renderer/Backend/BindGroup.h"
+#include "Renderer/Resources/BindGroup.h"
 namespace cerberus
 {
 	enum class ShaderStage : uint8_t

@@ -12,6 +12,7 @@
 #include "Renderer/RenderQueueManager.h"
 #include "Renderer/DeferredDeletionQueue.h"
 #include "Renderer/RendererRuntimeState.h"
+#include "Renderer/RendererResources.h"
 
 #include "imgui.h"
 #ifndef IMGUI_IMPL_API
@@ -26,7 +27,6 @@ namespace cerberus
 	{
 		RendererCommandState Commands;
 		RendererDescriptorState Descriptors;
-		RendererDefaultResources Defaults;
 		RendererImGuiState ImGui;
 		RendererFrameState Frame;
 	};
@@ -72,43 +72,13 @@ namespace cerberus
 		VK_CHECK_RESULT(vkCreateCommandPool(vulkanDevice->GetVulkanDevice(), &poolInfo, nullptr, &s_Data->Commands.GraphicsCommandPool));
 		
 		
-		// SHADERS
-		s_Data->Defaults.ShaderLibrary = CreateRef<ShaderLibrary>();
-		s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/PBR.glsl", false);
-		//s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/SceneComposite.glsl", false);
-		//s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/EquirectangularToCubeMap.glsl", false);
-		//s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/EnvironmentMipFilter.glsl", false);
-		//s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/EnvironmentIrradiance.glsl", false);
-		//s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/BRDF.glsl", false);
-		//s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/Skybox.glsl", false);
-		//s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/PreDepth.glsl", false);
-		//s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/ShadowMap.glsl", false);
-
-
-		// Textures
-		s_Data->Defaults.BlackCubeTexture = TextureFactory::CreateTextureCubeWithColor({ 0, 0, 0, 0 });
-		s_Data->Defaults.BlackTexture = TextureFactory::CreateTexture2DWithColor({ 0, 0, 0, 0 });
-		s_Data->Defaults.WhiteTexture = TextureFactory::CreateTexture2DWithColor({ 255, 255, 255, 255 });
-		s_Data->Defaults.BrdfLutTexture = TextureFactory::CreateBRDF();
-		// EmptyEnvironment
-#if OLD_RENDERER
-		s_Data->Defaults.EmptyEnvironment = CreateRef<EnvironmentMap>();
-		s_Data->Defaults.EmptyEnvironment->EquirectangularTex = s_Data->Defaults.BlackTexture;
-		s_Data->Defaults.EmptyEnvironment->IrradianceMap = s_Data->Defaults.BlackCubeTexture;
-		s_Data->Defaults.EmptyEnvironment->RadianceMap = s_Data->Defaults.BlackCubeTexture;
-		s_Data->Defaults.EmptyEnvironment->DebugName = "Empty Environment";
-#endif
+		RendererResources::Init();
 		s_Data->Commands.MainCommandBuffer = new CommandBuffer(ResourceManager::GetFramesInFlight(), "Main Command Buffer");
 		s_Data->Commands.SwapchainCommandBuffer = new CommandBuffer(true, "Swapchain");
 	
-		// Compile Shader and Create default textures
+		// Compile shaders and upload/create default GPU resources queued by RendererResources.
 		RenderQueueManager::ExecuteRenderQueue();
 		Renderer::InitImGui();
-
-		s_Data->Defaults.DefaultMaterial = CreateRef<MaterialAsset>();
-
-
-		s_Data->Defaults.DefaultMaterial->SetAlbedoColor({ 1.f, 0, 1.f });
 	}
 
 	void Renderer::Shutdown()
@@ -129,12 +99,7 @@ namespace cerberus
 		// 2. Destroy renderer-owned ResourceManager resources.
 		//    These calls may enqueue resource-free work internally.
 		// ---------------------------------------------------------------------
-		ResourceManager::DestroyTextureCube(s_Data->Defaults.BlackCubeTexture);
-		ResourceManager::DestroyTexture2D(s_Data->Defaults.BlackTexture);
-		ResourceManager::DestroyTexture2D(s_Data->Defaults.WhiteTexture);
-		ResourceManager::DestroyTexture2D(s_Data->Defaults.BrdfLutTexture);
-
-		s_Data->Defaults.ShaderLibrary->ReleaseAllShaders();
+		RendererResources::Shutdown();
 
 		// Wait again because the Destroy* calls above may submit Vulkan work or
 		// enqueue deferred frees that assume the GPU is idle.
@@ -524,10 +489,6 @@ namespace cerberus
 		style.IndentSpacing = 11.0f;
 	}
 
-	ShaderLibrary& Renderer::GetShaderLibrary()
-	{
-		return *s_Data->Defaults.ShaderLibrary.get();
-	}
 	// Frame -> Set -> Descriptors
 	static std::vector<std::vector<std::vector<VkWriteDescriptorSet>>>& RetrieveOrCreateUniformBufferWriteDescriptors(Ref<UniformBufferSet> uniformBufferSet, Ref<Shader> shader)
 	{
@@ -1129,7 +1090,7 @@ namespace cerberus
 			// BRDF LUT Texture
 			writeDescriptors[2] = *pbrShader->GetWriteDescriptorSet("u_BRDFLUTTex", 1);
 			writeDescriptors[2].dstSet = descriptorSet;
-			const auto& BrdfLutImageInfo= s_Data->Defaults.BrdfLutTexture->GetVulkanDescriptorInfo();
+			const auto& BrdfLutImageInfo= RendererResources::GetBRDFLutTexture()->GetVulkanDescriptorInfo();
 			writeDescriptors[2].pImageInfo = &BrdfLutImageInfo;
 			// Shadow Map
 			// Environment Radiance Texture
@@ -1488,25 +1449,5 @@ namespace cerberus
 	VkPhysicalDeviceLimits Renderer::GetDeviceLimits()
 	{
 		return s_Data->Frame.DeviceLimits;
-	}
-
-	Handle<Texture2D> Renderer::GetWhiteTexture()
-	{
-		return s_Data->Defaults.WhiteTexture;
-	}
-
-	Ref<MaterialAsset> Renderer::GetDefaultPBRMaterial()
-	{
-		return s_Data->Defaults.DefaultMaterial;
-	}
-
-	Ref<EnvironmentMap> Renderer::GetEmptyEnvironmentMap()
-	{
-		return s_Data->Defaults.EmptyEnvironment;
-	}
-
-	VkDescriptorSetLayout Renderer::CreateDescriptorSetLayout(VkDescriptorSetLayoutCreateInfo* info)
-	{
-		return DescriptorManager::CreateDescriptorSetLayout(info);
 	}
 }

@@ -2,7 +2,7 @@
 #include "Utils/SerializationUtils.h"
 #include "Asset/AssetSerializer.h"
 #include "Asset/AssetManager.h"
-#include "Renderer/Renderer.h"
+#include "Renderer/RendererResources.h"
 #include "Scene/Entity.h"
 #include "Utils/FileSystem.h"
 #include "Asset/AssetImporter.h"
@@ -182,7 +182,7 @@ namespace cerberus
 			if (materialTable->GetMaterialCount() > 0)
 			{
 				out << YAML::Key << "MaterialTable" << YAML::Value << YAML::BeginMap; // MaterialTable
-				Ref<MaterialAsset> defaultMaterial = Renderer::GetDefaultPBRMaterial();
+				Ref<MaterialAsset> defaultMaterial = RendererResources::GetDefaultPBRMaterial();
 				for (uint32_t i = 0; i < materialTable->GetMaterialCount(); i++)
 				{
 					Ref<MaterialAsset> material = AssetManager::GetAsset<MaterialAsset>(materialTable->GetMaterial(i));
@@ -280,7 +280,7 @@ namespace cerberus
 					if (meshComponent["MaterialTable"])
 					{
 						YAML::Node materialTableNode = meshComponent["MaterialTable"];
-						Ref<MaterialAsset> defaultPBRMaterial = Renderer::GetDefaultPBRMaterial();
+						Ref<MaterialAsset> defaultPBRMaterial = RendererResources::GetDefaultPBRMaterial();
 						for (auto materialEntry : materialTableNode)
 						{
 							uint32_t index = materialEntry.first.as<uint32_t>();

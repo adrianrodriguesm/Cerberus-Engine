@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "PathTracerSceneRenderer.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/RendererResources.h"
 #include "Asset/AssetManager.h"
 #include "Math/Matrix.h"
 #include "Renderer/ResourceManager.h"
@@ -58,7 +59,7 @@ namespace cerberus
 		// - mesh rendering
 		// ---------------------------------------------------------------------
 
-		auto& shaderLibrary = Renderer::GetShaderLibrary();
+		auto& shaderLibrary = RendererResources::GetShaderLibrary();
 		ShaderSpecification rtShaderSpec;
 		rtShaderSpec.Name = "Raytrace";
 		rtShaderSpec.Stages = {
@@ -72,7 +73,7 @@ namespace cerberus
 
 		// RT bind group layout reflected from Raytrace.rgen set 0.
 		{
-			Ref<Shader> rtShader = Renderer::GetShaderLibrary().Get("Raytrace");
+			Ref<Shader> rtShader = RendererResources::GetShaderLibrary().Get("Raytrace");
 			BindGroupLayout::BindGroupLayoutInfo layoutInfoRT = ShaderReflection::ReflectLayoutInfo(rtShader, 0);
 			m_RT_BindGroupLayout = ResourceManager::CreateBindGroupLayout(layoutInfoRT);
 
@@ -86,7 +87,7 @@ namespace cerberus
 		{
 			PipelineSpecification rtPipelineSpec;
 			rtPipelineSpec.DebugName = "RayTrace";
-			rtPipelineSpec.Shader = Renderer::GetShaderLibrary().Get("Raytrace");
+			rtPipelineSpec.Shader = RendererResources::GetShaderLibrary().Get("Raytrace");
 			rtPipelineSpec.CullMode = CullMode::Back;
 			rtPipelineSpec.DepthOperator = DepthCompareOperator::LessOrEqual;
 			m_RT_Pipeline = ResourceManager::CreateRayTracingPipeline(rtPipelineSpec);

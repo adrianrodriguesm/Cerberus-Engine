@@ -1,6 +1,6 @@
 #pragma once
-#include "Renderer/Backend/BindGroup.h"
-#include "Renderer/Backend/MeshProxy.h"
+#include "Renderer/Resources/BindGroup.h"
+#include "Renderer/Resources/MeshProxy.h"
 #include "Renderer/Shader.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Pipeline.h"

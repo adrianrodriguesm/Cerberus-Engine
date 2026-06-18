@@ -3,7 +3,7 @@
 #include "Renderer/Mesh.h"
 #include "Core/Handle.h"
 #include "Math/Matrix.h"
-#include "Renderer/Backend/BindGroup.h"
+#include "Renderer/Resources/BindGroup.h"
 namespace cerberus
 {
 	struct SubmeshSourceProxy

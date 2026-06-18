@@ -4,6 +4,7 @@
 #include "Renderer/RendererContext.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/RenderQueueManager.h"
+#include "Renderer/DescriptorManager.h"
 #include <spirv_cross/spirv_glsl.hpp>
 #include <shaderc/shaderc.hpp>
 #include <libshaderc_util/file_finder.h>
@@ -815,8 +816,7 @@ namespace cerberus
 			if (set >= m_DescriptorSetLayouts.size())
 				m_DescriptorSetLayouts.resize((size_t)(set + 1));
 
-			m_DescriptorSetLayouts[set] = Renderer::CreateDescriptorSetLayout(&descriptorLayout);
-			//VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &m_DescriptorSetLayouts[set]));
+			m_DescriptorSetLayouts[set] = DescriptorManager::CreateDescriptorSetLayout(&descriptorLayout);
 		}
 	}
 

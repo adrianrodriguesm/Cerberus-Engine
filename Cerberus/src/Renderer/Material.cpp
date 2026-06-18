@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Material.h"
+#include "Renderer/RendererResources.h"
 #include "Renderer/Renderer.h"
 namespace cerberus
 {
@@ -295,7 +296,7 @@ namespace cerberus
 
 	MaterialAsset::MaterialAsset()
 	{
-		m_Material = CreateRef<Material>(Renderer::GetShaderLibrary().Get("PBR"));
+		m_Material = CreateRef<Material>(RendererResources::GetShaderLibrary().Get("PBR"));
 
 		// Set defaults
 		SetAlbedoColor(glm::vec3(0.8f));
@@ -389,7 +390,7 @@ namespace cerberus
 
 	void MaterialAsset::ClearAlbedoMap()
 	{
-		m_Material->Set(s_AlbedoMapUniform, Renderer::GetWhiteTexture());
+		m_Material->Set(s_AlbedoMapUniform, RendererResources::GetWhiteTexture());
 	}
 
 	Ref<Texture2D> MaterialAsset::GetNormalMap()
@@ -417,7 +418,7 @@ namespace cerberus
 
 	void MaterialAsset::ClearNormalMap()
 	{
-		m_Material->Set(s_NormalMapUniform, Renderer::GetWhiteTexture());
+		m_Material->Set(s_NormalMapUniform, RendererResources::GetWhiteTexture());
 	}
 
 	Ref<Texture2D> MaterialAsset::GetMetalnessMap()
@@ -440,7 +441,7 @@ namespace cerberus
 
 	void MaterialAsset::ClearMetalnessMap()
 	{
-		m_Material->Set(s_MetalnessMapUniform, Renderer::GetWhiteTexture());
+		m_Material->Set(s_MetalnessMapUniform, RendererResources::GetWhiteTexture());
 	}
 
 	Ref<Texture2D> MaterialAsset::GetRoughnessMap()
@@ -466,7 +467,7 @@ namespace cerberus
 
 	void MaterialAsset::ClearRoughnessMap()
 	{
-		m_Material->Set(s_RoughnessMapUniform, Renderer::GetWhiteTexture());
+		m_Material->Set(s_RoughnessMapUniform, RendererResources::GetWhiteTexture());
 	}
 
 	///////////////////////////////////////////////////////////////

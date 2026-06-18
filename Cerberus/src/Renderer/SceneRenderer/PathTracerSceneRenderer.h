@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Renderer/SceneRenderer/SceneRenderer.h"
-#include "Renderer/Backend/BindGroup.h"
+#include "Renderer/Resources/BindGroup.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/RenderScene.h"

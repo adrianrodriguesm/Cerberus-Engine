@@ -4,9 +4,13 @@ This document captures the intended ownership model for the renderer after the l
 
 ## Renderer
 
-`Renderer` is the public facade for the global rendering backend. It owns process-wide renderer state and coordinates frame begin/end, shutdown, command allocation helpers, default resources, ImGui integration, and access to global systems such as `ResourceManager`, `ShaderLibrary`, `RenderQueueManager`, and `DeferredDeletionQueue`.
+`Renderer` is the public facade for the global rendering backend. It owns process-wide renderer state and coordinates frame begin/end, shutdown, command allocation helpers, ImGui integration, and access to global systems such as `ResourceManager`, `RendererResources`, `RenderQueueManager`, and `DeferredDeletionQueue`.
 
 It should not own per-scene render data such as mesh registrations, BLAS/TLAS registries, camera state, or pass-specific resources.
+
+## RendererResources
+
+`RendererResources` owns renderer-wide default resources such as default textures, the default PBR material, the empty environment, and the global `ShaderLibrary`. `Renderer` coordinates its lifetime, but it should not store these concrete default resources directly in `RendererData`.
 
 ## RendererContext / Device
 
@@ -47,8 +51,9 @@ It should not own descriptor allocation state. BindGroup and BindGroupLayout wra
 Before introducing a RenderGraph, keep the current goal focused on making ownership boundaries explicit:
 
 1. Renderer state grouped by responsibility.
-2. RenderScene owns renderable scene data.
-3. ResourceManager owns wrappers.
-4. DescriptorManager owns descriptor pools and descriptor set layout cache.
-5. DeferredDeletionQueue owns native delayed destruction.
-6. RenderQueueManager owns render command execution only.
+2. RendererResources owns default renderer resources and shader library.
+3. RenderScene owns renderable scene data.
+4. ResourceManager owns wrappers.
+5. DescriptorManager owns descriptor pools and descriptor set layout cache.
+6. DeferredDeletionQueue owns native delayed destruction.
+7. RenderQueueManager owns render command execution only.

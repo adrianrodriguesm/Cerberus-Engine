@@ -2,7 +2,7 @@
 
 #include "Core/Handle.h"
 #include "Renderer/AccelerationStructure.h"
-#include "Renderer/Backend/MeshProxy.h"
+#include "Renderer/Resources/MeshProxy.h"
 #include "Renderer/Material.h"
 #include "Renderer/Mesh.h"
 
