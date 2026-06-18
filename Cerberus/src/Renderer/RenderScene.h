@@ -1,0 +1,79 @@
+#pragma once
+
+#include "Core/Handle.h"
+#include "Renderer/AccelerationStructure.h"
+#include "Renderer/Backend/MeshProxy.h"
+#include "Renderer/Material.h"
+#include "Renderer/Mesh.h"
+
+namespace cerberus
+{
+	// RenderScene is the renderer-side representation of the logical Scene.
+	// It owns render proxies, GPU-facing mesh registrations, and RT acceleration
+	// structure state. SceneRenderer implementations consume this data instead of
+	// carrying scene registry state themselves.
+	class RenderScene final
+	{
+	public:
+		RenderScene() = default;
+		~RenderScene();
+
+		bool RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform);
+		bool UnregisterMesh(const Ref<Mesh>& mesh);
+		void UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform);
+		bool IsRegistered(const Ref<Mesh>& mesh) const;
+
+		// Builds pending BLAS and builds/updates TLAS when dirty.
+		// Returns true when a valid TLAS is available for tracing.
+		bool PrepareRayTracing();
+
+		bool HasRenderableMeshes() const { return m_MeshRegister.MeshInstanceCount > 0; }
+		bool HasValidTLAS() const { return m_MeshRegister.ASRegisterInfo.TLAS.IsValid(); }
+		Handle<AccelerationStructure> GetTLAS() const { return m_MeshRegister.ASRegisterInfo.TLAS; }
+
+		// Explicit shutdown is useful because the owning SceneRenderer can decide to
+		// wait for the GPU before releasing render-scene resources. Safe to call more
+		// than once.
+		void Shutdown();
+
+	private:
+		void BuildPendingBLAS();
+		void BuildOrUpdateTLAS();
+		void FlushPendingRTASDeletes();
+		void DestroyAllMeshProxies();
+		void ResetRayTracingDirtyFlags();
+
+	private:
+		struct MeshRegister
+		{
+			struct AccelerationStructureInfo
+			{
+				std::vector<Handle<MeshSourceProxy>> BLASToBuild;
+				std::vector<Handle<AccelerationStructure>> PendingBLASToDestroy;
+				std::vector<Handle<MeshSourceProxy>> PendingMeshSourcesToDestroy;
+
+				bool UpdateTLAS = false;
+
+				// BLAS/MeshSource invalidated. Requires safe rebuild + pending deletes.
+				bool ASNeedsSafeRebuild = false;
+
+				// Only TLAS contents changed, e.g. transform update.
+				// Does not destroy BLAS, but still cannot update/rebuild TLAS while GPU uses old TLAS.
+				bool TLASNeedsSafeUpdate = false;
+
+				Handle<AccelerationStructure> TLAS;
+			} ASRegisterInfo;
+
+			std::unordered_map<MeshHandle, std::vector<Handle<MeshInstanceProxy>>> MeshInstanceRegistered;
+			std::unordered_map<MeshSourceHandle, Handle<MeshSourceProxy>> MeshSourceRegistered;
+			std::unordered_map<MeshHandle, std::vector<MeshHandle>> InstancePerMeshSourceRegistered;
+
+			std::unordered_map<AssetHandle, Handle<BindGroup>> MaterialRegistered;
+
+			// Mesh Source Proxy -> Submesh index -> Submesh instance
+			std::unordered_map<Handle<MeshSourceProxy>, std::unordered_map<uint32_t, std::vector<Handle<MeshInstanceProxy>>>> MeshInstanceMap;
+
+			uint32_t MeshInstanceCount = 0;
+		} m_MeshRegister;
+	};
+}

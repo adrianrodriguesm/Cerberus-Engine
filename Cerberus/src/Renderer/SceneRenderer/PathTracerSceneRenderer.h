@@ -1,16 +1,19 @@
 #pragma once
+
 #include "Renderer/SceneRenderer/SceneRenderer.h"
-#include "Scene/Scene.h"
-#include "Renderer/AccelerationStructure.h"
-#include "Renderer/Backend/MeshProxy.h"
 #include "Renderer/Backend/BindGroup.h"
-#include "Renderer/Pipeline.h"
 #include "Renderer/Framebuffer.h"
+#include "Renderer/Pipeline.h"
+#include "Renderer/RenderScene.h"
 #include "Renderer/ShaderBindingTable.h"
 #include "Renderer/StorageBufferSet.h"
+
 #include <span>
+
 namespace cerberus
 {
+	class TextureAsset;
+
 	class PathTracerSceneRenderer final : public SceneRenderer
 	{
 	public:
@@ -25,7 +28,6 @@ namespace cerberus
 
 		virtual void Render(const SceneRendererCamera& sceneRendererCamera) override;
 
-
 		virtual bool RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) override;
 		virtual bool UnregisterMesh(const Ref<Mesh>& mesh) override;
 		virtual void UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform) override;
@@ -39,28 +41,28 @@ namespace cerberus
 	private:
 		void UpdateUBOData();
 		void FlushRenderPasses();
-		void FlushPendingRTASDeletes();
+
 	private:
 		// CPU-side mirror of the ObjDesc struct used in ray tracing shaders.
 		// One entry per mesh instance / submesh instance.
 		struct RayTracingObjectDesc
 		{
-			uint64_t VertexBufferAddress;        // Device address of the mesh vertex buffer
-			uint64_t IndexBufferAddress;         // Device address of the mesh index buffer
-			uint64_t MaterialBufferAddress;      // Optional: device address of material buffer
-			uint64_t MaterialIndexBufferAddress; // Optional: device address of per-primitive material indices
+			uint64_t VertexBufferAddress;
+			uint64_t IndexBufferAddress;
+			uint64_t MaterialBufferAddress;
+			uint64_t MaterialIndexBufferAddress;
 
-			uint32_t FirstIndex;                 // First triangle index for this submesh (in triangles, not bytes)
-			int32_t  BaseVertex;                 // Base vertex offset for this submesh
-			uint32_t TextureArrayOffset;         // Offset into bindless texture array (if used)
-			uint32_t Reserved;                   // Padding / reserved for future use
+			uint32_t FirstIndex;
+			int32_t  BaseVertex;
+			uint32_t TextureArrayOffset;
+			uint32_t Reserved;
 		};
 
 		struct SceneData
 		{
 			SceneRendererCamera SceneRendererCamera;
 		} m_SceneData;
-		// UBO structs
+
 		struct CameraUB
 		{
 			glm::mat4 Projection;
@@ -80,20 +82,21 @@ namespace cerberus
 			// z/w = unused
 			glm::vec4 Params;
 		};
-		// Mesh Shader
-		struct ShaderVertex  // See ObjLoader, copy of VertexObj, could be compressed for device
+
+		struct ShaderVertex
 		{
 			glm::vec3 pos;
 			glm::vec3 nrm;
 			glm::vec3 color;
 			glm::vec2 texCoord;
 		};
+
 	private:
 		SceneRendererSpecification m_Specification;
 
 		glm::ivec2 m_ViewportResolution;
 
-		CommandBuffer* m_CommandBuffer;
+		CommandBuffer* m_CommandBuffer = nullptr;
 
 		Ref<Scene> m_Scene;
 
@@ -105,46 +108,10 @@ namespace cerberus
 
 		Ref<UniformBufferSet> m_UniformBufferSet;
 		Ref<UniformBufferSet> m_UniformBufferSetCamera;
-		Ref<StorageBufferSet> m_RayTracingObjectDescSet; // SSBO for ObjDesc (set = 1, binding = eObjDescs)
+		Ref<StorageBufferSet> m_RayTracingObjectDescSet;
 
-		// Texture test
-		Scope<TextureAsset> m_TextureAsset;
-		Handle<Texture2D> m_TextureRonaldo;
-
-		struct MeshRegister
-		{
-			struct AccelerationStructureInfo
-			{
-				std::vector<Handle<MeshSourceProxy>> BLASToBuild;
-				std::vector<Handle<AccelerationStructure>> PendingBLASToDestroy;
-				std::vector<Handle<MeshSourceProxy>> PendingMeshSourcesToDestroy;
-
-				bool UpdateTLAS = false;
-
-				// BLAS/MeshSource invalidated. Requires safe rebuild + pending deletes.
-				bool ASNeedsSafeRebuild = false;
-
-				// Only TLAS contents changed, e.g. transform update.
-				// Does not destroy BLAS, but still cannot update/rebuild TLAS while GPU uses old TLAS.
-				bool TLASNeedsSafeUpdate = false;
-
-				Handle<AccelerationStructure> TLAS;
-			} ASRegisterInfo;
-
-			std::unordered_map<MeshHandle, std::vector<Handle<MeshInstanceProxy>>> MeshInstanceRegistered;
-			std::unordered_map<MeshSourceHandle, Handle<MeshSourceProxy>> MeshSourceRegistered;
-			std::unordered_map<MeshHandle, std::vector<MeshHandle>> InstancePerMeshSourceRegistered;
-
-			std::unordered_map<AssetHandle, Handle<BindGroup>> MaterialRegistered;
-
-			// Mesh Source Proxy -> Submesh index -> Submesh instance
-			std::unordered_map<Handle<MeshSourceProxy>, std::unordered_map<uint32_t, std::vector<Handle<MeshInstanceProxy>>>> MeshInstanceMap;
-
-			uint32_t MeshInstanceCount = 0;
-
-		} m_MeshRegister;
-
-
+		// Renderer-side representation of the logical scene.
+		Scope<RenderScene> m_RenderScene;
 
 		Handle<BindGroupLayout> m_BindGroup0Layout;
 		Handle<BindGroup> m_BindGroup0;
@@ -162,14 +129,12 @@ namespace cerberus
 
 		Scope<ShaderBindingTable> m_ShaderBindingTable;
 
-
-		// Push constant structure for the ray tracer
 		struct PushConstantRay
 		{
-			glm::vec4  ClearColor;
-			glm::vec3  LightPosition;
+			glm::vec4 ClearColor;
+			glm::vec3 LightPosition;
 			float LightIntensity;
-			int   LightType;
+			int LightType;
 		} m_RT_PushConstant;
 	};
 }
