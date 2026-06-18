@@ -306,7 +306,7 @@ namespace cerberus
 		CommandBuffer* commandBuffer = Renderer::GetMainCommandBuffer(m_Specification.SwapChainTarget);
 		CORE_ASSERT(commandBuffer, "Invalid main command buffer");
 
-		commandBuffer->RT_Begin();
+		commandBuffer->BeginRenderThread();
 
 		if constexpr (ENABLE_RASTER_TEST_PATH)
 		{
@@ -393,8 +393,8 @@ namespace cerberus
 				1);
 		}
 
-		commandBuffer->RT_End();
-		commandBuffer->RT_Submit();
+		commandBuffer->EndRenderThread();
+		commandBuffer->SubmitRenderThread();
 	}
 
 	void PathTracerSceneRenderer::SubmitMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform)

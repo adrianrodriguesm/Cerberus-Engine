@@ -70,31 +70,15 @@ namespace cerberus
 
 	void CommandBuffer::Begin()
 	{
-		// Reset Timestamp of the next available query
+		// Reset timestamp cursor on the calling thread before the command is queued.
 		m_TimestampNextAvailableQuery = 2;
+
 		CommandBuffer* instance = this;
 		RenderQueueManager::Submit([instance]()
 		{
-			uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
-			VkCommandBuffer commandBuffer = instance->m_CommandBuffers[frameIndex];
-			// Information about how to begin each command buffer
-			VkCommandBufferBeginInfo bufferBeginInfo = {};
-			bufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-			bufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;	// Buffer can be resubmitted when it has already been submitted and is awaiting execution
-			bufferBeginInfo.pNext = nullptr;
-			VK_CHECK_RESULT(vkBeginCommandBuffer(commandBuffer, &bufferBeginInfo));
-		
-			// Timestamp query
-			vkCmdResetQueryPool(commandBuffer, instance->m_TimestampQueryPools[frameIndex], 0, instance->m_TimestampQueryCount);
-			vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, instance->m_TimestampQueryPools[frameIndex], 0);
-
-			// Pipeline stats query
-			vkCmdResetQueryPool(commandBuffer, instance->m_PipelineStatisticsQueryPools[frameIndex], 0, instance->m_PipelineQueryCount);
-			vkCmdBeginQuery(commandBuffer, instance->m_PipelineStatisticsQueryPools[frameIndex], 0, 0);
-
-			
+			const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+			instance->BeginInternal(frameIndex, true);
 		});
-
 	}
 
 	void CommandBuffer::End()
@@ -102,14 +86,11 @@ namespace cerberus
 		CommandBuffer* instance = this;
 		RenderQueueManager::Submit([instance]()
 		{
-			uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
-			VkCommandBuffer commandBuffer = instance->m_CommandBuffers[frameIndex];
-			vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, instance->m_TimestampQueryPools[frameIndex], 1);
-			vkCmdEndQuery(commandBuffer, instance->m_PipelineStatisticsQueryPools[frameIndex], 0);
-			VK_CHECK_RESULT(vkEndCommandBuffer(commandBuffer));
+			const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+			instance->EndInternal(frameIndex, true);
 		});
-		
 	}
+
 	void CommandBuffer::Submit()
 	{
 		if (m_OwnedBySwapchain)
@@ -118,43 +99,47 @@ namespace cerberus
 		CommandBuffer* instance = this;
 		RenderQueueManager::Submit([instance]() mutable
 		{
-			Ref<Device> device = RendererContext::GetCurrentDevice();
-			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-			uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
-
-			VkSubmitInfo submitInfo{};
-			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-			submitInfo.commandBufferCount = 1;
-			VkCommandBuffer commandBuffer = instance->m_CommandBuffers[frameIndex];
-			submitInfo.pCommandBuffers = &commandBuffer;
-
-			// Make sure the frame we're requesting has finished rendering
-			VK_CHECK_RESULT(vkWaitForFences(vulkanDevice, 1, &instance->m_WaitFences[frameIndex], VK_TRUE, UINT64_MAX));
-			// Manually reset (close) fences
-			VK_CHECK_RESULT(vkResetFences(vulkanDevice, 1, &instance->m_WaitFences[frameIndex]));
-			// Submit command buffer to queue
-			VK_CHECK_RESULT(vkQueueSubmit(device->GetGraphicsQueue(), 1, &submitInfo, instance->m_WaitFences[frameIndex]));
-		
-			
-			// Retrieve timestamp query results
-			vkGetQueryPoolResults(device->GetVulkanDevice(), instance->m_TimestampQueryPools[frameIndex], 0, instance->m_TimestampNextAvailableQuery,
-				instance->m_TimestampNextAvailableQuery * sizeof(uint64_t), instance->m_TimestampQueryResults[frameIndex].data(), sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
-
-			for (uint32_t i = 0; i < instance->m_TimestampNextAvailableQuery; i += 2)
-			{
-				uint64_t startTime = instance->m_TimestampQueryResults[frameIndex][i];
-				uint64_t endTime = instance->m_TimestampQueryResults[frameIndex][i + 1];
-				float nsTime = endTime > startTime ? (endTime - startTime) * Renderer::GetDeviceLimits().timestampPeriod : 0.0f;
-				instance->m_ExecutionGPUTimes[frameIndex][i / 2] = nsTime * 0.000001f; // Time in ms
-			}
-
-			// Retrieve pipeline stats results
-			vkGetQueryPoolResults(device->GetVulkanDevice(), instance->m_PipelineStatisticsQueryPools[frameIndex], 0, 1,
-				sizeof(PipelineStatistics), &instance->m_PipelineStatisticsQueryResults[frameIndex], sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
-			
+			const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+			instance->SubmitInternal(frameIndex, true);
 		});
-
 	}
+
+	void CommandBuffer::BeginRenderThread()
+	{
+		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+		BeginInternal(frameIndex, false);
+	}
+
+	void CommandBuffer::EndRenderThread()
+	{
+		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+		EndInternal(frameIndex, false);
+	}
+
+	void CommandBuffer::SubmitRenderThread()
+	{
+		if (m_OwnedBySwapchain)
+			return;
+
+		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+		SubmitInternal(frameIndex, false);
+	}
+
+	void CommandBuffer::RT_Begin()
+	{
+		BeginRenderThread();
+	}
+
+	void CommandBuffer::RT_End()
+	{
+		EndRenderThread();
+	}
+
+	void CommandBuffer::RT_Submit()
+	{
+		SubmitRenderThread();
+	}
+
 	uint32_t CommandBuffer::BeginTimestampQuery()
 	{
 		uint32_t queryIndex = m_TimestampNextAvailableQuery;
@@ -194,28 +179,49 @@ namespace cerberus
 	{
 		return m_PipelineStatisticsQueryResults[Renderer::GetCurrentFrameIndex()];
 	}
-	void CommandBuffer::RT_Begin()
+	void CommandBuffer::BeginInternal(uint32_t frameIndex, bool enableQueries)
 	{
-		// Information about how to begin each command buffer
+		CORE_ASSERT(frameIndex < m_CommandBuffers.size(), "Overflow! Invalid command buffer index!");
+
+		VkCommandBuffer commandBuffer = m_CommandBuffers[frameIndex];
+
 		VkCommandBufferBeginInfo bufferBeginInfo = {};
 		bufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		bufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;	// Buffer can be resubmitted when it has already been submitted and is awaiting execution
+		bufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 		bufferBeginInfo.pNext = nullptr;
-		VK_CHECK_RESULT(vkBeginCommandBuffer(m_CommandBuffers[Renderer::GetCurrentFrameIndex()], &bufferBeginInfo));
-	}
-	void CommandBuffer::RT_End()
-	{
-		VK_CHECK_RESULT(vkEndCommandBuffer(m_CommandBuffers[Renderer::GetCurrentFrameIndex()]));
-	}
-	void CommandBuffer::RT_Submit()
-	{
-		if (m_OwnedBySwapchain)
+		VK_CHECK_RESULT(vkBeginCommandBuffer(commandBuffer, &bufferBeginInfo));
+
+		if (!enableQueries)
 			return;
 
+		vkCmdResetQueryPool(commandBuffer, m_TimestampQueryPools[frameIndex], 0, m_TimestampQueryCount);
+		vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, m_TimestampQueryPools[frameIndex], 0);
+
+		vkCmdResetQueryPool(commandBuffer, m_PipelineStatisticsQueryPools[frameIndex], 0, m_PipelineQueryCount);
+		vkCmdBeginQuery(commandBuffer, m_PipelineStatisticsQueryPools[frameIndex], 0, 0);
+	}
+
+	void CommandBuffer::EndInternal(uint32_t frameIndex, bool enableQueries)
+	{
+		CORE_ASSERT(frameIndex < m_CommandBuffers.size(), "Overflow! Invalid command buffer index!");
+
+		VkCommandBuffer commandBuffer = m_CommandBuffers[frameIndex];
+
+		if (enableQueries)
+		{
+			vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_TimestampQueryPools[frameIndex], 1);
+			vkCmdEndQuery(commandBuffer, m_PipelineStatisticsQueryPools[frameIndex], 0);
+		}
+
+		VK_CHECK_RESULT(vkEndCommandBuffer(commandBuffer));
+	}
+
+	void CommandBuffer::SubmitInternal(uint32_t frameIndex, bool collectQueryResults)
+	{
+		CORE_ASSERT(frameIndex < m_CommandBuffers.size(), "Overflow! Invalid command buffer index!");
 
 		Ref<Device> device = RendererContext::GetCurrentDevice();
-		VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-		uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+		VkDevice vulkanDevice = device->GetVulkanDevice();
 
 		VkSubmitInfo submitInfo{};
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -223,13 +229,28 @@ namespace cerberus
 		VkCommandBuffer commandBuffer = m_CommandBuffers[frameIndex];
 		submitInfo.pCommandBuffers = &commandBuffer;
 
-		// Make sure the frame we're requesting has finished rendering
 		VK_CHECK_RESULT(vkWaitForFences(vulkanDevice, 1, &m_WaitFences[frameIndex], VK_TRUE, UINT64_MAX));
-		// Manually reset (close) fences
 		VK_CHECK_RESULT(vkResetFences(vulkanDevice, 1, &m_WaitFences[frameIndex]));
-		// Submit command buffer to queue
 		VK_CHECK_RESULT(vkQueueSubmit(device->GetGraphicsQueue(), 1, &submitInfo, m_WaitFences[frameIndex]));
+
+		if (!collectQueryResults)
+			return;
+
+		vkGetQueryPoolResults(device->GetVulkanDevice(), m_TimestampQueryPools[frameIndex], 0, m_TimestampNextAvailableQuery,
+			m_TimestampNextAvailableQuery * sizeof(uint64_t), m_TimestampQueryResults[frameIndex].data(), sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
+
+		for (uint32_t i = 0; i < m_TimestampNextAvailableQuery; i += 2)
+		{
+			uint64_t startTime = m_TimestampQueryResults[frameIndex][i];
+			uint64_t endTime = m_TimestampQueryResults[frameIndex][i + 1];
+			float nsTime = endTime > startTime ? (endTime - startTime) * Renderer::GetDeviceLimits().timestampPeriod : 0.0f;
+			m_ExecutionGPUTimes[frameIndex][i / 2] = nsTime * 0.000001f;
+		}
+
+		vkGetQueryPoolResults(device->GetVulkanDevice(), m_PipelineStatisticsQueryPools[frameIndex], 0, 1,
+			sizeof(PipelineStatistics), &m_PipelineStatisticsQueryResults[frameIndex], sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
 	}
+
 	VkCommandBuffer CommandBuffer::GetCommandBuffer() const
 	{
 		uint32_t frameIndex = Renderer::GetCurrentFrameIndex();

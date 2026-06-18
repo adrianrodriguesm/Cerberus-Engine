@@ -466,10 +466,41 @@ namespace cerberus
 		vkCmdBindVertexBuffers(vulkanCmdBuffer, 0, 1, &vertexBuffer->Buffer, offsets);
 	}
 
+	TransientCommandBuffer Renderer::BeginTransientCommandBuffer(bool compute)
+	{
+		VkCommandPool commandPool = compute ? s_Data->Commands.ComputeCommandPool : s_Data->Commands.GraphicsCommandPool;
+
+		VkCommandBufferAllocateInfo cmdBufAllocateInfo = {};
+		cmdBufAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		cmdBufAllocateInfo.commandPool = commandPool;
+		cmdBufAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		cmdBufAllocateInfo.commandBufferCount = 1;
+
+		VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+		auto vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+		VK_CHECK_RESULT(vkAllocateCommandBuffers(vulkanDevice, &cmdBufAllocateInfo, &commandBuffer));
+
+		VkCommandBufferBeginInfo cmdBufferBeginInfo{};
+		cmdBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		cmdBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		VK_CHECK_RESULT(vkBeginCommandBuffer(commandBuffer, &cmdBufferBeginInfo));
+
+		Ref<Device> device = RendererContext::GetCurrentDevice();
+		VkQueue queue = compute ? device->GetComputeQueue() : device->GetGraphicsQueue();
+		return TransientCommandBuffer(commandBuffer, commandPool, queue);
+	}
+
+	void Renderer::SubmitTransientCommandBuffer(TransientCommandBuffer& commandBuffer, bool waitForQueueIdle)
+	{
+		commandBuffer.SubmitAndWait(waitForQueueIdle);
+	}
+
 	VkCommandBuffer Renderer::GetCommandBuffer(bool beginCommand, bool compute)
 	{
-		VkCommandBuffer cmdBuffer;
+		if (beginCommand)
+			return BeginTransientCommandBuffer(compute).Release();
 
+		VkCommandBuffer cmdBuffer = VK_NULL_HANDLE;
 		VkCommandBufferAllocateInfo cmdBufAllocateInfo = {};
 		cmdBufAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		cmdBufAllocateInfo.commandPool = compute ? s_Data->Commands.ComputeCommandPool : s_Data->Commands.GraphicsCommandPool;
@@ -477,19 +508,7 @@ namespace cerberus
 		cmdBufAllocateInfo.commandBufferCount = 1;
 
 		auto vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-		// Allocate command buffer from the queue
 		VK_CHECK_RESULT(vkAllocateCommandBuffers(vulkanDevice, &cmdBufAllocateInfo, &cmdBuffer));
-		
-		if (beginCommand)
-		{
-			VkCommandBufferBeginInfo cmdBufferBeginInfo{};
-			cmdBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-			// VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT =  each recording of the command buffer will only be submitted once, 
-			// and the command buffer will be reset and recorded again between each submission.
-			// TODO: Check if this needed
-			cmdBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-			VK_CHECK_RESULT(vkBeginCommandBuffer(cmdBuffer, &cmdBufferBeginInfo));
-		}
 		return cmdBuffer;
 	}
 

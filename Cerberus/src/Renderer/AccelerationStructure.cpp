@@ -86,7 +86,7 @@ namespace cerberus
 		m_UpdateTLAS = outTLAS.IsValid() ? true : false;
 		uint32_t countInstance = static_cast<uint32_t>(m_TLASInstances.size());
 		// Command buffer to create the TLAS
-		VkCommandBuffer   cmdBuf = Renderer::GetCommandBuffer(true, false);
+		TransientCommandBuffer cmdBuf = Renderer::BeginTransientCommandBuffer(false);
 
 		ResourceAllocator allocator("Top Level Acceleration Structure");
 		
@@ -107,7 +107,7 @@ namespace cerberus
 		VmaAllocation scratchBufferAllocation = CreateTlas(cmdBuf, countInstance, instBufferAddr, m_Flags, m_UpdateTLAS, m_MotionTLAS, allocator, scratchBuffer, outTLAS);
 
 		// Finalizing and destroying temporary data
-		Renderer::FlushCommandBuffer(cmdBuf, false, true);
+		cmdBuf.SubmitAndWait(true);
 
 		allocator.DestroyBuffer(instancesBuffer, instBufferAllocation);
 		allocator.DestroyBuffer(scratchBuffer, scratchBufferAllocation);
@@ -130,7 +130,7 @@ namespace cerberus
 
 		CORE_ASSERT(countInstance > 0, "Trying to build a TLAS with 0 instances");
 
-		VkCommandBuffer cmdBuf = Renderer::GetCommandBuffer(true, false);
+		TransientCommandBuffer cmdBuf = Renderer::BeginTransientCommandBuffer(false);
 
 		ResourceAllocator allocator("Top Level Acceleration Structure");
 
@@ -171,7 +171,7 @@ namespace cerberus
 				outTLAS
 			);
 
-		Renderer::FlushCommandBuffer(cmdBuf, false, true);
+		cmdBuf.SubmitAndWait(true);
 
 		allocator.DestroyBuffer(instancesBuffer, instBufferAllocation);
 		allocator.DestroyBuffer(scratchBuffer, scratchBufferAllocation);
@@ -354,16 +354,16 @@ namespace cerberus
 			// Over the limit or last BLAS element
 			if (batchSize >= batchLimit || idx == nbBlas - 1)
 			{
-				VkCommandBuffer cmdBuf = Renderer::GetCommandBuffer(true, false);
+				TransientCommandBuffer cmdBuf = Renderer::BeginTransientCommandBuffer(false);
 				CreateBlas(cmdBuf, indices, buildAs, scratchBufferAddress, queryPool);
-				Renderer::FlushCommandBuffer(cmdBuf, false, true, true);
+				cmdBuf.SubmitAndWait(true);
 				if (queryPool)
 				{
 					// After creation, the real space can be smaller, and it is possible to copy the acceleration structure 
 					// to one that is using exactly what is needed. This could save over 50% of the device memory usage
-					VkCommandBuffer cmdBuf = Renderer::GetCommandBuffer(true, false);
+					TransientCommandBuffer cmdBuf = Renderer::BeginTransientCommandBuffer(false);
 					CompactBlas(cmdBuf, indices, buildAs, queryPool);
-					Renderer::FlushCommandBuffer(cmdBuf, false, true, true);
+					cmdBuf.SubmitAndWait(true);
 					// Destroy the non-compacted version
 					DestroyNonCompacted(indices, buildAs);
 				}
@@ -432,7 +432,7 @@ namespace cerberus
 		VmaAllocation instanceAllocation = allocator.AllocateBuffer(bufferInfo, VMA_MEMORY_USAGE_GPU_ONLY, outIntanceBuffer);
 		// Get a copy command buffer to tranfer the data 
 		// from the staging buffer to the vertex buffer
-		VkCommandBuffer copyCmd = Renderer::GetCommandBuffer(true);
+		TransientCommandBuffer copyCmd = Renderer::BeginTransientCommandBuffer();
 
 		// Region of data to copy from and to
 		VkBufferCopy copyRegion = {};
@@ -442,7 +442,7 @@ namespace cerberus
 		// Record copy operation to the command buffer
 		vkCmdCopyBuffer(copyCmd, stagingBuffer, outIntanceBuffer, 1, &copyRegion);
 		// Flush command bufer (sumit to execution and detroy)
-		Renderer::FlushCommandBuffer(copyCmd);
+		copyCmd.SubmitAndWait();
 
 		// Destroy staging buffer, not longer need it
 		allocator.DestroyBuffer(stagingBuffer, stagingBufferAllocation);

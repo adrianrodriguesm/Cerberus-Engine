@@ -4,6 +4,7 @@
 #include "Renderer/VertexBuffer.h"
 #include "Renderer/IndexBuffer.h"
 #include "Renderer/CommandBuffer.h"
+#include "Renderer/TransientCommandBuffer.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Mesh.h"
 #include "Renderer/UniformBufferSet.h"
@@ -60,6 +61,10 @@ namespace cerberus
 		// -- Dispatch Compute Shader
 		static void DispatchComputeShader(Ref<CommandBuffer> CommandBuffer, Ref<ComputePipeline> pipeline, Ref<UniformBufferSet> uniformBufferSet, Ref<Material> material, const glm::ivec3& workGroups, Buffer additionalUniforms = {});
 		// Command Buffers
+		static TransientCommandBuffer BeginTransientCommandBuffer(bool compute = false);
+		static void SubmitTransientCommandBuffer(TransientCommandBuffer& commandBuffer, bool waitForQueueIdle = false);
+
+		// Legacy raw Vulkan helpers. Prefer BeginTransientCommandBuffer() for one-shot work.
 		static void FlushCommandBuffer(VkCommandBuffer commandBuffer, bool compute = false, bool waitToCompute = false, bool detroyCommandBuffer = true);
 		static VkCommandBuffer GetCommandBuffer(bool beginCommand = false, bool compute = false);
 		static VkCommandBuffer CreateSecondaryCommandBuffer();

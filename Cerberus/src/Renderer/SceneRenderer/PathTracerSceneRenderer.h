@@ -96,8 +96,6 @@ namespace cerberus
 
 		glm::ivec2 m_ViewportResolution;
 
-		CommandBuffer* m_CommandBuffer = nullptr;
-
 		Ref<Scene> m_Scene;
 
 		Handle<ImageView> m_FinalPassImage;

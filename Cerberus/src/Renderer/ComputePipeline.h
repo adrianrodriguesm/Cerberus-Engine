@@ -2,6 +2,7 @@
 
 #include "Renderer/Shader.h"
 #include "Renderer/CommandBuffer.h"
+#include "Renderer/TransientCommandBuffer.h"
 namespace cerberus
 {
 	class ComputePipeline
@@ -27,6 +28,7 @@ namespace cerberus
 		VkPipeline m_ComputePipeline = nullptr;
 
 		VkCommandBuffer m_ActiveComputeCommandBuffer = nullptr;
+		TransientCommandBuffer m_ActiveTransientComputeCommandBuffer;
 		bool m_UsingGraphicsQueue = false;
 	};
 

@@ -95,9 +95,9 @@ namespace cerberus
 
 		// Upload Fonts
 		{
-			VkCommandBuffer commandBuffer = Renderer::GetCommandBuffer(true);
+			TransientCommandBuffer commandBuffer = Renderer::BeginTransientCommandBuffer();
 			ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
-			Renderer::FlushCommandBuffer(commandBuffer);
+			commandBuffer.SubmitAndWait();
 
 			VK_CHECK_RESULT(vkDeviceWaitIdle(device->GetVulkanDevice()));
 			ImGui_ImplVulkan_DestroyFontUploadObjects();

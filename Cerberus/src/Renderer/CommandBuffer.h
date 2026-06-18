@@ -21,12 +21,17 @@ namespace cerberus
 		CommandBuffer(uint32_t count = 0, const std::string& debugName = "");
 		~CommandBuffer();
 
-		// Start recording commands to command buffer
+		// Queued API. These calls can be made from the application thread and are
+		// executed later by RenderQueueManager on the render thread.
 		void Begin();
-		// Stop recording commands to command buffer
 		void End();
-		// Submit commands
 		void Submit();
+
+		// Immediate API. Use these only when the caller is already executing on the
+		// render thread / render queue.
+		void BeginRenderThread();
+		void EndRenderThread();
+		void SubmitRenderThread();
 
 		uint32_t BeginTimestampQuery();
 		void EndTimestampQuery(uint32_t queryID);
@@ -35,6 +40,7 @@ namespace cerberus
 
 		PipelineStatistics GetPipelineStatistics() const;
 
+		// Legacy aliases kept temporarily while older call sites are migrated.
 		void RT_Begin();
 		void RT_End();
 		void RT_Submit();
@@ -51,6 +57,10 @@ namespace cerberus
 		static Ref<CommandBuffer> Create(uint32_t count = 0,const std::string& debugName = "");
 	private:
 		void Invalidate(uint32_t count);
+
+		void BeginInternal(uint32_t frameIndex, bool enableQueries);
+		void EndInternal(uint32_t frameIndex, bool enableQueries);
+		void SubmitInternal(uint32_t frameIndex, bool collectQueryResults);
 	private:
 		VkCommandPool m_CommandPool = nullptr;
 		std::vector<VkCommandBuffer> m_CommandBuffers;

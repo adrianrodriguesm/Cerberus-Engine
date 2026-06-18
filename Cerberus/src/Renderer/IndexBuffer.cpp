@@ -47,7 +47,7 @@ namespace cerberus
 
 		// Get a copy command buffer to tranfer the data 
 		// from the staging buffer to the vertex buffer
-		VkCommandBuffer copyCmd = Renderer::GetCommandBuffer(true);
+		TransientCommandBuffer copyCmd = Renderer::BeginTransientCommandBuffer();
 
 		// Region of data to copy from and to
 		VkBufferCopy copyRegion = {};
@@ -57,7 +57,7 @@ namespace cerberus
 		// Record copy operation to the command buffer
 		vkCmdCopyBuffer(copyCmd, stagingBuffer->Buffer, indexBuffer->Buffer, 1, &copyRegion);
 		// Flush command bufer (sumit to execution and detroy)
-		Renderer::FlushCommandBuffer(copyCmd);
+		copyCmd.SubmitAndWait();
 
 
 		ResourceManager::DestroyBuffer(stagingBufferHandle);

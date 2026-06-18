@@ -219,7 +219,7 @@ namespace cerberus
 		allocator.UnmapMemory(stagingBufferAllocation);
 
 		// Get Copy/Transfer Command Buffer
-		VkCommandBuffer copyCommandBuffer = Renderer::GetCommandBuffer(true);
+		TransientCommandBuffer copyCommandBuffer = Renderer::BeginTransientCommandBuffer();
 
 		// Transition the texture image layout to transfer target, so we can safely copy our buffer data to it.
 		// Insert a memory dependency at the proper pipeline stages that will execute the image layout transition 
@@ -261,7 +261,7 @@ namespace cerberus
 
 
 		// Flush Copy/Transfer Command Buffer (not longer needed)
-		Renderer::FlushCommandBuffer(copyCommandBuffer);
+		copyCommandBuffer.SubmitAndWait();
 		allocator.DestroyBuffer(stagingBuffer, stagingBufferAllocation);
 
 		if (m_Properties.GenerateMips)
@@ -289,7 +289,7 @@ namespace cerberus
 		uint32_t width = image->GetWidth();
 		uint32_t height = image->GetHeight();
 		// Get a command buffer to blit the image between the mip levels
-		const VkCommandBuffer blitCmd = Renderer::GetCommandBuffer(true);
+		TransientCommandBuffer blitCmd = Renderer::BeginTransientCommandBuffer();
 
 		for (uint32_t i = 1; i < mipLevels; i++)
 		{
@@ -368,7 +368,7 @@ namespace cerberus
 			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 			subresourceRange);
 
-		Renderer::FlushCommandBuffer(blitCmd);
+		blitCmd.SubmitAndWait();
 
 	}
 
@@ -463,7 +463,7 @@ namespace cerberus
 		auto device = RendererContext::GetCurrentDevice();
 		auto vulkanDevice = device->GetVulkanDevice();
 
-		VkCommandBuffer blitCmd = Renderer::GetCommandBuffer(true);
+		TransientCommandBuffer blitCmd = Renderer::BeginTransientCommandBuffer();
 		uint32_t mipLevels = GetMipLevelCount();
 		Image* image = ResourceManager::GetImage(m_Image);
 		// Change each face (layer) layout to  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
@@ -566,7 +566,7 @@ namespace cerberus
 			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 			subresourceRange);
 
-		Renderer::FlushCommandBuffer(blitCmd);
+		blitCmd.SubmitAndWait();
 	}
 
 	VkImageView TextureCube::CreateImageViewSingleMip(uint32_t mip)
@@ -731,7 +731,7 @@ namespace cerberus
 			allocator.UnmapMemory(stagingBufferAllocation);
 
 			// Get Copy/Transfer Command Buffer
-			VkCommandBuffer copyCommandBuffer = Renderer::GetCommandBuffer(true);
+			TransientCommandBuffer copyCommandBuffer = Renderer::BeginTransientCommandBuffer();
 			// Transition the texture image layout to transfer target, so we can safely copy our buffer data to it.
 			// Insert a memory dependency at the proper pipeline stages that will execute the image layout transition 
 			utils::ImageLayoutSpecification layoutSpec;
@@ -772,14 +772,14 @@ namespace cerberus
 
 			image->SetImageLayout(layoutSpec);
 
-			Renderer::FlushCommandBuffer(copyCommandBuffer);
+			copyCommandBuffer.SubmitAndWait();
 			allocator.DestroyBuffer(stagingBuffer, stagingBufferAllocation);
 		}
 		else
 		{
 			/**/
 			// Get Copy/Transfer Command Buffer
-			VkCommandBuffer copyCommandBuffer = Renderer::GetCommandBuffer(true);
+			TransientCommandBuffer copyCommandBuffer = Renderer::BeginTransientCommandBuffer();
 			// Transition the texture image layout to  target, so we can safely copy our buffer data to it.
 			// Once the data has been uploaded we transfer to the texture image to the VK_IMAGE_LAYOUT_GENERAL, so it can be write from, and read to
 			utils::ImageLayoutSpecification layoutSpec;
@@ -795,7 +795,7 @@ namespace cerberus
 			layoutSpec.BaseMipLevel = 0;
 
 			image->SetImageLayout(layoutSpec);
-			Renderer::FlushCommandBuffer(copyCommandBuffer);
+			copyCommandBuffer.SubmitAndWait();
 			/**/
 		}
 

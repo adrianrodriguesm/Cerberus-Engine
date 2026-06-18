@@ -16,6 +16,12 @@ It should not own per-scene render data such as mesh registrations, BLAS/TLAS re
 
 `ImGuiRenderer` owns Dear ImGui backend state: the ImGui descriptor pool, secondary command buffers, backend init/shutdown, and swapchain ImGui rendering. `Renderer` coordinates its lifetime, but `RendererData` should not store ImGui-specific Vulkan objects directly.
 
+## Renderer command state / CommandBuffer
+
+`Renderer` owns renderer-level command state: long-lived main/swapchain `CommandBuffer` wrappers and low-level one-shot command pools. Persistent command buffers should be stored as `CommandBuffer` wrappers, not raw `VkCommandBuffer` values. Raw `VkCommandBuffer` helpers are acceptable only for temporary one-shot work until they are wrapped in a later cleanup.
+
+`CommandBuffer` is a Vulkan command buffer wrapper. It provides queued calls for callers outside the render thread and explicit render-thread calls for code already executing on the render thread. It is not a `ResourceManager` resource because it belongs to frame execution infrastructure rather than asset/GPU data ownership.
+
 ## RendererContext / Device
 
 `RendererContext` and `Device` own Vulkan instance/device level state: `VkDevice`, queues, physical device capabilities, and backend extension access.

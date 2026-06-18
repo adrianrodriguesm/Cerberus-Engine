@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Base.h"
 #include "Renderer/RendererContext.h"
 #include "Renderer/CommandBuffer.h"
 #include "Renderer/UniformBufferSet.h"
@@ -15,8 +16,8 @@ namespace cerberus
 		VkCommandPool GraphicsCommandPool = VK_NULL_HANDLE;
 		VkCommandPool ComputeCommandPool = VK_NULL_HANDLE;
 
-		CommandBuffer* MainCommandBuffer = nullptr;
-		CommandBuffer* SwapchainCommandBuffer = nullptr;
+		CommandBuffer* MainCommandBuffer;
+		CommandBuffer* SwapchainCommandBuffer;
 	};
 
 	struct RendererDescriptorState

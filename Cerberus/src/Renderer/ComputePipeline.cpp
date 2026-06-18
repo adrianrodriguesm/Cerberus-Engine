@@ -86,7 +86,8 @@ namespace cerberus
 		}
 		else
 		{
-			m_ActiveComputeCommandBuffer = Renderer::GetCommandBuffer(true, true);
+			m_ActiveTransientComputeCommandBuffer = Renderer::BeginTransientCommandBuffer(true);
+			m_ActiveComputeCommandBuffer = m_ActiveTransientComputeCommandBuffer.GetNative();
 			m_UsingGraphicsQueue = false;
 		}
 		vkCmdBindPipeline(m_ActiveComputeCommandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, m_ComputePipeline);
@@ -99,28 +100,9 @@ namespace cerberus
 		VkDevice vulkanDevice = device->GetVulkanDevice();
 		if (!m_UsingGraphicsQueue)
 		{
-			VkQueue computeQueue = device->GetComputeQueue();
-
-			vkEndCommandBuffer(m_ActiveComputeCommandBuffer);
-
-			uint32_t currentFrame = Renderer::GetCurrentFrameIndex();
-			s_ComputeFence->Wait(currentFrame, UINT64_MAX);
-			// Manually close Fence
-			s_ComputeFence->Reset(currentFrame);
-
-			VkSubmitInfo computeSubmitInfo{};
-			computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-			computeSubmitInfo.commandBufferCount = 1;
-			computeSubmitInfo.pCommandBuffers = &m_ActiveComputeCommandBuffer;
-			VK_CHECK_RESULT(vkQueueSubmit(computeQueue, 1, &computeSubmitInfo, s_ComputeFence->GetVulkanFence(currentFrame)));
-
-			// Wait for execution of compute shader to complete
-			// Currently this is here for "safety"
-			{
-				Timer timer;
-				s_ComputeFence->Wait(currentFrame, UINT64_MAX);
-				NV_CORE_TRACE("Compute shader execution took {0} ms", timer.ElapsedMilliseconds());
-			}
+			Timer timer;
+			m_ActiveTransientComputeCommandBuffer.SubmitAndWait();
+			NV_CORE_TRACE("Compute shader execution took {0} ms", timer.ElapsedMilliseconds());
 		}
 		m_ActiveComputeCommandBuffer = nullptr;
 	}

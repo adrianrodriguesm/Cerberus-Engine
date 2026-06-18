@@ -190,9 +190,9 @@ namespace cerberus
 
 	void Image::SetLayout(VkImageLayout newImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask)
 	{
-		VkCommandBuffer cmdBuffer = Renderer::GetCommandBuffer(true);
+		TransientCommandBuffer cmdBuffer = Renderer::BeginTransientCommandBuffer();
 		SetLayout(cmdBuffer, newImageLayout, srcStageMask, dstStageMask);
-		Renderer::FlushCommandBuffer(cmdBuffer);
+		cmdBuffer.SubmitAndWait();
 	}
 
 	void Image::SetImageLayout(const utils::ImageLayoutSpecification& imgLayoutSpec)
@@ -457,7 +457,7 @@ namespace cerberus
 		if (m_Properties.Usage == ImageUsage::Storage)
 		{
 			// Transition image to GENERAL layout
-			VkCommandBuffer commandBuffer = Renderer::GetCommandBuffer(true);
+			TransientCommandBuffer commandBuffer = Renderer::BeginTransientCommandBuffer();
 
 			VkImageSubresourceRange subresourceRange = {};
 			subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -471,7 +471,7 @@ namespace cerberus
 				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
 				subresourceRange);
 
-			Renderer::FlushCommandBuffer(commandBuffer);
+			commandBuffer.SubmitAndWait();
 		}
 #endif
 	}
