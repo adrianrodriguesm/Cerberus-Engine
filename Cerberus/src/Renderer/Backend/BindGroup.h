@@ -1,4 +1,5 @@
 #pragma once
+#include "Renderer/DescriptorAllocation.h"
 #include "Core/Handle.h"
 #include "Renderer/Shader.h"
 #include "Renderer/UniformBufferSet.h"
@@ -58,7 +59,7 @@ namespace cerberus
 	private:
 		BindGroupLayoutInfo m_Info;
 		std::vector<std::vector<VkWriteDescriptorSet>> m_WriteDescriptors;
-		VkDescriptorSetLayout m_DescriptorSetLayout;
+		VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
 
 		friend class BindGroup;
 	};
@@ -67,7 +68,10 @@ namespace cerberus
 	struct BindGroupSpecification
 	{
 		Handle<BindGroupLayout> BindGroupLayout;
-		bool Persistent = false;
+
+		// BindGroups are engine/resource wrappers and should be persistent by default.
+		// Use Transient only for descriptor sets that are rebuilt every frame and never reused across frames.
+		DescriptorAllocationLifetime Lifetime = DescriptorAllocationLifetime::Persistent;
 	};
 
 	class BindGroup
@@ -97,7 +101,7 @@ namespace cerberus
 		std::vector<VkDescriptorSet> m_Descriptors;
 		// FrameIndex -> [Binding Point, WriteDescriptor]
 		std::vector<std::vector<VkWriteDescriptorSet>> m_WriteDescriptors;
-		bool m_Persistent;
+		DescriptorAllocationLifetime m_Lifetime = DescriptorAllocationLifetime::Persistent;
 	};
 
 	/** /

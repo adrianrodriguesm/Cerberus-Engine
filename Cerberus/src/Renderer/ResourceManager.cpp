@@ -2,7 +2,7 @@
 #include "ResourceManager.h"
 #include "ResourceAllocator.h"
 #include "Core/Pool.h"
-#include "Renderer/Descriptor.h"
+#include "Renderer/DescriptorManager.h"
 #include "Renderer/DeferredDeletionQueue.h"
 namespace cerberus
 {
@@ -24,8 +24,6 @@ namespace cerberus
 		Pool<GraphicsPipeline> GraphicsPipelines;
 		Pool<RayTracingPipeline> RayTracingPipelines;
 
-		DescriptorAllocator* PersistentDescriptorAllocator;
-		DescriptorAllocator* DescriptorAllocator;
 	};
 
 	static ResourceManagerData* s_RMData;
@@ -33,17 +31,6 @@ namespace cerberus
 	void ResourceManager::Init()
 	{
 		s_RMData = new ResourceManagerData();
-
-		//////////////////////////////////
-		// Create Descriptor Pool
-		//////////////////////////////////
-		DescriptorAllocatorSpecification descriptorAllocatorSpec;
-		descriptorAllocatorSpec.NumberOfFrames = GetRendererConfig().FramesInFlight;
-		descriptorAllocatorSpec.MaxSets = 1000;
-		descriptorAllocatorSpec.Flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-		s_RMData->PersistentDescriptorAllocator = new DescriptorAllocator(descriptorAllocatorSpec);
-		descriptorAllocatorSpec.IsPersistent = false;
-		s_RMData->DescriptorAllocator = new DescriptorAllocator(descriptorAllocatorSpec);
 	}
 
 	void ResourceManager::Shutdown()
@@ -88,9 +75,6 @@ namespace cerberus
 		// The destructors above may have submitted deferred Vulkan/VMA destroys.
 		// Flush them while VMA / RendererContext are still alive.
 		DeferredDeletionQueue::FlushAll();
-
-		delete s_RMData->PersistentDescriptorAllocator;
-		delete s_RMData->DescriptorAllocator;
 
 		delete s_RMData;
 		s_RMData = nullptr;
@@ -195,18 +179,31 @@ namespace cerberus
 		return GetRendererConfig().FramesInFlight;
 	}
 
-	VkDescriptorSet ResourceManager::AllocateDescriptorSet(Handle<BindGroupLayout> handle, bool persistent /* = false */)
+	VkDescriptorSet ResourceManager::AllocateDescriptorSet(Handle<BindGroupLayout> handle, DescriptorAllocationLifetime lifetime)
 	{
 		BindGroupLayout* bindGroupLayout = ResourceManager::GetBindGroupLayout(handle);
 		if (!bindGroupLayout)
 			return nullptr;
 
 		VkDescriptorSetLayout vkLayout = bindGroupLayout->GetVulkanDescriptorSetLayout();
+		return DescriptorManager::AllocateDescriptorSet(vkLayout, lifetime);
+	}
 
-		VkDescriptorSet descriptorSet = persistent ? s_RMData->PersistentDescriptorAllocator->Allocate(vkLayout) : 
-													 s_RMData->DescriptorAllocator->Allocate(vkLayout);
+	VkDescriptorSet ResourceManager::AllocateDescriptorSet(Handle<BindGroupLayout> handle, bool persistent /* = true */)
+	{
+		return AllocateDescriptorSet(
+			handle,
+			persistent ? DescriptorAllocationLifetime::Persistent : DescriptorAllocationLifetime::Transient);
+	}
 
-		return descriptorSet;
+	VkDescriptorSet ResourceManager::AllocateTransientDescriptorSet(Handle<BindGroupLayout> handle)
+	{
+		return AllocateDescriptorSet(handle, DescriptorAllocationLifetime::Transient);
+	}
+
+	VkDescriptorSet ResourceManager::AllocatePersistentDescriptorSet(Handle<BindGroupLayout> handle)
+	{
+		return AllocateDescriptorSet(handle, DescriptorAllocationLifetime::Persistent);
 	}
 
 	Handle<Texture2D> ResourceManager::CreateTexture2D(ImageFormat format, const uint32_t width, const uint32_t height, const void* data, TextureProperties properties)
@@ -339,7 +336,7 @@ namespace cerberus
 
 	void ResourceManager::ResetDescriptorPool()
 	{
-		s_RMData->DescriptorAllocator->ResetPool();
+		DescriptorManager::ResetTransientFramePools();
 	}
 }
 

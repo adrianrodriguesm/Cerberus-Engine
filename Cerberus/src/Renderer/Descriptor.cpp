@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "Descriptor.h"
 #include "Renderer/Renderer.h"
-#include "Renderer/RenderQueueManager.h"
+#include "Renderer/DeferredDeletionQueue.h"
 namespace cerberus
 {
 	DescriptorAllocator::DescriptorAllocator(const DescriptorAllocatorSpecification& spec)
@@ -22,7 +22,7 @@ namespace cerberus
 		pool_info.poolSizeCount = (uint32_t)sizes.size();
 		pool_info.pPoolSizes = sizes.data();
 
-		m_AllocationCount.resize(3);
+		m_AllocationCount.resize(m_Specification.NumberOfFrames);
 		VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 		m_DescriptorPools.resize(m_Specification.NumberOfFrames);
 		for (size_t i = 0; i < m_Specification.NumberOfFrames; i++)
@@ -36,13 +36,20 @@ namespace cerberus
 
 	void DescriptorAllocator::Release()
 	{
-		RenderQueueManager::SubmitResourceFree([descriptorPools = m_DescriptorPools]() 
+		if (m_DescriptorPools.empty())
+			return;
+
+		DeferredDeletionQueue::Submit(Renderer::GetCurrentFrameIndex(), [descriptorPools = m_DescriptorPools]() mutable
 		{
 			VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 
-			for (VkDescriptorPool descriptoPool : descriptorPools)
-				vkDestroyDescriptorPool(device, descriptoPool, nullptr);
+			for (VkDescriptorPool descriptorPool : descriptorPools)
+			{
+				if (descriptorPool != VK_NULL_HANDLE)
+					vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+			}
 		});
+
 		m_DescriptorPools.clear();
 	}
 
@@ -79,10 +86,28 @@ namespace cerberus
 	}
 	DescriptorLayoutCache::~DescriptorLayoutCache()
 	{
-		VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+		if (m_DescriptoLayoutCache.empty())
+			return;
+
+		std::vector<VkDescriptorSetLayout> layouts;
+		layouts.reserve(m_DescriptoLayoutCache.size());
 
 		for (auto& [info, layout] : m_DescriptoLayoutCache)
-			vkDestroyDescriptorSetLayout(device, layout, nullptr);
+		{
+			if (layout != VK_NULL_HANDLE)
+				layouts.push_back(layout);
+		}
+
+		DeferredDeletionQueue::Submit(Renderer::GetCurrentFrameIndex(), [layouts = std::move(layouts)]() mutable
+		{
+			VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+
+			for (VkDescriptorSetLayout layout : layouts)
+			{
+				if (layout != VK_NULL_HANDLE)
+					vkDestroyDescriptorSetLayout(device, layout, nullptr);
+			}
+		});
 
 		m_DescriptoLayoutCache.clear();
 	}

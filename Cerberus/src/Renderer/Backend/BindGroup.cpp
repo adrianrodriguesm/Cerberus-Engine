@@ -2,7 +2,7 @@
 #include "BindGroup.h"
 #include "Renderer/ResourceManager.h"
 #include "Renderer/RendererContext.h"
-#include "Renderer/RenderQueueManager.h"
+#include "Renderer/DescriptorManager.h"
 #include "Renderer/AccelerationStructure.h"
 namespace cerberus
 {
@@ -139,19 +139,15 @@ namespace cerberus
 			info.ImageStorages.size(),
 			info.AccelerationStructures.size());
 
-		// Otherwise create a new one (not found)
-		VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &m_DescriptorSetLayout));
+		// DescriptorManager owns/caches descriptor set layouts.
+		m_DescriptorSetLayout = DescriptorManager::CreateDescriptorSetLayout(&layoutInfo);
     }
 
     BindGroupLayout::~BindGroupLayout()
     {
-		RenderQueueManager::SubmitResourceFree([descriptorLayout = m_DescriptorSetLayout]()
-		{
-			VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-			vkDestroyDescriptorSetLayout(device, descriptorLayout, nullptr);
-		});
-		
+		// Descriptor set layouts are cached and owned by DescriptorManager.
+		// Individual BindGroupLayout wrappers do not destroy the native layout.
+		m_DescriptorSetLayout = VK_NULL_HANDLE;
     }
 
 	BindGroupLayout::BindGroupLayout(BindGroupLayout&& other) noexcept
@@ -163,7 +159,8 @@ namespace cerberus
 	}
 
 	BindGroup::BindGroup(const BindGroupSpecification& spec)
-		: m_BindGroupLayout(spec.BindGroupLayout), m_Persistent(spec.Persistent)
+		: m_BindGroupLayout(spec.BindGroupLayout)
+		, m_Lifetime(spec.Lifetime)
 	{
 		BindGroupLayout* layout = ResourceManager::GetBindGroupLayout(m_BindGroupLayout);
 		const auto& writeDescriptors = layout->m_WriteDescriptors;
@@ -203,11 +200,11 @@ namespace cerberus
 			m_WriteDescriptors[writeDescriptor.dstBinding] = entry;
 		}
 		/**/
-		if (m_Persistent)
+		if (m_Lifetime == DescriptorAllocationLifetime::Persistent)
 		{
 			for (uint32_t frameIndex = 0; frameIndex < framesInFlight; frameIndex++)
 			{
-				m_Descriptors[frameIndex] = ResourceManager::AllocateDescriptorSet(m_BindGroupLayout);
+				m_Descriptors[frameIndex] = ResourceManager::AllocateDescriptorSet(m_BindGroupLayout, DescriptorAllocationLifetime::Persistent);
 
 				for (auto& writeDescriptor : m_WriteDescriptors[frameIndex])
 				{
@@ -371,9 +368,9 @@ namespace cerberus
 
 	void BindGroup::Update(uint32_t frameIndex)
 	{
-		if (!m_Persistent || m_Descriptors[frameIndex] == VK_NULL_HANDLE)
+		if (m_Lifetime == DescriptorAllocationLifetime::Transient || m_Descriptors[frameIndex] == VK_NULL_HANDLE)
 		{
-			m_Descriptors[frameIndex] = ResourceManager::AllocateDescriptorSet(m_BindGroupLayout, m_Persistent);
+			m_Descriptors[frameIndex] = ResourceManager::AllocateDescriptorSet(m_BindGroupLayout, m_Lifetime);
 
 			CORE_ASSERT(m_Descriptors[frameIndex], "Invalid descriptor set created!");
 			//m_DescriptorSets[frameIndex] = descriptorSet;

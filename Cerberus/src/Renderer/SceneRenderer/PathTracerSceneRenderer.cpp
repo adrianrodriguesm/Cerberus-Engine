@@ -78,7 +78,7 @@ namespace cerberus
 
 			BindGroupSpecification bindGroupRTSpec;
 			bindGroupRTSpec.BindGroupLayout = m_RT_BindGroupLayout;
-			bindGroupRTSpec.Persistent = false;
+			bindGroupRTSpec.Lifetime = DescriptorAllocationLifetime::Transient;
 			m_RT_BindGroup = ResourceManager::CreateBindGroup(bindGroupRTSpec);
 		}
 
@@ -297,8 +297,8 @@ namespace cerberus
 
 	void PathTracerSceneRenderer::FlushRenderPasses()
 	{
-		ResourceManager::ResetDescriptorPool();
-
+		// Descriptor pool reset belongs to Renderer::BeginFrame. Resetting here can invalidate
+		// descriptor sets that were already allocated/bound earlier in the same frame.
 		uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 		UpdateUBOData();
 

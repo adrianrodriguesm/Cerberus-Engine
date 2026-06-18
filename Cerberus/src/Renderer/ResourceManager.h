@@ -1,4 +1,5 @@
 #pragma once
+#include "Renderer/DescriptorAllocation.h"
 #include "Core/Handle.h"
 #include "Renderer/GPUBuffer.h"
 #include "Renderer/AccelerationStructure.h"
@@ -96,7 +97,10 @@ namespace cerberus
 	
 		static const RendererConfiguration& GetRendererConfig();
 
-		static VkDescriptorSet AllocateDescriptorSet(Handle<BindGroupLayout> Layout, bool persistent = false);
+		static VkDescriptorSet AllocateDescriptorSet(Handle<BindGroupLayout> Layout, DescriptorAllocationLifetime lifetime);
+		static VkDescriptorSet AllocateDescriptorSet(Handle<BindGroupLayout> Layout, bool persistent = true);
+		static VkDescriptorSet AllocateTransientDescriptorSet(Handle<BindGroupLayout> Layout);
+		static VkDescriptorSet AllocatePersistentDescriptorSet(Handle<BindGroupLayout> Layout);
 
 		static uint32_t GetFramesInFlight();
 

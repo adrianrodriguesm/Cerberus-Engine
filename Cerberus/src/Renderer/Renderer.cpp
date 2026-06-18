@@ -4,13 +4,14 @@
 #include "Renderer/ResourceAllocator.h"
 #include "Renderer/UniformBufferSet.h"
 #include "Renderer/ComputePipeline.h"
-#include "Renderer/Descriptor.h"
+#include "Renderer/DescriptorManager.h"
 #include "Utils/StringUtils.h"
 #include "ImGui/ImGuizmo.h"
 #include "ImGui/ImGuiColors.h"
 #include "Renderer/ResourceManager.h"
 #include "Renderer/RenderQueueManager.h"
 #include "Renderer/DeferredDeletionQueue.h"
+#include "Renderer/RendererRuntimeState.h"
 
 #include "imgui.h"
 #ifndef IMGUI_IMPL_API
@@ -23,49 +24,15 @@ namespace cerberus
 {
 	struct RendererData
 	{
-		// Render Command Pool (This pool is mostly is by the transfer queue but in Vulkan 
-		// by default the graphics queue already includes the transfer queue)
-		VkCommandPool CommandPool;
-		VkCommandPool ComputeCommandPool;
-		// Renderer Textures
-		Handle<TextureCube> BlackCubeTexture;
-		Handle<Texture2D> BlackTexture;
-		Handle<Texture2D> WhiteTexture;
-		Handle<Texture2D> BrdfLutTexture;
-		// TODO: Switch to Bind group
-		Ref<MaterialAsset> DefaultMaterial;
-		// TODO: Move to Scene renderer class
-		Ref<EnvironmentMap> EmptyEnvironment;
-
-		std::unordered_map<SceneRenderer*, std::vector<std::vector<VkDescriptorSet>>> RendererDescriptorSetCache;
-		VkDescriptorSet ActiveRendererDescriptorSet = nullptr;
-
-		VkDescriptorPool ImGuiDescriptorPool;
-		DescriptorAllocator* PersistentDescriptorAllocator;
-		DescriptorAllocator* DescriptorAllocator;
-		DescriptorLayoutCache* DescriptorLayoutCache;
-
-		CommandBuffer* MainCommandBuffer;
-		CommandBuffer* SwapchainCommandBuffer;
-
-		struct WriteDescriptorData
-		{
-			uint32_t Set;
-			std::vector<VkWriteDescriptorSet> WriteDescriptors;
-		};
-
-		// UniformBufferSet -> Shader Hash -> Frame -> Set -> WriteDescriptor
-		std::unordered_map<UniformBufferSet*, std::unordered_map<uint64_t, std::vector<std::vector<std::vector<VkWriteDescriptorSet>>>>> UniformBufferWriteDescriptorCache;
-		uint32_t DrawCallCount;
-
-		Ref<ShaderLibrary> ShaderLibrary;
-
-		VkPhysicalDeviceLimits DeviceLimits;
+		RendererCommandState Commands;
+		RendererDescriptorState Descriptors;
+		RendererDefaultResources Defaults;
+		RendererImGuiState ImGui;
+		RendererFrameState Frame;
 	};
 
 	static RendererData* s_Data;
 
-	static std::vector<VkCommandBuffer> s_ImGuiCommandBuffers;
 	void Renderer::Init()
 	{
 		s_Data = new RendererData();
@@ -73,11 +40,12 @@ namespace cerberus
 		auto vulkanDevice = RendererContext::GetCurrentDevice();
 		
 
-		s_Data->DeviceLimits = vulkanDevice->GetPhysicalDeviceLimits();
+		s_Data->Frame.DeviceLimits = vulkanDevice->GetPhysicalDeviceLimits();
 
-		ResourceManager::Init();
 		RenderQueueManager::Init();
 		DeferredDeletionQueue::Init(Renderer::GetRendererConfig().FramesInFlight);
+		DescriptorManager::Init();
+		ResourceManager::Init();
 
 		//////////////////////////////////
 		// Create Compute Pool
@@ -90,7 +58,7 @@ namespace cerberus
 		// VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT allows any command buffer allocated from a pool to be individually reset to the initial state when calling vkBeginCommandBuffer
 		poolComputeInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 		// Create a Graphics Queue Family Command Pool
-		VK_CHECK_RESULT(vkCreateCommandPool(vulkanDevice->GetVulkanDevice(), &poolComputeInfo, nullptr, &s_Data->ComputeCommandPool));
+		VK_CHECK_RESULT(vkCreateCommandPool(vulkanDevice->GetVulkanDevice(), &poolComputeInfo, nullptr, &s_Data->Commands.ComputeCommandPool));
 		//////////////////////////////////
 		// Create Graphic Pool
 		//////////////////////////////////
@@ -101,59 +69,46 @@ namespace cerberus
 		// VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT allows any command buffer allocated from a pool to be individually reset to the initial state when calling vkBeginCommandBuffer
 		poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 		// Create a Graphics Queue Family Command Pool
-		VK_CHECK_RESULT(vkCreateCommandPool(vulkanDevice->GetVulkanDevice(), &poolInfo, nullptr, &s_Data->CommandPool));
+		VK_CHECK_RESULT(vkCreateCommandPool(vulkanDevice->GetVulkanDevice(), &poolInfo, nullptr, &s_Data->Commands.GraphicsCommandPool));
 		
 		
-		//////////////////////////////////
-		// Create Descriptor Pool
-		//////////////////////////////////
-		DescriptorAllocatorSpecification descriptorAllocatorSpec;
-		descriptorAllocatorSpec.NumberOfFrames = Renderer::GetRendererConfig().FramesInFlight;
-		descriptorAllocatorSpec.MaxSets = 1000;
-		descriptorAllocatorSpec.Flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-		descriptorAllocatorSpec.IsPersistent = false;
-		s_Data->DescriptorAllocator = new DescriptorAllocator(descriptorAllocatorSpec);
-		descriptorAllocatorSpec.IsPersistent = true;
-		s_Data->PersistentDescriptorAllocator = new DescriptorAllocator(descriptorAllocatorSpec);
-		s_Data->DescriptorLayoutCache = new DescriptorLayoutCache();
-
 		// SHADERS
-		s_Data->ShaderLibrary = CreateRef<ShaderLibrary>();
-		s_Data->ShaderLibrary->Load("Resources/Shaders/PBR.glsl", false);
-		//s_Data->ShaderLibrary->Load("Resources/Shaders/SceneComposite.glsl", false);
-		//s_Data->ShaderLibrary->Load("Resources/Shaders/EquirectangularToCubeMap.glsl", false);
-		//s_Data->ShaderLibrary->Load("Resources/Shaders/EnvironmentMipFilter.glsl", false);
-		//s_Data->ShaderLibrary->Load("Resources/Shaders/EnvironmentIrradiance.glsl", false);
-		//s_Data->ShaderLibrary->Load("Resources/Shaders/BRDF.glsl", false);
-		//s_Data->ShaderLibrary->Load("Resources/Shaders/Skybox.glsl", false);
-		//s_Data->ShaderLibrary->Load("Resources/Shaders/PreDepth.glsl", false);
-		//s_Data->ShaderLibrary->Load("Resources/Shaders/ShadowMap.glsl", false);
+		s_Data->Defaults.ShaderLibrary = CreateRef<ShaderLibrary>();
+		s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/PBR.glsl", false);
+		//s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/SceneComposite.glsl", false);
+		//s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/EquirectangularToCubeMap.glsl", false);
+		//s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/EnvironmentMipFilter.glsl", false);
+		//s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/EnvironmentIrradiance.glsl", false);
+		//s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/BRDF.glsl", false);
+		//s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/Skybox.glsl", false);
+		//s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/PreDepth.glsl", false);
+		//s_Data->Defaults.ShaderLibrary->Load("Resources/Shaders/ShadowMap.glsl", false);
 
 
 		// Textures
-		s_Data->BlackCubeTexture = TextureFactory::CreateTextureCubeWithColor({ 0, 0, 0, 0 });
-		s_Data->BlackTexture = TextureFactory::CreateTexture2DWithColor({ 0, 0, 0, 0 });
-		s_Data->WhiteTexture = TextureFactory::CreateTexture2DWithColor({ 255, 255, 255, 255 });
-		s_Data->BrdfLutTexture = TextureFactory::CreateBRDF();
+		s_Data->Defaults.BlackCubeTexture = TextureFactory::CreateTextureCubeWithColor({ 0, 0, 0, 0 });
+		s_Data->Defaults.BlackTexture = TextureFactory::CreateTexture2DWithColor({ 0, 0, 0, 0 });
+		s_Data->Defaults.WhiteTexture = TextureFactory::CreateTexture2DWithColor({ 255, 255, 255, 255 });
+		s_Data->Defaults.BrdfLutTexture = TextureFactory::CreateBRDF();
 		// EmptyEnvironment
 #if OLD_RENDERER
-		s_Data->EmptyEnvironment = CreateRef<EnvironmentMap>();
-		s_Data->EmptyEnvironment->EquirectangularTex = s_Data->BlackTexture;
-		s_Data->EmptyEnvironment->IrradianceMap = s_Data->BlackCubeTexture;
-		s_Data->EmptyEnvironment->RadianceMap = s_Data->BlackCubeTexture;
-		s_Data->EmptyEnvironment->DebugName = "Empty Environment";
+		s_Data->Defaults.EmptyEnvironment = CreateRef<EnvironmentMap>();
+		s_Data->Defaults.EmptyEnvironment->EquirectangularTex = s_Data->Defaults.BlackTexture;
+		s_Data->Defaults.EmptyEnvironment->IrradianceMap = s_Data->Defaults.BlackCubeTexture;
+		s_Data->Defaults.EmptyEnvironment->RadianceMap = s_Data->Defaults.BlackCubeTexture;
+		s_Data->Defaults.EmptyEnvironment->DebugName = "Empty Environment";
 #endif
-		s_Data->MainCommandBuffer = new CommandBuffer(ResourceManager::GetFramesInFlight(), "Main Command Buffer");
-		s_Data->SwapchainCommandBuffer = new CommandBuffer(true, "Swapchain");
+		s_Data->Commands.MainCommandBuffer = new CommandBuffer(ResourceManager::GetFramesInFlight(), "Main Command Buffer");
+		s_Data->Commands.SwapchainCommandBuffer = new CommandBuffer(true, "Swapchain");
 	
 		// Compile Shader and Create default textures
 		RenderQueueManager::ExecuteRenderQueue();
 		Renderer::InitImGui();
 
-		s_Data->DefaultMaterial = CreateRef<MaterialAsset>();
+		s_Data->Defaults.DefaultMaterial = CreateRef<MaterialAsset>();
 
 
-		s_Data->DefaultMaterial->SetAlbedoColor({ 1.f, 0, 1.f });
+		s_Data->Defaults.DefaultMaterial->SetAlbedoColor({ 1.f, 0, 1.f });
 	}
 
 	void Renderer::Shutdown()
@@ -174,12 +129,12 @@ namespace cerberus
 		// 2. Destroy renderer-owned ResourceManager resources.
 		//    These calls may enqueue resource-free work internally.
 		// ---------------------------------------------------------------------
-		ResourceManager::DestroyTextureCube(s_Data->BlackCubeTexture);
-		ResourceManager::DestroyTexture2D(s_Data->BlackTexture);
-		ResourceManager::DestroyTexture2D(s_Data->WhiteTexture);
-		ResourceManager::DestroyTexture2D(s_Data->BrdfLutTexture);
+		ResourceManager::DestroyTextureCube(s_Data->Defaults.BlackCubeTexture);
+		ResourceManager::DestroyTexture2D(s_Data->Defaults.BlackTexture);
+		ResourceManager::DestroyTexture2D(s_Data->Defaults.WhiteTexture);
+		ResourceManager::DestroyTexture2D(s_Data->Defaults.BrdfLutTexture);
 
-		s_Data->ShaderLibrary->ReleaseAllShaders();
+		s_Data->Defaults.ShaderLibrary->ReleaseAllShaders();
 
 		// Wait again because the Destroy* calls above may submit Vulkan work or
 		// enqueue deferred frees that assume the GPU is idle.
@@ -202,25 +157,16 @@ namespace cerberus
 		NV_CORE_WARN("Memory allocated: {0}", stats.Used);
 		NV_CORE_WARN("Memory free: {0}", stats.Free);
 
-		vkDestroyCommandPool(vulkanDevice, s_Data->CommandPool, nullptr);
-		vkDestroyCommandPool(vulkanDevice, s_Data->ComputeCommandPool, nullptr);
+		vkDestroyCommandPool(vulkanDevice, s_Data->Commands.GraphicsCommandPool, nullptr);
+		vkDestroyCommandPool(vulkanDevice, s_Data->Commands.ComputeCommandPool, nullptr);
 
-		delete s_Data->DescriptorAllocator;
-		s_Data->DescriptorAllocator = nullptr;
+		delete s_Data->Commands.MainCommandBuffer;
+		s_Data->Commands.MainCommandBuffer = nullptr;
 
-		delete s_Data->PersistentDescriptorAllocator;
-		s_Data->PersistentDescriptorAllocator = nullptr;
+		delete s_Data->Commands.SwapchainCommandBuffer;
+		s_Data->Commands.SwapchainCommandBuffer = nullptr;
 
-		delete s_Data->DescriptorLayoutCache;
-		s_Data->DescriptorLayoutCache = nullptr;
-
-		delete s_Data->MainCommandBuffer;
-		s_Data->MainCommandBuffer = nullptr;
-
-		delete s_Data->SwapchainCommandBuffer;
-		s_Data->SwapchainCommandBuffer = nullptr;
-
-		s_Data->RendererDescriptorSetCache.clear();
+		s_Data->Descriptors.RendererDescriptorSetCache.clear();
 
 		// Destructors above can enqueue deferred Vulkan destruction work. Drain it
 		// before ResourceManager and RendererContext/allocator start shutting down.
@@ -238,6 +184,11 @@ namespace cerberus
 		// before DeferredDeletionQueue and VMA/RendererContext are destroyed.
 		DeferredDeletionQueue::FlushAll();
 
+		// DescriptorManager owns descriptor pools and descriptor set layouts.
+		// Shut it down after ResourceManager has released BindGroups/Layouts and
+		// before the VkDevice is destroyed.
+		DescriptorManager::Shutdown();
+
 		// DeferredDeletionQueue owns only queue storage at this point. It must not
 		// execute queued deletion commands during shutdown.
 		DeferredDeletionQueue::Shutdown();
@@ -252,11 +203,11 @@ namespace cerberus
 
 	void Renderer::BeginFrame()
 	{
-		RenderQueueManager::Submit([]()
-		{
-			s_Data->DescriptorAllocator->ResetPool();
-			s_Data->DrawCallCount = 0;
-		});
+		// This must happen at the frame boundary before any frame-local descriptor set is allocated
+		// or command buffer is recorded. Do not enqueue it into RenderQueueManager, otherwise it may
+		// execute after render passes have already allocated/bound descriptor sets.
+		DescriptorManager::ResetTransientFramePools();
+		s_Data->Frame.DrawCallCount = 0;
 	}
 
 	void Renderer::EndFrame()
@@ -310,7 +261,7 @@ namespace cerberus
 		pool_info.maxSets = 100 * IM_ARRAYSIZE(pool_sizes);
 		pool_info.poolSizeCount = (uint32_t)IM_ARRAYSIZE(pool_sizes);
 		pool_info.pPoolSizes = pool_sizes;
-		VK_CHECK_RESULT(vkCreateDescriptorPool(device->GetVulkanDevice(), &pool_info, nullptr, &s_Data->ImGuiDescriptorPool));
+		VK_CHECK_RESULT(vkCreateDescriptorPool(device->GetVulkanDevice(), &pool_info, nullptr, &s_Data->ImGui.DescriptorPool));
 
 		// Setup Platform/Renderer bindings
 		ImGui_ImplGlfw_InitForVulkan(window, true);
@@ -321,7 +272,7 @@ namespace cerberus
 		init_info.QueueFamily = physicalDevice->GetQueueFamilyIndices().Graphics;
 		init_info.Queue = device->GetGraphicsQueue();
 		init_info.PipelineCache = nullptr;
-		init_info.DescriptorPool = s_Data->ImGuiDescriptorPool;
+		init_info.DescriptorPool = s_Data->ImGui.DescriptorPool;
 		init_info.Allocator = nullptr;
 		init_info.MinImageCount = 2;
 		Ref<Swapchain> swapchain = Application::Get().GetWindow()->GetSwapchain();
@@ -342,9 +293,9 @@ namespace cerberus
 		}
 
 		uint32_t framesInFlight = Renderer::GetRendererConfig().FramesInFlight;
-		s_ImGuiCommandBuffers.resize(framesInFlight);
+		s_Data->ImGui.SecondaryCommandBuffers.resize(framesInFlight);
 		for (uint32_t i = 0; i < framesInFlight; i++)
-			s_ImGuiCommandBuffers[i] = Renderer::CreateSecondaryCommandBuffer();
+			s_Data->ImGui.SecondaryCommandBuffers[i] = Renderer::CreateSecondaryCommandBuffer();
 	}
 
 	void Renderer::ShutdownImGui()
@@ -356,19 +307,19 @@ namespace cerberus
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();
 
-		vkDestroyDescriptorPool(device, s_Data->ImGuiDescriptorPool, nullptr);
+		vkDestroyDescriptorPool(device, s_Data->ImGui.DescriptorPool, nullptr);
 	}
 
 	void Renderer::RenderImGui()
 	{
 		RenderQueueManager::Submit([]() mutable
 		{
-			BeginImGui(s_Data->MainCommandBuffer);
+			BeginImGui(s_Data->Commands.MainCommandBuffer);
 
 			auto& application = Application::Get();
 			application.OnImGuiRender();
 
-			EndImGui(s_Data->MainCommandBuffer);
+			EndImGui(s_Data->Commands.MainCommandBuffer);
 		});
 	}
 
@@ -427,7 +378,7 @@ namespace cerberus
 		cmdBufInfo.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
 		cmdBufInfo.pInheritanceInfo = &inheritanceInfo;
 
-		VK_CHECK_RESULT(vkBeginCommandBuffer(s_ImGuiCommandBuffers[commandBufferIndex], &cmdBufInfo));
+		VK_CHECK_RESULT(vkBeginCommandBuffer(s_Data->ImGui.SecondaryCommandBuffers[commandBufferIndex], &cmdBufInfo));
 
 		VkViewport viewport = {};
 		viewport.x = 0.0f;
@@ -436,22 +387,22 @@ namespace cerberus
 		viewport.width = (float)width;
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0f;
-		vkCmdSetViewport(s_ImGuiCommandBuffers[commandBufferIndex], 0, 1, &viewport);
+		vkCmdSetViewport(s_Data->ImGui.SecondaryCommandBuffers[commandBufferIndex], 0, 1, &viewport);
 
 		VkRect2D scissor = {};
 		scissor.extent.width = width;
 		scissor.extent.height = height;
 		scissor.offset.x = 0;
 		scissor.offset.y = 0;
-		vkCmdSetScissor(s_ImGuiCommandBuffers[commandBufferIndex], 0, 1, &scissor);
+		vkCmdSetScissor(s_Data->ImGui.SecondaryCommandBuffers[commandBufferIndex], 0, 1, &scissor);
 
 		ImDrawData* main_draw_data = ImGui::GetDrawData();
-		ImGui_ImplVulkan_RenderDrawData(main_draw_data, s_ImGuiCommandBuffers[commandBufferIndex]);
+		ImGui_ImplVulkan_RenderDrawData(main_draw_data, s_Data->ImGui.SecondaryCommandBuffers[commandBufferIndex]);
 
-		VK_CHECK_RESULT(vkEndCommandBuffer(s_ImGuiCommandBuffers[commandBufferIndex]));
+		VK_CHECK_RESULT(vkEndCommandBuffer(s_Data->ImGui.SecondaryCommandBuffers[commandBufferIndex]));
 
 		std::vector<VkCommandBuffer> commandBuffers;
-		commandBuffers.push_back(s_ImGuiCommandBuffers[commandBufferIndex]);
+		commandBuffers.push_back(s_Data->ImGui.SecondaryCommandBuffers[commandBufferIndex]);
 
 		vkCmdExecuteCommands(drawCommandBuffer, uint32_t(commandBuffers.size()), commandBuffers.data());
 
@@ -575,7 +526,7 @@ namespace cerberus
 
 	ShaderLibrary& Renderer::GetShaderLibrary()
 	{
-		return *s_Data->ShaderLibrary.get();
+		return *s_Data->Defaults.ShaderLibrary.get();
 	}
 	// Frame -> Set -> Descriptors
 	static std::vector<std::vector<std::vector<VkWriteDescriptorSet>>>& RetrieveOrCreateUniformBufferWriteDescriptors(Ref<UniformBufferSet> uniformBufferSet, Ref<Shader> shader)
@@ -583,9 +534,9 @@ namespace cerberus
 		size_t shaderHash = shader->GetHash();
 #if OLD_RENDERER
 		// If the uniform buffer already extis in the map use that write descriptor set
-		if (s_Data->UniformBufferWriteDescriptorCache.find(uniformBufferSet.get()) != s_Data->UniformBufferWriteDescriptorCache.end())
+		if (s_Data->Descriptors.UniformBufferWriteDescriptorCache.find(uniformBufferSet.get()) != s_Data->Descriptors.UniformBufferWriteDescriptorCache.end())
 		{
-			auto& shaderMap = s_Data->UniformBufferWriteDescriptorCache.at(uniformBufferSet.get());
+			auto& shaderMap = s_Data->Descriptors.UniformBufferWriteDescriptorCache.at(uniformBufferSet.get());
 			if (shaderMap.find(shaderHash) != shaderMap.end())
 			{
 				auto& writeDescriptors = shaderMap.at(shaderHash);
@@ -605,7 +556,7 @@ namespace cerberus
 					for (auto&& [binding, shaderUB] : shaderDescriptorSets[i].UniformBuffers)
 					{
 						// Add this new entry to the descriptor set map
-						auto& writeDescriptors = s_Data->UniformBufferWriteDescriptorCache[uniformBufferSet.get()][shaderHash];
+						auto& writeDescriptors = s_Data->Descriptors.UniformBufferWriteDescriptorCache[uniformBufferSet.get()][shaderHash];
 						writeDescriptors.resize(framesInFlight);
 						for (uint32_t frame = 0; frame < framesInFlight; frame++)
 						{
@@ -625,7 +576,7 @@ namespace cerberus
 			}
 		}
 #endif
-		return s_Data->UniformBufferWriteDescriptorCache[uniformBufferSet.get()][shaderHash];
+		return s_Data->Descriptors.UniformBufferWriteDescriptorCache[uniformBufferSet.get()][shaderHash];
 	}
 
 	void Renderer::UpdateMaterialForRendering(Ref<Material> material, Ref<UniformBufferSet> uniformBufferSet)
@@ -639,7 +590,9 @@ namespace cerberus
 
 	VkDescriptorSet Renderer::AllocateDescriptorSet(VkDescriptorSetLayout& layout, bool persistent)
 	{
-		return persistent ? s_Data->PersistentDescriptorAllocator->Allocate(layout) : s_Data->DescriptorAllocator->Allocate(layout);
+		// Renderer-level descriptor allocations are transient by default. Long-lived resources
+		// should allocate through ResourceManager/BindGroup or pass persistent=true explicitly.
+		return DescriptorManager::AllocateDescriptorSet(layout, persistent);
 	}
 
 	Ref<RendererContext> Renderer::GetRenderContext()
@@ -846,14 +799,14 @@ namespace cerberus
 		// End Render Pass
 		vkCmdEndRenderPass(commandBuffer->GetCommandBuffer(Renderer::GetCurrentFrameIndex()));
 
-		s_Data->DrawCallCount = 0;
+		s_Data->Frame.DrawCallCount = 0;
 #if OLD_RENDERER
 		Renderer::Submit([CommandBuffer]()
 		{
 			// End Render Pass
 			vkCmdEndRenderPass(CommandBuffer->GetCommandBuffer(Renderer::GetCurrentFrameIndex()));
 
-			s_Data->DrawCallCount = 0;
+			s_Data->Frame.DrawCallCount = 0;
 		});
 #endif
 	}
@@ -884,7 +837,7 @@ namespace cerberus
 
 		VkCommandBufferAllocateInfo cmdBufAllocateInfo = {};
 		cmdBufAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		cmdBufAllocateInfo.commandPool = compute ? s_Data->ComputeCommandPool : s_Data->CommandPool;
+		cmdBufAllocateInfo.commandPool = compute ? s_Data->Commands.ComputeCommandPool : s_Data->Commands.GraphicsCommandPool;
 		cmdBufAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		cmdBufAllocateInfo.commandBufferCount = 1;
 
@@ -908,9 +861,9 @@ namespace cerberus
 	CommandBuffer* Renderer::GetMainCommandBuffer(bool swapchain)
 	{
 		if(swapchain)
-			return s_Data->SwapchainCommandBuffer;
+			return s_Data->Commands.SwapchainCommandBuffer;
 		else
-			return s_Data->MainCommandBuffer;
+			return s_Data->Commands.MainCommandBuffer;
 	}
 
 	VkCommandBuffer Renderer::CreateSecondaryCommandBuffer()
@@ -919,7 +872,7 @@ namespace cerberus
 
 		VkCommandBufferAllocateInfo cmdBufAllocateInfo = {};
 		cmdBufAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		cmdBufAllocateInfo.commandPool = s_Data->CommandPool;
+		cmdBufAllocateInfo.commandPool = s_Data->Commands.GraphicsCommandPool;
 		cmdBufAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
 		cmdBufAllocateInfo.commandBufferCount = 1;
 
@@ -962,7 +915,7 @@ namespace cerberus
 
 		if (detroyCommandBuffer)
 		{
-			VkCommandPool commandPool = compute ? s_Data->ComputeCommandPool : s_Data->CommandPool;
+			VkCommandPool commandPool = compute ? s_Data->Commands.ComputeCommandPool : s_Data->Commands.GraphicsCommandPool;
 			vkFreeCommandBuffers(vulkanDevice, commandPool, 1, &commandBuffer);
 		}
 	}
@@ -1143,21 +1096,21 @@ namespace cerberus
 			Ref<Shader> pbrShader = Renderer::GetShaderLibrary().Get("PBR");
 			const uint32_t currentFrame = Renderer::GetCurrentFrameIndex();
 			// Change to a persistent pool
-			if (s_Data->RendererDescriptorSetCache.find(sceneRenderer) == s_Data->RendererDescriptorSetCache.end())
+			if (s_Data->Descriptors.RendererDescriptorSetCache.find(sceneRenderer) == s_Data->Descriptors.RendererDescriptorSetCache.end())
 			{
 				const uint32_t framesInFlight = Renderer::GetRendererConfig().FramesInFlight;
-				s_Data->RendererDescriptorSetCache[sceneRenderer].resize(framesInFlight);
+				s_Data->Descriptors.RendererDescriptorSetCache[sceneRenderer].resize(framesInFlight);
 				for (uint32_t i = 0; i < framesInFlight; i++)
 				{
 					VkDescriptorSet descriptorSet = Renderer::AllocateDescriptorSet(pbrShader->GetDescriptorSetLayout(1), true);
-					s_Data->RendererDescriptorSetCache.at(sceneRenderer)[i].push_back(descriptorSet);
+					s_Data->Descriptors.RendererDescriptorSetCache.at(sceneRenderer)[i].push_back(descriptorSet);
 				}
 					
 			}
-			VkDescriptorSet descriptorSet = s_Data->RendererDescriptorSetCache.at(sceneRenderer)[currentFrame][0];
+			VkDescriptorSet descriptorSet = s_Data->Descriptors.RendererDescriptorSetCache.at(sceneRenderer)[currentFrame][0];
 			// Dynamic pool allocation
 			// VkDescriptorSet descriptorSet = Renderer::AllocateDescriptorSet(pbrShader->GetDescriptorSetLayout(1));
-			s_Data->ActiveRendererDescriptorSet = descriptorSet;
+			s_Data->Descriptors.ActiveRendererDescriptorSet = descriptorSet;
 
 			std::array<VkWriteDescriptorSet, 4> writeDescriptors;
 
@@ -1176,7 +1129,7 @@ namespace cerberus
 			// BRDF LUT Texture
 			writeDescriptors[2] = *pbrShader->GetWriteDescriptorSet("u_BRDFLUTTex", 1);
 			writeDescriptors[2].dstSet = descriptorSet;
-			const auto& BrdfLutImageInfo= s_Data->BrdfLutTexture->GetVulkanDescriptorInfo();
+			const auto& BrdfLutImageInfo= s_Data->Defaults.BrdfLutTexture->GetVulkanDescriptorInfo();
 			writeDescriptors[2].pImageInfo = &BrdfLutImageInfo;
 			// Shadow Map
 			// Environment Radiance Texture
@@ -1315,7 +1268,7 @@ namespace cerberus
 
 			// Draw call
 			vkCmdDrawIndexed(vulkanCommandBuffer, drawCallInfo.IndexCount, 1, drawCallInfo.IndexOffset, drawCallInfo.VertexOffset, 0);
-			s_Data->DrawCallCount++;
+			s_Data->Frame.DrawCallCount++;
 
 		}
 
@@ -1379,7 +1332,7 @@ namespace cerberus
 
 			// Draw call
 			vkCmdDrawIndexed(vulkanCommandBuffer, submeshSource.IndexCount, 1, submeshSource.BaseIndex, submeshSource.BaseVertex, 0);
-			s_Data->DrawCallCount++;
+			s_Data->Frame.DrawCallCount++;
 
 		}
 
@@ -1426,7 +1379,7 @@ namespace cerberus
 				std::array<VkDescriptorSet, 2> descriptorSets = 
 				{	
 					material->GetDescriptorSet(currentFrame),		// Set 0
-					s_Data->ActiveRendererDescriptorSet						// Set 1 (Environment)
+					s_Data->Descriptors.ActiveRendererDescriptorSet						// Set 1 (Environment)
 				};
 
 				// Bind the descriptor set
@@ -1442,7 +1395,7 @@ namespace cerberus
 					
 				// Draw call
 				vkCmdDrawIndexed(vulkanCommandBuffer, submesh.IndexCount, 1, submesh.BaseIndex, submesh.BaseVertex, 0);
-				s_Data->DrawCallCount++;
+				s_Data->Frame.DrawCallCount++;
 			}
 #endif
 		});
@@ -1502,7 +1455,7 @@ namespace cerberus
 				vkCmdPushConstants(vulkanCommandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, pushConstantBuffer.Size, pushConstantBuffer.Data);
 				// Draw call
 				vkCmdDrawIndexed(vulkanCommandBuffer, submesh.IndexCount, 1, submesh.BaseIndex, submesh.BaseVertex, 0);
-				s_Data->DrawCallCount++;
+				s_Data->Frame.DrawCallCount++;
 			}
 			pushConstantBuffer.Release();
 		});
@@ -1534,26 +1487,26 @@ namespace cerberus
 
 	VkPhysicalDeviceLimits Renderer::GetDeviceLimits()
 	{
-		return s_Data->DeviceLimits;
+		return s_Data->Frame.DeviceLimits;
 	}
 
 	Handle<Texture2D> Renderer::GetWhiteTexture()
 	{
-		return s_Data->WhiteTexture;
+		return s_Data->Defaults.WhiteTexture;
 	}
 
 	Ref<MaterialAsset> Renderer::GetDefaultPBRMaterial()
 	{
-		return s_Data->DefaultMaterial;
+		return s_Data->Defaults.DefaultMaterial;
 	}
 
 	Ref<EnvironmentMap> Renderer::GetEmptyEnvironmentMap()
 	{
-		return s_Data->EmptyEnvironment;
+		return s_Data->Defaults.EmptyEnvironment;
 	}
 
 	VkDescriptorSetLayout Renderer::CreateDescriptorSetLayout(VkDescriptorSetLayoutCreateInfo* info)
 	{
-		return s_Data->DescriptorLayoutCache->CreateDescriptorLayout(info);
+		return DescriptorManager::CreateDescriptorSetLayout(info);
 	}
 }
