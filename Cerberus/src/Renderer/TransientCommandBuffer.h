@@ -1,18 +1,19 @@
 #pragma once
+#include "Renderer/CommandPool.h"
 
 namespace cerberus
 {
 	// Lightweight wrapper for one-shot command buffers used by uploads, copies,
 	// image transitions and other immediate setup work.
 	//
-	// Persistent frame command buffers are still represented by CommandBuffer.
-	// This wrapper exists only to avoid leaking raw VkCommandBuffer lifetime to
-	// the rest of the renderer.
+	// Persistent frame command buffers are represented by CommandBuffer.
+	// TransientCommandBuffer borrows a renderer-owned CommandPool and frees its
+	// command buffer back to that pool after SubmitAndWait().
 	class TransientCommandBuffer
 	{
 	public:
 		TransientCommandBuffer() = default;
-		TransientCommandBuffer(VkCommandBuffer commandBuffer, VkCommandPool commandPool, VkQueue queue);
+		TransientCommandBuffer(VkCommandBuffer commandBuffer, CommandPool* commandPool);
 		~TransientCommandBuffer();
 
 		TransientCommandBuffer(const TransientCommandBuffer&) = delete;
@@ -39,7 +40,6 @@ namespace cerberus
 
 	private:
 		VkCommandBuffer m_CommandBuffer = VK_NULL_HANDLE;
-		VkCommandPool m_CommandPool = VK_NULL_HANDLE;
-		VkQueue m_Queue = VK_NULL_HANDLE;
+		CommandPool* m_CommandPool = nullptr;
 	};
 }

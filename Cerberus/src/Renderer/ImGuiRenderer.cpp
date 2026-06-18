@@ -27,7 +27,7 @@ namespace cerberus
 
 	static ImGuiRendererData* s_ImGuiData = nullptr;
 
-	void ImGuiRenderer::Init()
+	void ImGuiRenderer::Init(CommandPool& graphicsCommandPool)
 	{
 		CORE_ASSERT(!s_ImGuiData, "ImGuiRenderer already initialized");
 		s_ImGuiData = new ImGuiRendererData();
@@ -102,11 +102,11 @@ namespace cerberus
 			VK_CHECK_RESULT(vkDeviceWaitIdle(device->GetVulkanDevice()));
 			ImGui_ImplVulkan_DestroyFontUploadObjects();
 		}
-
+		
 		uint32_t framesInFlight = Renderer::GetRendererConfig().FramesInFlight;
 		s_ImGuiData->SecondaryCommandBuffers.resize(framesInFlight);
 		for (uint32_t i = 0; i < framesInFlight; i++)
-			s_ImGuiData->SecondaryCommandBuffers[i] = Renderer::CreateSecondaryCommandBuffer();
+			s_ImGuiData->SecondaryCommandBuffers[i] = graphicsCommandPool.AllocateCommandBuffer(VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 	}
 
 	void ImGuiRenderer::Shutdown()

@@ -4,6 +4,7 @@
 #include "Renderer/VertexBuffer.h"
 #include "Renderer/IndexBuffer.h"
 #include "Renderer/CommandBuffer.h"
+#include "Renderer/CommandPool.h"
 #include "Renderer/TransientCommandBuffer.h"
 #include "Renderer/Pipeline.h"
 #include "Renderer/Mesh.h"
@@ -63,13 +64,8 @@ namespace cerberus
 		// Command Buffers
 		static TransientCommandBuffer BeginTransientCommandBuffer(bool compute = false);
 		static void SubmitTransientCommandBuffer(TransientCommandBuffer& commandBuffer, bool waitForQueueIdle = false);
-
-		// Legacy raw Vulkan helpers. Prefer BeginTransientCommandBuffer() for one-shot work.
-		static void FlushCommandBuffer(VkCommandBuffer commandBuffer, bool compute = false, bool waitToCompute = false, bool detroyCommandBuffer = true);
-		static VkCommandBuffer GetCommandBuffer(bool beginCommand = false, bool compute = false);
-		static VkCommandBuffer CreateSecondaryCommandBuffer();
-		// TODO: sort this out
 		static CommandBuffer* GetMainCommandBuffer(bool swapchain = false);
+
 		// -- Environment Map
 		// Return a pair with <FilteredMap, IrradianceMap>
 		static Ref<EnvironmentMap> CreateEnvironmentMap(const std::string& filepath);
@@ -79,6 +75,10 @@ namespace cerberus
 		static RendererConfig& GetRendererConfig();
 		static Ref<RendererContext> GetRenderContext();
 		static VkPhysicalDeviceLimits GetDeviceLimits();
-	
+	private:
+		friend class CommandBuffer;
+	private:
+		static CommandPool* GetGraphicsCommandPool();
+		static CommandPool* GetComputeCommandPool();
 	};
 }

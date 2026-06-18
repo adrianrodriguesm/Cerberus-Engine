@@ -1,4 +1,6 @@
 #pragma once
+#include "Renderer/CommandPool.h"
+
 namespace cerberus
 {
 	struct PipelineStatistics
@@ -18,6 +20,7 @@ namespace cerberus
 	{
 	public:
 		CommandBuffer(bool ownedBySwapChain = false, const std::string& debugName = "");
+		CommandBuffer(CommandPool* commandPool, uint32_t count = 0, const std::string& debugName = "");
 		CommandBuffer(uint32_t count = 0, const std::string& debugName = "");
 		~CommandBuffer();
 
@@ -62,7 +65,7 @@ namespace cerberus
 		void EndInternal(uint32_t frameIndex, bool enableQueries);
 		void SubmitInternal(uint32_t frameIndex, bool collectQueryResults);
 	private:
-		VkCommandPool m_CommandPool = nullptr;
+		CommandPool* m_CommandPool = nullptr;
 		std::vector<VkCommandBuffer> m_CommandBuffers;
 		std::vector<VkFence> m_WaitFences;
 		std::string m_DebugName;

@@ -10,7 +10,7 @@ namespace cerberus
 	class ImGuiRenderer
 	{
 	public:
-		static void Init();
+		static void Init(CommandPool& graphicsCommandPool);
 		static void Shutdown();
 
 		static void Render();

@@ -3,6 +3,7 @@
 #include "Core/Base.h"
 #include "Renderer/RendererContext.h"
 #include "Renderer/CommandBuffer.h"
+#include "Renderer/CommandPool.h"
 #include "Renderer/UniformBufferSet.h"
 #include "Renderer/SceneRenderer/SceneRenderer.h"
 
@@ -13,11 +14,11 @@ namespace cerberus
 	// subsystem owns frame state, command resources, descriptors and UI.
 	struct RendererCommandState
 	{
-		VkCommandPool GraphicsCommandPool = VK_NULL_HANDLE;
-		VkCommandPool ComputeCommandPool = VK_NULL_HANDLE;
+		Scope<CommandPool> GraphicsCommandPool;
+		Scope<CommandPool> ComputeCommandPool;
 
-		CommandBuffer* MainCommandBuffer;
-		CommandBuffer* SwapchainCommandBuffer;
+		Scope<CommandBuffer> MainCommandBuffer;
+		Scope<CommandBuffer> SwapchainCommandBuffer;
 	};
 
 	struct RendererDescriptorState

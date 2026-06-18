@@ -16,11 +16,15 @@ It should not own per-scene render data such as mesh registrations, BLAS/TLAS re
 
 `ImGuiRenderer` owns Dear ImGui backend state: the ImGui descriptor pool, secondary command buffers, backend init/shutdown, and swapchain ImGui rendering. `Renderer` coordinates its lifetime, but `RendererData` should not store ImGui-specific Vulkan objects directly.
 
-## Renderer command state / CommandBuffer
+## Renderer command state / CommandPool / CommandBuffer
 
-`Renderer` owns renderer-level command state: long-lived main/swapchain `CommandBuffer` wrappers and low-level one-shot command pools. Persistent command buffers should be stored as `CommandBuffer` wrappers, not raw `VkCommandBuffer` values. Raw `VkCommandBuffer` helpers are acceptable only for temporary one-shot work until they are wrapped in a later cleanup.
+`Renderer` owns renderer-level command execution infrastructure. That includes renderer-owned `CommandPool` wrappers and long-lived main/swapchain `CommandBuffer` wrappers. Raw `VkCommandPool` handles should stay hidden inside `CommandPool`; other systems should request persistent command buffers or transient command buffers through renderer-facing APIs instead of allocating from Vulkan pools directly.
 
-`CommandBuffer` is a Vulkan command buffer wrapper. It provides queued calls for callers outside the render thread and explicit render-thread calls for code already executing on the render thread. It is not a `ResourceManager` resource because it belongs to frame execution infrastructure rather than asset/GPU data ownership.
+`CommandPool` wraps a native `VkCommandPool` and centralizes command buffer allocation/free for a specific renderer queue family. It is not a `ResourceManager` resource because it belongs to frame execution infrastructure rather than asset/GPU data ownership.
+
+`CommandBuffer` is the persistent frame command buffer wrapper. It allocates from a renderer-owned `CommandPool`, provides queued calls for callers outside the render thread, and explicit render-thread calls for code already executing on the render thread.
+
+`TransientCommandBuffer` is the one-shot command buffer wrapper for uploads, copies, image transitions and setup work. It borrows a renderer-owned `CommandPool`, submits/waits, and returns the native command buffer to the pool.
 
 ## RendererContext / Device
 
@@ -67,4 +71,5 @@ Before introducing a RenderGraph, keep the current goal focused on making owners
 5. DescriptorManager owns descriptor pools and descriptor set layout cache.
 6. DeferredResourceDeletionQueue owns native delayed destruction.
 7. ImGuiRenderer owns Dear ImGui backend resources.
-8. RenderQueueManager owns render command execution only.
+8. CommandPool wraps renderer command pools; CommandBuffer and TransientCommandBuffer allocate through it.
+9. RenderQueueManager owns render command execution only.

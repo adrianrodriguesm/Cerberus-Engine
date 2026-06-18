@@ -20,6 +20,7 @@ namespace cerberus
 		}
 		else
 		{
+			m_CommandPool = Renderer::GetGraphicsCommandPool();
 			CommandBuffer* instance = this;
 			RenderQueueManager::Submit([instance]()
 			{
@@ -28,9 +29,12 @@ namespace cerberus
 			});
 		}
 	}
-	CommandBuffer::CommandBuffer(uint32_t count, const std::string& debugName)
-		: m_DebugName(debugName)
+
+	CommandBuffer::CommandBuffer(CommandPool* commandPool, uint32_t count, const std::string& debugName)
+		: m_CommandPool(commandPool), m_DebugName(debugName)
 	{
+		CORE_ASSERT(m_CommandPool, "CommandBuffer requires a valid CommandPool");
+
 		CommandBuffer* instance = this;
 		RenderQueueManager::Submit([instance, count]() mutable
 		{
@@ -39,12 +43,18 @@ namespace cerberus
 			instance->Invalidate(count);
 		});
 	}
+
+	CommandBuffer::CommandBuffer(uint32_t count, const std::string& debugName)
+		: CommandBuffer(Renderer::GetGraphicsCommandPool(), count, debugName)
+	{
+	}
+
 	CommandBuffer::~CommandBuffer()
 	{
 		if (m_OwnedBySwapchain)
 			return;
 
-		DeferredResourceDeletionQueue::SubmitCurrentFrame([commandPool = m_CommandPool, waitFences = m_WaitFences, timestampQueryPools = m_TimestampQueryPools, pipelineQueryPool = m_PipelineStatisticsQueryPools]()
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([commandPool = m_CommandPool, commandBuffers = m_CommandBuffers, waitFences = m_WaitFences, timestampQueryPools = m_TimestampQueryPools, pipelineQueryPool = m_PipelineStatisticsQueryPools]()
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 
@@ -56,8 +66,9 @@ namespace cerberus
 
 			for (auto& fence : waitFences)
 				vkDestroyFence(vulkanDevice, fence, nullptr);
-			
-			vkDestroyCommandPool(vulkanDevice, commandPool, nullptr);
+
+			if (commandPool && !commandBuffers.empty())
+				commandPool->FreeCommandBuffers(commandBuffers);
 		});
 
 		m_WaitFences.clear();
@@ -269,24 +280,12 @@ namespace cerberus
 	void CommandBuffer::Invalidate(uint32_t count)
 	{
 		Ref<Device> device = RendererContext::GetCurrentDevice();
-		///////////////////////////////////////////////////////
-		//// Create Command Pool
-		///////////////////////////////////////////////////////
-		VkCommandPoolCreateInfo cmdPoolInfo = {};
-		cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-		cmdPoolInfo.queueFamilyIndex = device->GetPhysicalDevice()->GetQueueFamilyIndices().Graphics;
-		cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-		VK_CHECK_RESULT(vkCreateCommandPool(device->GetVulkanDevice(), &cmdPoolInfo, nullptr, &m_CommandPool));
+		CORE_ASSERT(m_CommandPool, "CommandBuffer requires a valid renderer-owned CommandPool");
+
 		///////////////////////////////////////////////////////
 		//// Allocate Command Buffers
 		///////////////////////////////////////////////////////
-		VkCommandBufferAllocateInfo commandBufferAllocateInfo{};
-		commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		commandBufferAllocateInfo.commandPool = m_CommandPool;
-		commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		commandBufferAllocateInfo.commandBufferCount = count;
-		m_CommandBuffers.resize(count);
-		VK_CHECK_RESULT(vkAllocateCommandBuffers(device->GetVulkanDevice(), &commandBufferAllocateInfo, m_CommandBuffers.data()));
+		m_CommandBuffers = m_CommandPool->AllocateCommandBuffers(count, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 		///////////////////////////////////////////////////////
 		//// Create Fences
 		///////////////////////////////////////////////////////
