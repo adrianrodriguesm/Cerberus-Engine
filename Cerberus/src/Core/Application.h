@@ -2,6 +2,7 @@
 #include "Window.h"
 #include "Core\LayerStack.h"
 #include "Events/ApplicationEvent.h"
+#include <filesystem>
 int main(int argc, char** argv);
 namespace cerberus
 {
@@ -10,6 +11,12 @@ namespace cerberus
 		std::string Name = "Cerberus";
 		uint32_t WindowWidth = 1600, WindowHeight = 900;
 		bool Fullscreen = false;
+
+		// These are resolved at startup. They can be relative to the working directory,
+		// the executable directory, or any parent folder. The editor normally uses
+		// "Cerberus" and "Cerberus-Editor".
+		std::filesystem::path EngineRoot = "Cerberus";
+		std::filesystem::path ProjectRoot = "Cerberus-Editor";
 	};
 	class Application
 	{

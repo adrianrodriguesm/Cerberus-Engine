@@ -71,6 +71,19 @@ namespace cerberus
 	};
 
 
+	struct ShaderStageSource
+	{
+		VkShaderStageFlagBits Stage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+		std::string FilePath;
+	};
+
+	struct ShaderSpecification
+	{
+		std::string Name;
+		std::vector<ShaderStageSource> Stages;
+	};
+
+
 	class Shader
 	{
 	public:
@@ -127,6 +140,7 @@ namespace cerberus
 		};
 	public:
 		Shader(const std::string& path, bool forceCompile = false);
+		Shader(const ShaderSpecification& specification, bool forceCompile = false);
 		~Shader();
 		static void ClearUniformBuffers();
 		
@@ -148,6 +162,7 @@ namespace cerberus
 		const VkWriteDescriptorSet* GetWriteDescriptorSet(const std::string& name, uint32_t set) const;
 	private:
 		std::unordered_map<VkShaderStageFlagBits, std::string> PreProcess(const std::string& source);
+		std::string PreProcessStageSource(const std::string& source, VkShaderStageFlagBits stage, const std::string& sourcePath);
 		// Compile or Get Binary shader cached
 		void CompileOrGetVulkanBinary(std::unordered_map<VkShaderStageFlagBits, std::vector<uint32_t>>& outputBinary, bool forceCompile);
 		// Create Shader Modules
@@ -161,6 +176,7 @@ namespace cerberus
 	private:
 		std::vector<VkPipelineShaderStageCreateInfo> m_PipelineShaderStageCreateInfos;
 		std::unordered_map<VkShaderStageFlagBits, std::string> m_ShaderSource;
+		std::unordered_map<VkShaderStageFlagBits, std::string> m_ShaderSourceFilePaths;
 		std::string m_AssetPath;
 		std::string m_Name;
 
@@ -192,6 +208,7 @@ namespace cerberus
 		void Add(const Ref<Shader>& shader);
 		void Load(const std::string& path, bool forceCompile = false);
 		void Load(const std::string& name, const std::string& path);
+		void Load(const ShaderSpecification& specification, bool forceCompile = false);
 
 		const Ref<Shader>& Get(const std::string& name) const;
 	private:

@@ -21,6 +21,8 @@ namespace cerberus
 	{
 		ApplicationSpecification specification;
 		specification.Fullscreen = false;
+		specification.EngineRoot = "Cerberus";
+		specification.ProjectRoot = "Cerberus-Editor";
 		return new EditorApplication(specification);
 	}
 }

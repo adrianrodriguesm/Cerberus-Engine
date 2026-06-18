@@ -5,6 +5,7 @@
 #include "Renderer/ResourceManager.h"
 #include "Renderer/RenderQueueManager.h"
 #include "Asset/AssetManager.h"
+#include "Utils/FileSystem.h"
 
 #include <imgui/imgui.h>
 namespace cerberus
@@ -26,6 +27,9 @@ namespace cerberus
 		m_Window->SetEventCallback(BIND_EVENT_FN(Application::OnEvent));
 		Log::Init();
 		m_Window->Init();
+
+		FileSystem::Init(m_Specification.EngineRoot, m_Specification.ProjectRoot);
+
 		Renderer::Init();
 		AssetManager::Init();
 	}

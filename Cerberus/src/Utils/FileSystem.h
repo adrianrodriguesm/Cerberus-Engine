@@ -1,5 +1,6 @@
 #pragma once
 #include <filesystem>
+#include <string>
 
 namespace cerberus
 {
@@ -15,6 +16,21 @@ namespace cerberus
 	class FileSystem
 	{
 	public:
+		static void Init(const std::filesystem::path& engineRoot, const std::filesystem::path& projectRoot);
+
+		static const std::filesystem::path& GetEngineRoot();
+		static const std::filesystem::path& GetProjectRoot();
+		static std::filesystem::path GetEngineShaderDirectory();
+		static std::filesystem::path GetProjectShaderDirectory();
+
+		// Resolves explicit virtual paths such as:
+		//   engine://Shaders/RayTracing/Raytrace.rgen
+		//   project://Shaders/PBR.glsl
+		// Legacy paths are kept working by searching the project root first and then the engine root.
+		static std::filesystem::path ResolvePath(const std::string& filepath);
+		static std::filesystem::path ResolveFileSystemPath(const std::string& filepath);
+		static bool IsVirtualPath(const std::string& filepath);
+
 		static std::filesystem::path GetRelativePathFromAbsolute(const std::filesystem::path absolutePath);
 		static std::string GetProjectPath();
 		static bool Exists(const std::filesystem::path& filepath);

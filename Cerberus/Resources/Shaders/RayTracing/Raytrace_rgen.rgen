@@ -1,0 +1,37 @@
+#version 460
+
+#extension GL_EXT_ray_tracing : require
+#extension GL_EXT_nonuniform_qualifier : enable
+
+#include "Common.glsl"
+#include "Camera.glsl"
+#include "Payload.glsl"
+
+layout(location = 0) rayPayloadEXT HitPayload Payload;
+
+void main()
+{
+    ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
+    ivec2 size = ivec2(gl_LaunchSizeEXT.xy);
+
+    vec3 origin = Camera.Position.xyz;
+    vec3 direction = GetCameraRayDirection(vec2(gl_LaunchIDEXT.xy), vec2(gl_LaunchSizeEXT.xy));
+
+    Payload.hitValue = vec3(0.0, 0.0, 0.0);
+
+    traceRayEXT(
+        TLAS,
+        gl_RayFlagsOpaqueEXT,
+        0xFF,
+        0,
+        0,
+        0,
+        origin,
+        CERBERUS_RAY_T_MIN,
+        direction,
+        CERBERUS_RAY_T_MAX,
+        0
+    );
+
+    imageStore(RTOutput, pixel, vec4(Payload.hitValue, 1.0));
+}

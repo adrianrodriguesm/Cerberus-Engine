@@ -8,22 +8,26 @@
 #include <shaderc/shaderc.hpp>
 #include <libshaderc_util/file_finder.h>
 #include <filesystem>
+#include <algorithm>
+#include <cctype>
 #include "GLSLIncludeProcessor.h"
+#include "Utils/FileSystem.h"
 
 namespace cerberus
 {
 	namespace utils
 	{
 		
-		static const char* GetCacheDirectory()
+		static std::filesystem::path GetCacheDirectory()
 		{
-			// TODO: make sure the assets directory is valid
-			return "Resources/Cache/Shader";
+			// Engine-owned shader cache. Project shaders can still be loaded, but compiled
+			// binaries live in a single engine cache for now.
+			return FileSystem::GetEngineRoot() / "Cache" / "Shader";
 		}
 
 		static void CreateCacheDirectoryIfNeeded()
 		{
-			std::string cacheDirectory = GetCacheDirectory();
+			std::filesystem::path cacheDirectory = GetCacheDirectory();
 			if (!std::filesystem::exists(cacheDirectory))
 				std::filesystem::create_directories(cacheDirectory);
 		}
@@ -56,22 +60,41 @@ namespace cerberus
 
 		static VkShaderStageFlagBits ShaderTypeFromString(const std::string& type)
 		{
-			if (type == "vertex")                       return VK_SHADER_STAGE_VERTEX_BIT;
-			if (type == "fragment" || type == "pixel")  return VK_SHADER_STAGE_FRAGMENT_BIT;
-			if (type == "compute")                      return VK_SHADER_STAGE_COMPUTE_BIT;
-			if (type == "rayGen")						return VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-			if (type == "closestHit")                   return VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
-			if (type == "anyHit")						return VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
-			if (type == "missHit")                      return VK_SHADER_STAGE_MISS_BIT_KHR;
-			if (type == "intersection")                 return VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+			if (type == "vertex" || type == "vert")                      return VK_SHADER_STAGE_VERTEX_BIT;
+			if (type == "fragment" || type == "pixel" || type == "frag")  return VK_SHADER_STAGE_FRAGMENT_BIT;
+			if (type == "compute" || type == "comp")                     return VK_SHADER_STAGE_COMPUTE_BIT;
+			if (type == "rayGen" || type == "raygen" || type == "rgen")  return VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+			if (type == "closestHit" || type == "closesthit" || type == "rchit") return VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+			if (type == "anyHit" || type == "anyhit" || type == "rahit") return VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+			if (type == "missHit" || type == "miss" || type == "rmiss")   return VK_SHADER_STAGE_MISS_BIT_KHR;
+			if (type == "intersection" || type == "rint")                return VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+
+			return VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+		}
+
+		static VkShaderStageFlagBits ShaderStageFromFileExtension(const std::string& filepath)
+		{
+			const std::filesystem::path path(filepath);
+			std::string extension = path.extension().string();
+			std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+
+			if (extension == ".vert")  return VK_SHADER_STAGE_VERTEX_BIT;
+			if (extension == ".frag")  return VK_SHADER_STAGE_FRAGMENT_BIT;
+			if (extension == ".comp")  return VK_SHADER_STAGE_COMPUTE_BIT;
+			if (extension == ".rgen")  return VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+			if (extension == ".rmiss") return VK_SHADER_STAGE_MISS_BIT_KHR;
+			if (extension == ".rchit") return VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+			if (extension == ".rahit") return VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+			if (extension == ".rint")  return VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
 
 			return VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
 		}
 
 		static std::string ReadShaderFromFile(const std::string& filepath)
 		{
+			std::filesystem::path resolvedPath = FileSystem::ResolvePath(filepath);
 			std::string result;
-			std::ifstream in(filepath, std::ios::in | std::ios::binary);
+			std::ifstream in(resolvedPath, std::ios::in | std::ios::binary);
 			if (in)
 			{
 				in.seekg(0, std::ios::end);
@@ -81,7 +104,7 @@ namespace cerberus
 			}
 			else
 			{
-				CORE_ASSERT(false, "Could not load shader!");
+				CORE_ASSERT(false, "Could not load shader: {0} resolved to {1}", filepath, resolvedPath.string());
 			}
 			in.close();
 			return result;
@@ -129,7 +152,7 @@ namespace cerberus
 	static std::unordered_map<uint32_t, std::unordered_map<uint32_t, Shader::AccelerationStructure*>> s_AccelerationStructure; // set -> binding point -> AS
 
     Shader::Shader(const std::string& path, bool forceCompile)
-        : m_AssetPath(path)
+        : m_AssetPath(FileSystem::ResolvePath(path).string())
     {
         size_t found = path.find_last_of("/\\");
         m_Name = found != std::string::npos ? path.substr(found + 1) : path;
@@ -138,6 +161,23 @@ namespace cerberus
 
         Reload(forceCompile);
     }
+
+	Shader::Shader(const ShaderSpecification& specification, bool forceCompile)
+		: m_AssetPath(specification.Stages.empty() ? specification.Name : FileSystem::ResolvePath(specification.Stages.front().FilePath).string())
+	{
+		CORE_ASSERT(!specification.Name.empty(), "ShaderSpecification requires a name");
+		CORE_ASSERT(!specification.Stages.empty(), "ShaderSpecification requires at least one stage");
+
+		m_Name = specification.Name;
+		for (const ShaderStageSource& stageSource : specification.Stages)
+		{
+			CORE_ASSERT(stageSource.Stage != VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM, "Invalid shader stage in ShaderSpecification");
+			CORE_ASSERT(!stageSource.FilePath.empty(), "Invalid shader stage file path in ShaderSpecification");
+			m_ShaderSourceFilePaths[stageSource.Stage] = FileSystem::ResolvePath(stageSource.FilePath).string();
+		}
+
+		Reload(forceCompile);
+	}
     Shader::~Shader()
     {
 		m_PipelineShaderStageCreateInfos.clear();
@@ -161,17 +201,25 @@ namespace cerberus
 
 	void Shader::SubmitResourcesToFree()
 	{
-		std::vector<VkPipelineShaderStageCreateInfo>pipelineStage = m_PipelineShaderStageCreateInfos;
-		std::vector<VkDescriptorSetLayout> descriptorSetLayout = m_DescriptorSetLayouts;
-		RenderQueueManager::SubmitResourceFree([pipelineStage, descriptorSetLayout]() mutable
+		std::vector<VkPipelineShaderStageCreateInfo> pipelineStages = m_PipelineShaderStageCreateInfos;
+		std::vector<VkDescriptorSetLayout> descriptorSetLayouts = m_DescriptorSetLayouts;
+
+		m_PipelineShaderStageCreateInfos.clear();
+		m_DescriptorSetLayouts.clear();
+
+		// Deferred deletion should only capture native Vulkan resources by value.
+		RenderQueueManager::SubmitResourceFree([pipelineStages, descriptorSetLayouts]() mutable
 		{
 			auto vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 
-			for (VkPipelineShaderStageCreateInfo pipelineStage : pipelineStage)
-				vkDestroyShaderModule(vulkanDevice, pipelineStage.module, nullptr);
+			for (VkPipelineShaderStageCreateInfo pipelineStage : pipelineStages)
+			{
+				if (pipelineStage.module != VK_NULL_HANDLE)
+					vkDestroyShaderModule(vulkanDevice, pipelineStage.module, nullptr);
+			}
 
 			/** /
-			for (VkDescriptorSetLayout descriptorLayout : descriptorSetLayout)
+			for (VkDescriptorSetLayout descriptorLayout : descriptorSetLayouts)
 				vkDestroyDescriptorSetLayout(vulkanDevice, descriptorLayout, nullptr);
 			/**/
 		});
@@ -182,7 +230,7 @@ namespace cerberus
 		Shader* instance = this;
 		RenderQueueManager::Submit([instance, forceCompile]() mutable
 		{
-			// Clear old shader
+			// Clear old shader CPU-side reflection/state. Shader modules are released by ShaderLibrary::ReleaseAllShaders().
 			instance->m_ShaderDescriptorSets.clear();
 			instance->m_Resources.clear();
 			instance->m_PipelineShaderStageCreateInfos.clear();
@@ -190,14 +238,26 @@ namespace cerberus
 			instance->m_ShaderSource.clear();
 			instance->m_Buffers.clear();
 			instance->m_TypeCounts.clear();
+			instance->m_ShaderByteCodeData.clear();
 
 			utils::CreateCacheDirectoryIfNeeded();
 
+			if (!instance->m_ShaderSourceFilePaths.empty())
+			{
+				// Multi-file shader path. Used by RT pipelines and any future split-stage shader.
+				for (const auto& [stage, path] : instance->m_ShaderSourceFilePaths)
+				{
+					std::string source = utils::ReadShaderFromFile(path);
+					instance->m_ShaderSource[stage] = instance->PreProcessStageSource(source, stage, path);
+				}
+			}
+			else
+			{
+				// Backwards-compatible single-file path. Supports old #type blocks and standalone stage files.
+				std::string source = utils::ReadShaderFromFile(instance->m_AssetPath);
+				instance->m_ShaderSource = instance->PreProcess(source);
+			}
 
-			// Vertex and Fragment for now
-			std::string source = utils::ReadShaderFromFile(instance->m_AssetPath);
-
-			instance->m_ShaderSource = instance->PreProcess(source);
 			if (s_PrintShaders)
 			{
 				for (auto [flag, shader] : instance->m_ShaderSource)
@@ -208,7 +268,6 @@ namespace cerberus
 				}
 			}
 
-			//std::unordered_map<VkShaderStageFlagBits, std::vector<uint32_t>> shaderData;
 			instance->CompileOrGetVulkanBinary(instance->m_ShaderByteCodeData, forceCompile);
 			instance->LoadAndCreateShaders(instance->m_ShaderByteCodeData);
 			instance->ReflectAllShaderStages(instance->m_ShaderByteCodeData);
@@ -250,11 +309,14 @@ namespace cerberus
 		std::filesystem::path cacheDirectory = utils::GetCacheDirectory();
 		for (auto [stage, source] : m_ShaderSource)
 		{
+			const std::string shaderSourcePath = m_ShaderSourceFilePaths.find(stage) != m_ShaderSourceFilePaths.end()
+				? m_ShaderSourceFilePaths.at(stage)
+				: m_AssetPath;
 			auto extension = utils::VkShaderStageCachedFileExtension(stage);
 			// Get the compile shader from the cache directory
 			if (!forceCompile)
 			{
-				std::filesystem::path p = m_AssetPath;
+				std::filesystem::path p = shaderSourcePath;
 				auto path = cacheDirectory / (p.filename().string() + extension);
 				std::string cachedFilePath = path.string();
 
@@ -293,7 +355,7 @@ namespace cerberus
 				// Compile shader
 				{
 					auto& shaderSource = m_ShaderSource.at(stage);
-					shaderc::SpvCompilationResult module = compiler.CompileGlslToSpv(shaderSource, utils::VkShaderStageToShaderC(stage), m_AssetPath.c_str(), options);
+					shaderc::SpvCompilationResult module = compiler.CompileGlslToSpv(shaderSource, utils::VkShaderStageToShaderC(stage), shaderSourcePath.c_str(), options);
 
 					if (module.GetCompilationStatus() != shaderc_compilation_status_success)
 					{
@@ -758,6 +820,46 @@ namespace cerberus
 		}
 	}
 
+	std::string Shader::PreProcessStageSource(const std::string& source, VkShaderStageFlagBits stage, const std::string& sourcePath)
+	{
+		shaderc_util::FileFinder fileFinder;
+
+		std::filesystem::path shaderPath = sourcePath;
+		if (shaderPath.has_parent_path())
+			fileFinder.search_path().emplace_back(shaderPath.parent_path().string());
+
+		// Keep old include folders working, but also allow project-relative, engine-relative,
+		// and shader-relative includes. Project folders are searched before engine folders
+		// to preserve legacy editor behavior.
+		fileFinder.search_path().emplace_back(FileSystem::GetProjectShaderDirectory().string());
+		fileFinder.search_path().emplace_back((FileSystem::GetProjectShaderDirectory() / "Include").string());
+		fileFinder.search_path().emplace_back((FileSystem::GetProjectShaderDirectory() / "Include" / "Common").string());
+		fileFinder.search_path().emplace_back(FileSystem::GetEngineShaderDirectory().string());
+		fileFinder.search_path().emplace_back((FileSystem::GetEngineShaderDirectory() / "Include").string());
+		fileFinder.search_path().emplace_back((FileSystem::GetEngineShaderDirectory() / "Include" / "Common").string());
+		fileFinder.search_path().emplace_back("Resources/Shaders/");
+		fileFinder.search_path().emplace_back("Resources/Shaders/Include/");
+		fileFinder.search_path().emplace_back("Resources/Shaders/Include/Common/");
+		fileFinder.search_path().emplace_back(".");
+
+		shaderc::Compiler compiler;
+		shaderc::CompileOptions options;
+		options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_2);
+
+		// Deleted by shaderc. Created per stage so #pragma once/include tracking is stage-local.
+		auto includer = std::make_unique<GLSLIncludeProcessor>(&fileFinder);
+		options.SetIncluder(std::move(includer));
+
+		const auto preProcessingResult = compiler.PreprocessGlsl(source, utils::VkShaderStageToShaderC(stage), sourcePath.c_str(), options);
+		if (preProcessingResult.GetCompilationStatus() != shaderc_compilation_status_success)
+		{
+			NV_CORE_ERROR(preProcessingResult.GetErrorMessage());
+			CORE_ASSERT(false, "Shader preprocessing failed");
+		}
+
+		return std::string(preProcessingResult.begin(), preProcessingResult.end());
+	}
+
 	std::unordered_map<VkShaderStageFlagBits, std::string> Shader::PreProcess(const std::string& source)
 	{
 		std::unordered_map<VkShaderStageFlagBits, std::string> shaderSources;
@@ -765,41 +867,41 @@ namespace cerberus
 		const char* typeToken = "#type";
 		size_t typeTokenLength = strlen(typeToken);
 		size_t pos = source.find(typeToken, 0);
+
+		// Backwards-compatible standalone stage file path.
+		// This keeps compute shaders such as .comp working without requiring #type.
+		if (pos == std::string::npos)
+		{
+			VkShaderStageFlagBits stage = utils::ShaderStageFromFileExtension(m_AssetPath);
+			CORE_ASSERT(stage != VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM, "Shader file has no #type block and its extension does not map to a shader stage");
+			m_ShaderSourceFilePaths[stage] = m_AssetPath;
+			shaderSources[stage] = PreProcessStageSource(source, stage, m_AssetPath);
+			return shaderSources;
+		}
+
 		while (pos != std::string::npos)
 		{
 			size_t eol = source.find_first_of("\r\n", pos);
 			CORE_ASSERT(eol != std::string::npos, "Syntax error");
 			size_t begin = pos + typeTokenLength + 1;
 			std::string type = source.substr(begin, eol - begin);
-			CORE_ASSERT(type == "vertex" || type == "fragment" || type == "pixel" || type == "compute" || type == "rayGen"
-				|| type == "closestHit" || type == "missHit" || type == "intersection" || type == "anyHit",
-				"Invalid shader type specified");
+
+			auto shaderType = utils::ShaderTypeFromString(type);
+			CORE_ASSERT(shaderType != VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM, "Invalid shader type specified");
 
 			size_t nextLinePos = source.find_first_not_of("\r\n", eol);
 			pos = source.find(typeToken, nextLinePos);
-			auto shaderType = utils::ShaderTypeFromString(type);
-			shaderSources[shaderType] = source.substr(nextLinePos, pos - (nextLinePos == std::string::npos ? source.size() - 1 : nextLinePos));
-		}
 
-		shaderc_util::FileFinder fileFinder;
-		static shaderc::Compiler compiler;
-		fileFinder.search_path().emplace_back("Resources/Shaders/Include/Common/"); //Shared include directory
-		for (auto& [stage, shaderSource] : shaderSources)
-		{
-			shaderc::CompileOptions options;
-			options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_2);
+			const size_t sourceStart = nextLinePos == std::string::npos ? source.size() : nextLinePos;
+			const size_t sourceEnd = pos == std::string::npos ? source.size() : pos;
+			std::string stageSource = source.substr(sourceStart, sourceEnd - sourceStart);
 
-			// Deleted by shaderc and created per stage
-			GLSLIncludeProcessor* includer = new GLSLIncludeProcessor(&fileFinder);
-
-			options.SetIncluder(std::unique_ptr<GLSLIncludeProcessor>(includer));
-			const auto preProcessingResult = compiler.PreprocessGlsl(shaderSource, utils::VkShaderStageToShaderC(stage), m_AssetPath.c_str(), options);
-
-			shaderSource = std::string(preProcessingResult.begin(), preProcessingResult.end());
+			shaderSources[shaderType] = PreProcessStageSource(stageSource, shaderType, m_AssetPath);
 		}
 
 		return shaderSources;
 	}
+
 
 	const VkWriteDescriptorSet* Shader::GetWriteDescriptorSet(const std::string& name, uint32_t set) const
 	{
@@ -848,6 +950,13 @@ namespace cerberus
 	{
 		CORE_ASSERT(m_Shaders.find(name) == m_Shaders.end(), "Shader already exits");
 		m_Shaders[name] = CreateRef<Shader>(path);
+	}
+
+	void ShaderLibrary::Load(const ShaderSpecification& specification, bool forceCompile)
+	{
+		CORE_ASSERT(!specification.Name.empty(), "ShaderSpecification requires a name");
+		CORE_ASSERT(m_Shaders.find(specification.Name) == m_Shaders.end(), "Shader already exits");
+		m_Shaders[specification.Name] = CreateRef<Shader>(specification, forceCompile);
 	}
 
 	const Ref<Shader>& ShaderLibrary::Get(const std::string& name) const

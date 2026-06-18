@@ -9,7 +9,6 @@
 #include "Renderer/VulkanExtensions.h"
 // TODO: Remove these to (only for test)
 #include "Renderer/ShaderCompiler.h"
-#include "Renderer/TextureAsset.h"
 
 namespace cerberus
 {
@@ -60,7 +59,14 @@ namespace cerberus
 		// ---------------------------------------------------------------------
 
 		auto& shaderLibrary = Renderer::GetShaderLibrary();
-		shaderLibrary.Load("Resources/Shaders/Ray Tracing/Raytrace.rgen", true);
+		ShaderSpecification rtShaderSpec;
+		rtShaderSpec.Name = "Raytrace";
+		rtShaderSpec.Stages = {
+			{ VK_SHADER_STAGE_RAYGEN_BIT_KHR,      "engine://Shaders/RayTracing/Raytrace_rgen.rgen" },
+			{ VK_SHADER_STAGE_MISS_BIT_KHR,        "engine://Shaders/RayTracing/Raytrace_rmiss.rmiss" },
+			{ VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, "engine://Shaders/RayTracing/Raytrace_rchit.rchit" }
+		};
+		shaderLibrary.Load(rtShaderSpec, true);
 
 		RenderQueueManager::ExecuteRenderQueue();
 
@@ -175,8 +181,6 @@ namespace cerberus
 			// they are not deleted, only not used by this isolated path.
 		}
 
-
-		Renderer::GetShaderLibrary().Load("Resources/Shaders/RayTraceTest.glsl", true);
 
 		RenderQueueManager::ExecuteRenderQueue();
 	}
