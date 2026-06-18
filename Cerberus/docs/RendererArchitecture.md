@@ -4,7 +4,7 @@ This document captures the intended ownership model for the renderer after the l
 
 ## Renderer
 
-`Renderer` is the public facade for the global rendering backend. It owns process-wide renderer state and coordinates frame begin/end, shutdown, command allocation helpers, ImGui integration, and access to global systems such as `ResourceManager`, `RendererResources`, `RenderQueueManager`, and `DeferredDeletionQueue`.
+`Renderer` is the public facade for the global rendering backend. It owns process-wide renderer state and coordinates frame begin/end, shutdown, command allocation helpers, and access to global systems such as `ResourceManager`, `RendererResources`, `ImGuiRenderer`, `RenderQueueManager`, and `DeferredResourceDeletionQueue`.
 
 It should not own per-scene render data such as mesh registrations, BLAS/TLAS registries, camera state, or pass-specific resources.
 
@@ -12,13 +12,17 @@ It should not own per-scene render data such as mesh registrations, BLAS/TLAS re
 
 `RendererResources` owns renderer-wide default resources such as default textures, the default PBR material, the empty environment, and the global `ShaderLibrary`. `Renderer` coordinates its lifetime, but it should not store these concrete default resources directly in `RendererData`.
 
+## ImGuiRenderer
+
+`ImGuiRenderer` owns Dear ImGui backend state: the ImGui descriptor pool, secondary command buffers, backend init/shutdown, and swapchain ImGui rendering. `Renderer` coordinates its lifetime, but `RendererData` should not store ImGui-specific Vulkan objects directly.
+
 ## RendererContext / Device
 
 `RendererContext` and `Device` own Vulkan instance/device level state: `VkDevice`, queues, physical device capabilities, and backend extension access.
 
 ## ResourceManager
 
-`ResourceManager` owns engine wrappers and handle pools. It is responsible for creating and destroying engine-level resource wrappers. When a wrapper owns native Vulkan/VMA resources, destruction should extract native handles and submit only those native handles to `DeferredDeletionQueue`.
+`ResourceManager` owns engine wrappers and handle pools. It is responsible for creating and destroying engine-level resource wrappers. When a wrapper owns native Vulkan/VMA resources, destruction should extract native handles and submit only those native handles to `DeferredResourceDeletionQueue`.
 
 It should not own descriptor allocation state. BindGroup and BindGroupLayout wrappers live in `ResourceManager`, but native descriptor pools and descriptor layout caching belong to `DescriptorManager`.
 
@@ -26,9 +30,9 @@ It should not own descriptor allocation state. BindGroup and BindGroupLayout wra
 
 `DescriptorManager` is the single owner of descriptor allocation and descriptor layout cache state. It owns transient descriptor pools, persistent descriptor pools, and the descriptor set layout cache. `Renderer` initializes and shuts it down; `ResourceManager`, `BindGroup`, and shader reflection request descriptor allocation/layouts through it but do not own its allocators.
 
-## DeferredDeletionQueue
+## DeferredResourceDeletionQueue
 
-`DeferredDeletionQueue` owns delayed native GPU destruction. It should only capture native Vulkan/VMA objects by value. It should not capture engine wrappers, `ResourceManager` handles, `this`, or references.
+`DeferredResourceDeletionQueue` owns delayed native GPU destruction. It should only capture native Vulkan/VMA objects by value. It should not capture engine wrappers, `ResourceManager` handles, `this`, or references.
 
 ## RenderQueueManager
 
@@ -55,5 +59,6 @@ Before introducing a RenderGraph, keep the current goal focused on making owners
 3. RenderScene owns renderable scene data.
 4. ResourceManager owns wrappers.
 5. DescriptorManager owns descriptor pools and descriptor set layout cache.
-6. DeferredDeletionQueue owns native delayed destruction.
-7. RenderQueueManager owns render command execution only.
+6. DeferredResourceDeletionQueue owns native delayed destruction.
+7. ImGuiRenderer owns Dear ImGui backend resources.
+8. RenderQueueManager owns render command execution only.

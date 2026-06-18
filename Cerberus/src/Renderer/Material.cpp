@@ -2,6 +2,7 @@
 #include "Material.h"
 #include "Renderer/RendererResources.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/DescriptorManager.h"
 namespace cerberus
 {
 	static const std::string s_AlbedoColorUniform = "u_MaterialUniforms.AlbedoColor";
@@ -65,7 +66,7 @@ namespace cerberus
 		if ((!persistent || m_DescriptorSets[frameIndex] == VK_NULL_HANDLE) && descriptorSetLayouts.size())
 		{
 			VkDescriptorSetLayout descriptorSetLayout = descriptorSetLayouts[0];
-			m_DescriptorSets[frameIndex] = Renderer::AllocateDescriptorSet(descriptorSetLayout, persistent);
+			m_DescriptorSets[frameIndex] = DescriptorManager::AllocateDescriptorSet(descriptorSetLayout, persistent);
 
 			CORE_ASSERT(m_DescriptorSets[frameIndex], "Invalid descriptor set created!");
 			//m_DescriptorSets[frameIndex] = descriptorSet;

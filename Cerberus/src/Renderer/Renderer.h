@@ -41,13 +41,6 @@ namespace cerberus
 		// Prepare and end rendering
 		static void BeginFrame();
 		static void EndFrame();
-		// ImGui
-		static void InitImGui();
-		static void ShutdownImGui();
-		static void RenderImGui();
-		static void BeginImGui(CommandBuffer* commandBuffer);
-		static void EndImGui(CommandBuffer* commandBuffer);
-		static void SetImGuiColorTheme();
 		// Actual Rendering
 		// -- Render Passes
 		static void BeginRenderPass(CommandBuffer* CommandBuffer, Handle<RenderPass> renderPass, const DrawArea& drawArea);
@@ -56,7 +49,6 @@ namespace cerberus
 		static void SetActiveVertexAndIndexBuffer(CommandBuffer* commandBuffer, const Handle<GPUBuffer> hVertexBuffer, const Handle<GPUBuffer> hInderBuffer);
 		// -- Descriptor's
 		static void UpdateMaterialForRendering(Ref<Material> material, Ref<UniformBufferSet> uniformBufferSet);
-		static VkDescriptorSet AllocateDescriptorSet(VkDescriptorSetLayout& layout, bool persistent = false);
 		// -- Render Geometry
 		static void RenderFullscreenQuad(CommandBuffer* commandBuffer, Handle<GraphicsPipeline> pipeline, Handle<BindGroup> material = {});
 		static void RenderRenderPass(CommandBuffer* commandBuffer, const DrawArea& drawArea, std::vector<uint32_t> drawStream);

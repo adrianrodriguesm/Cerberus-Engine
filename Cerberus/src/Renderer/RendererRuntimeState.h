@@ -30,12 +30,6 @@ namespace cerberus
 		std::unordered_map<UniformBufferSet*, std::unordered_map<uint64_t, std::vector<std::vector<std::vector<VkWriteDescriptorSet>>>>> UniformBufferWriteDescriptorCache;
 	};
 
-	struct RendererImGuiState
-	{
-		VkDescriptorPool DescriptorPool = VK_NULL_HANDLE;
-		std::vector<VkCommandBuffer> SecondaryCommandBuffers;
-	};
-
 	struct RendererFrameState
 	{
 		VkPhysicalDeviceLimits DeviceLimits{};

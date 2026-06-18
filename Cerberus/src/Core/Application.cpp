@@ -2,6 +2,7 @@
 #include "Core/Application.h"
 #include "Core/Timer.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/ImGuiRenderer.h"
 #include "Renderer/ResourceManager.h"
 #include "Renderer/RenderQueueManager.h"
 #include "Asset/AssetManager.h"
@@ -74,7 +75,7 @@ namespace cerberus
 			m_TimeStep = timer.ElapsedAndReset();
 			Renderer::BeginFrame();
 			{
-				Renderer::RenderImGui();
+				ImGuiRenderer::Render();
 				
 				for (Layer* layer : m_LayerStack)
 					layer->OnUpdate(m_TimeStep);
