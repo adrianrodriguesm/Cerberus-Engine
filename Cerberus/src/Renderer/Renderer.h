@@ -30,7 +30,7 @@ namespace cerberus
 	//
 	// Renderer owns process-wide rendering state and frame lifecycle helpers.
 	// Per-scene renderable data belongs in RenderScene / SceneRenderer; native
-	// Vulkan/VMA delayed destruction belongs in DeferredDeletionQueue; engine
+	// Vulkan/VMA delayed destruction belongs in DeferredResourceDeletionQueue; engine
 	// resource wrappers belong in ResourceManager.
 	class Renderer
 	{

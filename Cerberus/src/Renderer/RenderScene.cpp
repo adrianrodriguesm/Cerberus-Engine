@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "RenderScene.h"
 
-#include "Renderer/DeferredDeletionQueue.h"
+#include "Renderer/DeferredResourceDeletionQueue.h"
 #include "Renderer/RendererContext.h"
 #include "Renderer/ResourceManager.h"
 
@@ -246,7 +246,7 @@ namespace cerberus
 			// Debug-safe only. This stalls the GPU.
 			// Replace with frame-fence based TLAS double/triple buffering later.
 			vkDeviceWaitIdle(RendererContext::GetCurrentVulkanDevice());
-			DeferredDeletionQueue::FlushAll();
+			DeferredResourceDeletionQueue::FlushAll();
 		}
 
 		if (m_MeshRegister.MeshInstanceCount == 0)
@@ -293,7 +293,7 @@ namespace cerberus
 		// the old TLAS/BLAS before we destroy them. Replace this later with a proper
 		// frame-fence deferred deletion queue.
 		vkDeviceWaitIdle(RendererContext::GetCurrentVulkanDevice());
-		DeferredDeletionQueue::FlushAll();
+		DeferredResourceDeletionQueue::FlushAll();
 
 		// If BLAS were invalidated by unregistering a mesh source, the current TLAS may
 		// still contain instance records pointing at those BLAS. Destroy the TLAS first,
@@ -388,7 +388,7 @@ namespace cerberus
 		// Debug-safe shutdown: make sure no submitted command buffer still references
 		// TLAS/BLAS resources before destroying them.
 		vkDeviceWaitIdle(RendererContext::GetCurrentVulkanDevice());
-		DeferredDeletionQueue::FlushAll();
+		DeferredResourceDeletionQueue::FlushAll();
 
 		FlushPendingRTASDeletes();
 

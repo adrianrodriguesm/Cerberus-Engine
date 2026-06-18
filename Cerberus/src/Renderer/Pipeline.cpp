@@ -2,6 +2,7 @@
 #include "Pipeline.h"
 #include "Core/Window.h"
 #include "Renderer/ResourceManager.h"
+#include "Renderer/DeferredResourceDeletionQueue.h"
 #include "Renderer/RenderQueueManager.h"
 #include "Renderer/VulkanExtensions.h"
 namespace cerberus
@@ -98,7 +99,7 @@ namespace cerberus
 		if (!pipeline && !pipelineLayout && !pipelineCache)
 			return;
 
-		RenderQueueManager::SubmitResourceFree([pipeline, pipelineLayout, pipelineCache]() mutable
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([pipeline, pipelineLayout, pipelineCache]() mutable
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 
@@ -123,7 +124,7 @@ namespace cerberus
 			m_PipelineCache = VK_NULL_HANDLE;
 			m_PipelineLayout = VK_NULL_HANDLE;
 
-			RenderQueueManager::SubmitResourceFree([pipeline, pipelineCache, pipelineLayout]() mutable
+			DeferredResourceDeletionQueue::SubmitCurrentFrame([pipeline, pipelineCache, pipelineLayout]() mutable
 			{
 				VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 				if (pipeline)
@@ -372,7 +373,7 @@ namespace cerberus
 		if (!pipeline && !pipelineCache && !pipelineLayout)
 			return;
 
-		RenderQueueManager::SubmitResourceFree([pipeline, pipelineCache, pipelineLayout]() mutable
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([pipeline, pipelineCache, pipelineLayout]() mutable
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			if (pipeline)
@@ -398,7 +399,7 @@ namespace cerberus
 			m_rtPipelineCache = VK_NULL_HANDLE;
 			m_rtPipelineLayout = VK_NULL_HANDLE;
 
-			RenderQueueManager::SubmitResourceFree([pipeline, pipelineCache, pipelineLayout]() mutable
+			DeferredResourceDeletionQueue::SubmitCurrentFrame([pipeline, pipelineCache, pipelineLayout]() mutable
 			{
 				VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 				if (pipeline)

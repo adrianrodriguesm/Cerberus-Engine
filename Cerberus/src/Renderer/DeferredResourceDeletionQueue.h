@@ -1,23 +1,24 @@
 #pragma once
 
 #include "Renderer/RenderQueue.h"
+#include "Renderer/Renderer.h"
 #include <type_traits>
 
 namespace cerberus
 {
-	class DeferredDeletionQueue
+	class DeferredResourceDeletionQueue
 	{
 	public:
 		static void Init(uint32_t framesInFlight);
 		static void Shutdown();
 
 		template<typename FuncT>
-		static void Submit(uint32_t frameIndex, FuncT&& func)
+		static void SubmitForFrame(uint32_t frameIndex, FuncT&& func)
 		{
 			using CommandT = std::decay_t<FuncT>;
 
-			CORE_ASSERT(IsInitialized(), "DeferredDeletionQueue is not initialized");
-			CORE_ASSERT(!IsShuttingDown(), "Cannot submit deferred deletions while DeferredDeletionQueue is shutting down");
+			CORE_ASSERT(IsInitialized(), "DeferredResourceDeletionQueue is not initialized");
+			CORE_ASSERT(!IsShuttingDown(), "Cannot submit deferred deletions while DeferredResourceDeletionQueue is shutting down");
 
 			auto resourceFreeCommand = [](void* ptr)
 			{
@@ -29,6 +30,13 @@ namespace cerberus
 			RenderQueue& queue = GetQueue(frameIndex);
 			void* functionMemoryAllocation = queue.Allocate(resourceFreeCommand, sizeof(CommandT));
 			new (functionMemoryAllocation) CommandT(std::forward<FuncT>(func));
+		}
+
+		template<typename FuncT>
+		static void SubmitCurrentFrame(FuncT&& func)
+		{
+			const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+			SubmitForFrame(frameIndex, std::forward<FuncT>(func));
 		}
 
 		static void FlushFrame(uint32_t frameIndex);

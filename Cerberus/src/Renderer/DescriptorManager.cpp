@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "DescriptorManager.h"
 #include "Renderer/Renderer.h"
-#include "Renderer/DeferredDeletionQueue.h"
+#include "Renderer/DeferredResourceDeletionQueue.h"
 
 namespace cerberus
 {
@@ -50,7 +50,7 @@ namespace cerberus
 
 		// DescriptorAllocator/DescriptorLayoutCache destructors submit native Vulkan
 		// destruction work. Drain it while the VkDevice is still alive.
-		DeferredDeletionQueue::FlushAll();
+		DeferredResourceDeletionQueue::FlushAll();
 
 		delete s_DescriptorManagerData;
 		s_DescriptorManagerData = nullptr;

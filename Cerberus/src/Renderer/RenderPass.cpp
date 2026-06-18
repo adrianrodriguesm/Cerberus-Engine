@@ -3,6 +3,8 @@
 #include "Renderer/RendererContext.h"
 #include "Renderer/RenderQueueManager.h"
 #include "Renderer/ResourceManager.h"
+#include "Renderer/DeferredResourceDeletionQueue.h"
+
 namespace cerberus
 {
 	namespace utils
@@ -70,7 +72,7 @@ namespace cerberus
 	}
 	RenderPass::~RenderPass()
 	{
-		RenderQueueManager::SubmitResourceFree([renderPass = m_RenderPass]()
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([renderPass = m_RenderPass]()
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			vkDestroyRenderPass(vulkanDevice, renderPass, nullptr);

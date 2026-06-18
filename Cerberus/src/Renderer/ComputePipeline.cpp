@@ -4,6 +4,7 @@
 #include "Core/Timer.h"
 #include "Renderer/Fence.h"
 #include "Renderer/RenderQueueManager.h"
+#include "Renderer/DeferredResourceDeletionQueue.h"
 namespace cerberus
 {
 	static Ref<Fence> s_ComputeFence;
@@ -28,7 +29,7 @@ namespace cerberus
 		if (!m_ComputePipeline)
 			return;
 
-		RenderQueueManager::SubmitResourceFree([computePipeline = m_ComputePipeline, pipelineLayout = m_ComputePipelineLayout, pipelineCache = m_PipelineCache]()
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([computePipeline = m_ComputePipeline, pipelineLayout = m_ComputePipelineLayout, pipelineCache = m_PipelineCache]()
 		{
 			VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			vkDestroyPipelineLayout(device, pipelineLayout, nullptr);

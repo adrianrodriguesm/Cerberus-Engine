@@ -32,16 +32,6 @@ namespace cerberus
 		s_RenderCoreData = nullptr;
 	}
 
-	void RenderQueueManager::FreeAllSubmittedResources()
-	{
-		DeferredDeletionQueue::FlushAll();
-	}
-
-	void RenderQueueManager::FreeResourceFromQueue(const uint32_t frameIndex)
-	{
-		DeferredDeletionQueue::FlushFrame(frameIndex);
-	}
-
 	void RenderQueueManager::ExecuteRenderQueue()
 	{
 		if (!s_RenderCoreData || !s_RenderCoreData->CommandQueue)

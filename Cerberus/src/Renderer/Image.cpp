@@ -3,6 +3,8 @@
 #include "Renderer/Renderer.h"
 #include "Renderer/ResourceManager.h"
 #include "Renderer/RenderQueueManager.h"
+#include "Renderer/DeferredResourceDeletionQueue.h"
+
 namespace cerberus
 {
 	namespace utils
@@ -81,7 +83,7 @@ namespace cerberus
 		if (!m_Image || !m_MemoryAlloc)
 			return;
 
-		RenderQueueManager::SubmitResourceFree([image = m_Image, memoryAlloc = m_MemoryAlloc]()
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([image = m_Image, memoryAlloc = m_MemoryAlloc]()
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			ResourceAllocator allocator("VulkanImage2D");
@@ -153,7 +155,7 @@ namespace cerberus
 		if (!m_Image || !m_MemoryAlloc)
 			return;
 
-		RenderQueueManager::SubmitResourceFree([image = m_Image, allocation = m_MemoryAlloc]() mutable
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([image = m_Image, allocation = m_MemoryAlloc]() mutable
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			ResourceAllocator allocator("VulkanImage2D");
@@ -315,7 +317,7 @@ namespace cerberus
 		if (!m_ImageView)
 			return;
 
-		RenderQueueManager::SubmitResourceFree([imageView = m_ImageView, sampler = m_Sampler]()
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([imageView = m_ImageView, sampler = m_Sampler]()
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			NV_CORE_WARN("Image2D::Release ImageView = {0}", (const void*)imageView);
@@ -352,7 +354,7 @@ namespace cerberus
 		if (!m_ImageView)
 			return;
 
-		RenderQueueManager::SubmitResourceFree([imageView = m_ImageView, sampler = m_Sampler]() mutable
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([imageView = m_ImageView, sampler = m_Sampler]() mutable
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			NV_CORE_WARN("Image2D::Release ImageView = {0}", (const void*)imageView);

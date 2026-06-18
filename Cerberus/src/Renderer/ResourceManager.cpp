@@ -3,7 +3,7 @@
 #include "ResourceAllocator.h"
 #include "Core/Pool.h"
 #include "Renderer/DescriptorManager.h"
-#include "Renderer/DeferredDeletionQueue.h"
+#include "Renderer/DeferredResourceDeletionQueue.h"
 namespace cerberus
 {
 	struct ResourceManagerData
@@ -74,7 +74,7 @@ namespace cerberus
 		// Important:
 		// The destructors above may have submitted deferred Vulkan/VMA destroys.
 		// Flush them while VMA / RendererContext are still alive.
-		DeferredDeletionQueue::FlushAll();
+		DeferredResourceDeletionQueue::FlushAll();
 
 		delete s_RMData;
 		s_RMData = nullptr;

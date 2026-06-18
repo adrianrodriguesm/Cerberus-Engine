@@ -2,6 +2,7 @@
 #include "GPUBuffer.h"
 #include "Renderer/ResourceManager.h"
 #include "Renderer/RenderQueueManager.h"
+#include "Renderer/DeferredResourceDeletionQueue.h"
 namespace cerberus
 {
 	namespace utils
@@ -68,7 +69,7 @@ namespace cerberus
 			return;
 		}
 
-		RenderQueueManager::SubmitResourceFree([name = DebugName, buffer = Buffer, allocation = Allocation]()
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([name = DebugName, buffer = Buffer, allocation = Allocation]()
 		{
 			ResourceAllocator allocator(name);
 			allocator.DestroyBuffer(buffer, allocation);

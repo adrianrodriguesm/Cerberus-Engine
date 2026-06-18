@@ -2,6 +2,7 @@
 #include "CommandBuffer.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/RenderQueueManager.h"
+#include "Renderer/DeferredResourceDeletionQueue.h"
 #include "Core/Window.h"
 
 namespace cerberus
@@ -43,7 +44,7 @@ namespace cerberus
 		if (m_OwnedBySwapchain)
 			return;
 
-		RenderQueueManager::SubmitResourceFree([commandPool = m_CommandPool, waitFences = m_WaitFences, timestampQueryPools = m_TimestampQueryPools, pipelineQueryPool = m_PipelineStatisticsQueryPools]()
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([commandPool = m_CommandPool, waitFences = m_WaitFences, timestampQueryPools = m_TimestampQueryPools, pipelineQueryPool = m_PipelineStatisticsQueryPools]()
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 

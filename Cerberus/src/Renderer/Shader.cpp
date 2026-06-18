@@ -3,6 +3,7 @@
 
 #include "Renderer/RendererContext.h"
 #include "Renderer/Renderer.h"
+#include "Renderer/DeferredResourceDeletionQueue.h"
 #include "Renderer/RenderQueueManager.h"
 #include "Renderer/DescriptorManager.h"
 #include <spirv_cross/spirv_glsl.hpp>
@@ -209,7 +210,7 @@ namespace cerberus
 		m_DescriptorSetLayouts.clear();
 
 		// Deferred deletion should only capture native Vulkan resources by value.
-		RenderQueueManager::SubmitResourceFree([pipelineStages, descriptorSetLayouts]() mutable
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([pipelineStages, descriptorSetLayouts]() mutable
 		{
 			auto vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 
@@ -218,11 +219,6 @@ namespace cerberus
 				if (pipelineStage.module != VK_NULL_HANDLE)
 					vkDestroyShaderModule(vulkanDevice, pipelineStage.module, nullptr);
 			}
-
-			/** /
-			for (VkDescriptorSetLayout descriptorLayout : descriptorSetLayouts)
-				vkDestroyDescriptorSetLayout(vulkanDevice, descriptorLayout, nullptr);
-			/**/
 		});
 	}
 

@@ -5,6 +5,7 @@
 #include "Core/Application.h"
 #include "Renderer/ResourceManager.h"
 #include "Renderer/RenderQueueManager.h"
+#include "Renderer/DeferredResourceDeletionQueue.h"
 
 namespace cerberus
 {
@@ -66,7 +67,7 @@ namespace cerberus
 		ResourceManager::DestroyRenderTarget(m_DepthRenderTargets);
 		// Framebuffer
 		VkFramebuffer framebuffer = m_Framebuffer;
-		RenderQueueManager::SubmitResourceFree([framebuffer]()
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([framebuffer]()
 		{
 			VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 			vkDestroyFramebuffer(device, framebuffer, nullptr);
@@ -94,7 +95,7 @@ namespace cerberus
 		if (m_Framebuffer)
 		{
 			VkFramebuffer framebuffer = m_Framebuffer;
-			RenderQueueManager::SubmitResourceFree([framebuffer]()
+			DeferredResourceDeletionQueue::SubmitCurrentFrame([framebuffer]()
 			{
 				VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 				vkDestroyFramebuffer(device, framebuffer, nullptr);

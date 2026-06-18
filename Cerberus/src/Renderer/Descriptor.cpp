@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "Descriptor.h"
 #include "Renderer/Renderer.h"
-#include "Renderer/DeferredDeletionQueue.h"
+#include "Renderer/DeferredResourceDeletionQueue.h"
 namespace cerberus
 {
 	DescriptorAllocator::DescriptorAllocator(const DescriptorAllocatorSpecification& spec)
@@ -39,7 +39,7 @@ namespace cerberus
 		if (m_DescriptorPools.empty())
 			return;
 
-		DeferredDeletionQueue::Submit(Renderer::GetCurrentFrameIndex(), [descriptorPools = m_DescriptorPools]() mutable
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([descriptorPools = m_DescriptorPools]() mutable
 		{
 			VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 
@@ -98,7 +98,7 @@ namespace cerberus
 				layouts.push_back(layout);
 		}
 
-		DeferredDeletionQueue::Submit(Renderer::GetCurrentFrameIndex(), [layouts = std::move(layouts)]() mutable
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([layouts = std::move(layouts)]() mutable
 		{
 			VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 
