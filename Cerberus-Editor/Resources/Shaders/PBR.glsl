@@ -101,6 +101,7 @@ layout(push_constant) uniform Material
 	layout(offset = 64) vec3 AlbedoColor;
 						float Metalness;
 						float Roughness;
+						float Emission;
 						bool UseNormalMap;
 } u_MaterialUniforms;
 

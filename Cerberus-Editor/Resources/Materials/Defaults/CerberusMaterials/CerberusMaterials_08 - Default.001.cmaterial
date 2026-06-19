@@ -1,0 +1,5 @@
+Material:
+  AlbedoColor: [0.588235319, 0.588235319, 0.588235319]
+  UseNormalMap: false
+  Metalness: 1
+  Roughness: 0.858578622

@@ -6,6 +6,45 @@
 
 namespace cerberus
 {
+
+	static constexpr uint32_t InvalidMaterialTextureIndex = 0xFFFFFFFFu;
+
+	struct MaterialTextureAssetSlots
+	{
+		AssetHandle AlbedoMap = 0;
+		AssetHandle NormalMap = 0;
+		AssetHandle MetalnessMap = 0;
+		AssetHandle RoughnessMap = 0;
+
+		bool HasAlbedoMap() const { return AlbedoMap != 0; }
+		bool HasNormalMap() const { return NormalMap != 0; }
+		bool HasMetalnessMap() const { return MetalnessMap != 0; }
+		bool HasRoughnessMap() const { return RoughnessMap != 0; }
+	};
+
+	// CPU/high-level material data. This is renderer-agnostic and can be serialized.
+	// RenderScene will later translate it into MaterialProxy / GPUMaterial data.
+	struct MaterialData
+	{
+		glm::vec3 AlbedoColor = glm::vec3(0.8f);
+		float Metalness = 0.0f;
+		float Roughness = 0.4f;
+		float Emission = 0.0f;
+		bool UseNormalMap = false;
+
+		MaterialTextureAssetSlots Textures;
+	};
+
+	// Compact material representation intended for future raster/RT material tables.
+	// Texture indices are bindless table indices and are provided by RenderScene/MaterialProxy.
+	struct GPUMaterialData
+	{
+		glm::vec4 AlbedoColor = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
+		// x = Roughness, y = Metalness, z = Emission, w = UseNormalMap
+		glm::vec4 Parameters = glm::vec4(0.4f, 0.0f, 0.0f, 0.0f);
+		glm::uvec4 TextureIndices = glm::uvec4(InvalidMaterialTextureIndex);
+	};
+
 	/**/
 	class Material
 	{
@@ -127,7 +166,7 @@ namespace cerberus
 		bool m_Persistent = true;
 	};
 
-	// todo: Switch texture to material assets
+	// High-level material asset. Stores CPU-side scalar data and texture asset handles.
 	class MaterialAsset : public Asset
 	{
 	public:
@@ -137,6 +176,13 @@ namespace cerberus
 
 
 		const std::string& GetName() const;
+
+		const MaterialData& GetMaterialData() const { return m_Data; }
+		GPUMaterialData BuildGPUMaterialData(
+			uint32_t albedoTextureIndex = InvalidMaterialTextureIndex,
+			uint32_t normalTextureIndex = InvalidMaterialTextureIndex,
+			uint32_t metalnessTextureIndex = InvalidMaterialTextureIndex,
+			uint32_t roughnessTextureIndex = InvalidMaterialTextureIndex) const;
 
 		glm::vec3& GetAlbedoColor();
 		void SetAlbedoColor(const glm::vec3& color);
@@ -150,26 +196,27 @@ namespace cerberus
 		float& GetEmission();
 		void SetEmission(float value);
 
-		// Textures
-		Ref<Texture2D> GetAlbedoMap();
-		void SetAlbedoMap(Ref<Texture2D> texture);
-		bool IsUsingAlbedoMap();
+		// Texture asset handles. The renderer later resolves these to GPU texture handles
+		// and bindless texture indices through MaterialProxy/RenderScene.
+		AssetHandle GetAlbedoMapHandle() const;
+		void SetAlbedoMap(AssetHandle textureAsset);
+		bool IsUsingAlbedoMap() const;
 		void ClearAlbedoMap();
 
-		Ref<Texture2D> GetNormalMap();
-		void SetNormalMap(Ref<Texture2D> texture);
-		bool IsUsingNormalMap();
+		AssetHandle GetNormalMapHandle() const;
+		void SetNormalMap(AssetHandle textureAsset);
+		bool IsUsingNormalMap() const;
 		void SetUseNormalMap(bool value);
 		void ClearNormalMap();
 
-		Ref<Texture2D> GetMetalnessMap();
-		void SetMetalnessMap(Ref<Texture2D> texture);
-		bool IsUsingMetalnessMap();
+		AssetHandle GetMetalnessMapHandle() const;
+		void SetMetalnessMap(AssetHandle textureAsset);
+		bool IsUsingMetalnessMap() const;
 		void ClearMetalnessMap();
 
-		Ref<Texture2D> GetRoughnessMap();
-		void SetRoughnessMap(Ref<Texture2D> texture);
-		bool IsUsingRoughnessMap();
+		AssetHandle GetRoughnessMapHandle() const;
+		void SetRoughnessMap(AssetHandle textureAsset);
+		bool IsUsingRoughnessMap() const;
 		void ClearRoughnessMap();
 
 		static AssetType GetStaticType() { return AssetType::Material; }
@@ -177,6 +224,9 @@ namespace cerberus
 
 		Ref<Material> GetMaterial() const { return m_Material; }
 	private:
+		void ApplyDataToMaterial();
+	private:
+		MaterialData m_Data;
 		Ref<Material> m_Material;
 
 	};

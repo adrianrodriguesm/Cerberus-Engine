@@ -8,6 +8,7 @@
 #include <assimp/DefaultLogger.hpp>
 #include <assimp/LogStream.hpp>
 #include <filesystem>
+#include <algorithm>
 #define MESH_DEBUG_LOG 1
 #if MESH_DEBUG_LOG
 #define NV_MESH_LOG(...) NV_CORE_TRACE(__VA_ARGS__)
@@ -60,7 +61,7 @@ namespace cerberus
 	{
 		LogStream::Initialize();
 
-		m_Importer = std::make_unique<Assimp::Importer>();
+		m_Importer = CreateScope<Assimp::Importer>();
 		const aiScene* scene = m_Importer->ReadFile(m_Properties.Filepath.string(), s_MeshImportFlags);
 
 		if (!scene || !scene->HasMeshes())
@@ -137,17 +138,6 @@ namespace cerberus
 			}
 		}
 
-		//m_VertexBuffer = CreateRef<VertexBuffer>(m_Vertices.data(), (uint32_t)(m_Vertices.size() * sizeof(Vertex)));
-		m_VertexBufferLayout = {
-			{ ShaderDataType::Float3, "a_Position"	},
-			{ ShaderDataType::Float3, "a_Normal"	},
-			{ ShaderDataType::Float3, "a_Tangent"	},
-			{ ShaderDataType::Float3, "a_Binormal"	},
-			{ ShaderDataType::Float2, "a_TexCoord"	},
-		};
-		//m_VertexBuffer->SetVertexBufferLayout(m_VertexBufferLayout);
-		//m_IndexBuffer = CreateRef<IndexBuffer>(m_Indices.data(), (uint32_t)(m_Indices.size() * sizeof(Index)));
-
 	}
 
 	void MeshSource::TraverseNodes(aiNode* node, const glm::mat4& parentTransform, uint32_t level)
@@ -169,226 +159,109 @@ namespace cerberus
 
 	void MeshSource::LoadMaterials()
 	{
-#if OLD_RENDERER
+		auto getMaterialSlotCount = [this]() -> uint32_t
+		{
+			uint32_t materialSlotCount = m_Scene && m_Scene->HasMaterials() ? m_Scene->mNumMaterials : 0;
+
+			for (const Submesh& submesh : m_Submeshes)
+				materialSlotCount = std::max(materialSlotCount, submesh.MaterialIndex + 1);
+
+			return std::max(materialSlotCount, 1u);
+		};
+
+		auto createMaterialAsset = [this](uint32_t materialIndex, aiMaterial* aiMaterial) -> Ref<MaterialAsset>
+		{
+			const std::string meshSourceName = m_Properties.Filepath.stem().string();
+
+			std::string aiMaterialName = aiMaterial ? aiMaterial->GetName().C_Str() : "";
+			aiMaterialName = aiMaterialName.empty() ? std::to_string(materialIndex) : aiMaterialName;
+
+			std::string materialName = meshSourceName + "_" + aiMaterialName;
+			std::string filename = materialName + ".cmaterial";
+			std::string materialDirectory = (AssetManager::GetAssetPath() / "Materials/Defaults" / meshSourceName).string();
+
+			Ref<Material> material = CreateRef<Material>(m_MeshShader, materialName);
+			Ref<MaterialAsset> materialAsset = AssetManager::CreateNewAsset<MaterialAsset>(filename, materialDirectory, material);
+
+			glm::vec3 albedoColor(0.8f);
+			if (aiMaterial)
+			{
+				aiColor3D aiColor;
+				if (aiMaterial->Get(AI_MATKEY_COLOR_DIFFUSE, aiColor) == AI_SUCCESS)
+					albedoColor = { aiColor.r, aiColor.g, aiColor.b };
+			}
+
+			float shininess = 80.0f;
+			if (aiMaterial)
+				aiMaterial->Get(AI_MATKEY_SHININESS, shininess);
+
+			float roughness = 1.0f - glm::sqrt(shininess / 100.0f);
+			roughness = glm::clamp(roughness, 0.0f, 1.0f);
+
+			float metalness = 0.0f;
+			if (aiMaterial)
+				aiMaterial->Get(AI_MATKEY_REFLECTIVITY, metalness);
+
+			materialAsset->SetAlbedoColor(albedoColor);
+			materialAsset->SetUseNormalMap(false);
+			materialAsset->SetMetalness(metalness);
+			materialAsset->SetRoughness(roughness);
+
+			// Texture import is intentionally kept for a later phase. This step restores
+			// material slots and scalar/color material data without depending on the old
+			// Ref<Texture2D>-based material path.
+			AssetImporter::Serialize(materialAsset);
+
+			NV_MESH_LOG("  Created material asset {0} (Slot = {1})", filename, materialIndex);
+			return materialAsset;
+		};
+
+		const uint32_t materialSlotCount = getMaterialSlotCount();
+		m_MaterialsAsset.clear();
+		m_MaterialsAsset.resize(materialSlotCount);
+
 		if (!m_Properties.SubmeshMaterials.empty())
 		{
-			for (uint32_t submeshIndex = 0; submeshIndex < m_Properties.SubmeshMaterials.size(); submeshIndex++)
+			for (const auto& [submeshIndex, materialHandle] : m_Properties.SubmeshMaterials)
 			{
-				auto& materialHandle = m_Properties.SubmeshMaterials[submeshIndex];
-				uint32_t materialIndex = m_Submeshes[submeshIndex].MaterialIndex;
+				if (submeshIndex >= m_Submeshes.size())
+				{
+					NV_CORE_WARN("Mesh material override references invalid submesh index {0}", submeshIndex);
+					continue;
+				}
+
+				const uint32_t materialIndex = m_Submeshes[submeshIndex].MaterialIndex;
+				if (materialIndex >= m_MaterialsAsset.size())
+					m_MaterialsAsset.resize(materialIndex + 1);
+
 				Ref<MaterialAsset> materialAsset = AssetManager::GetAsset<MaterialAsset>(materialHandle);
 				if (materialAsset)
-				{
-					if (materialIndex >= m_MaterialsAsset.size())
-						m_MaterialsAsset.resize(materialIndex + 1);
-
 					m_MaterialsAsset[materialIndex] = materialAsset;
-				}
 				else
-				{
-					if (materialIndex >= m_MaterialsAsset.size())
-						m_MaterialsAsset.resize(materialIndex + 1);
-
-					m_MaterialsAsset[materialIndex] = Renderer::GetDefaultPBRMaterial();
-				}
+					NV_CORE_WARN("Invalid material override handle for submesh {0}; using imported/default material", submeshIndex);
 			}
-
 		}
-		else
+
+		for (uint32_t materialIndex = 0; materialIndex < m_MaterialsAsset.size(); materialIndex++)
 		{
-			Handle<Texture2D> whiteTexture = Renderer::GetWhiteTexture();
-			if (m_Scene->HasMaterials())
+			if (m_MaterialsAsset[materialIndex])
+				continue;
+
+			aiMaterial* aiMaterial = nullptr;
+			if (m_Scene && m_Scene->HasMaterials() && materialIndex < m_Scene->mNumMaterials)
+				aiMaterial = m_Scene->mMaterials[materialIndex];
+
+			m_MaterialsAsset[materialIndex] = createMaterialAsset(materialIndex, aiMaterial);
+		}
+
+		for (Submesh& submesh : m_Submeshes)
+		{
+			if (submesh.MaterialIndex >= m_MaterialsAsset.size() || !m_MaterialsAsset[submesh.MaterialIndex])
 			{
-				m_MaterialsAsset.resize(m_Scene->mNumMaterials);
-				std::string meshSourceName = m_Properties.Filepath.stem().string();
-				for (uint32_t i = 0; i < m_Scene->mNumMaterials; i++)
-				{
-					auto aiMaterial = m_Scene->mMaterials[i];
-					std::string aiMaterialName = aiMaterial->GetName().C_Str();
-					aiMaterialName = (aiMaterialName == "") ? std::to_string(i) : aiMaterialName;
-					std::string filename = meshSourceName + "_" + aiMaterialName;
-					Ref<Material> material = CreateRef<Material>(m_MeshShader, filename);
-					// CreateMaterialAsset
-					filename += ".cmaterial";
-					std::string materialPath = "Materials/Defaults/" + meshSourceName;
-					std::string filepath = (AssetManager::GetAssetPath() / materialPath).string();
-					Ref<MaterialAsset> materialAsset = AssetManager::CreateNewAsset<MaterialAsset>(filename, filepath, material);
-					m_MaterialsAsset[i] = materialAsset;
-
-					NV_MESH_LOG("  {0} (Index = {1})", filename, i);
-					aiString aiTexPath;
-					uint32_t textureCount = aiMaterial->GetTextureCount(aiTextureType_DIFFUSE);
-					NV_MESH_LOG("    TextureCount = {0}", textureCount);
-					///////////////////////////
-					/// ALBEDO
-					///////////////////////////
-					if (aiMaterial->GetTexture(aiTextureType_DIFFUSE, 0, &aiTexPath) == AI_SUCCESS)
-					{
-						std::filesystem::path path = m_Properties.Filepath;
-						auto parentPath = path.parent_path();
-						parentPath /= std::string(aiTexPath.data);
-						std::string texturePath = parentPath.string();
-						NV_MESH_LOG("    Albedo map path = {0}", texturePath);
-						TextureProperties textureProperties;
-						textureProperties.SRGB = true;
-						textureProperties.GenerateMips = true;
-						AssetHandle albedoAssetHandle = AssetManager::GetMetadata(parentPath).Handle;
-#if OLD_RENDERER
-						Ref<Texture2D> texture = AssetManager::OverrideAsset<Texture2D>(albedoAssetHandle, texturePath, textureProperties);
-						if (texture->Loaded())
-						{
-							materialAsset->SetAlbedoColor(glm::vec3(1.f));
-							materialAsset->SetAlbedoMap(texture);
-						}
-						else
-						{
-							NV_CORE_ERROR("Could not load albedo texture: {0}", texturePath);
-						}
-#endif
-					}
-					else
-					{
-						glm::vec3 albedoColor(0.8f);
-						aiColor3D aiColor;
-						if (aiMaterial->Get(AI_MATKEY_COLOR_DIFFUSE, aiColor) == AI_SUCCESS)
-							albedoColor = { aiColor.r, aiColor.g, aiColor.b };
-
-						materialAsset->SetAlbedoColor(albedoColor);
-						materialAsset->SetAlbedoMap(whiteTexture);
-					}
-					///////////////////////////
-					/// NORMALS
-					///////////////////////////
-					if (aiMaterial->GetTexture(aiTextureType_NORMALS, 0, &aiTexPath) == AI_SUCCESS)
-					{
-						std::filesystem::path path = m_Properties.Filepath;
-						auto parentPath = path.parent_path();
-						parentPath /= std::string(aiTexPath.data);
-						std::string texturePath = parentPath.string();
-						NV_MESH_LOG("    Normal map path = {0}", texturePath);
-						TextureProperties textureProperties;
-						textureProperties.SRGB = false;
-						textureProperties.GenerateMips = true;
-						AssetHandle albedoAssetHandle = AssetManager::GetMetadata(parentPath).Handle;
-#if OLD_RENDERER
-						Ref<Texture2D> texture = AssetManager::OverrideAsset<Texture2D>(albedoAssetHandle, texturePath, textureProperties);
-						if (texture->Loaded())
-						{
-
-							materialAsset->SetNormalMap(texture);
-							materialAsset->SetUseNormalMap(true);
-						}
-						else
-						{
-							NV_CORE_ERROR("Could not load normal texture: {0}", texturePath);
-						}
-#endif
-					}
-					else
-					{
-						materialAsset->SetNormalMap(whiteTexture);
-						materialAsset->SetUseNormalMap(false);
-					}
-
-					///////////////////////////
-					/// ROUGHNESS
-					///////////////////////////
-					if (aiMaterial->GetTexture(aiTextureType_SHININESS, 0, &aiTexPath) == AI_SUCCESS)
-					{
-						std::filesystem::path path = m_Properties.Filepath;
-						auto parentPath = path.parent_path();
-						parentPath /= std::string(aiTexPath.data);
-						std::string texturePath = parentPath.string();
-
-						NV_MESH_LOG("    Roughness map path = {0}", texturePath);
-						TextureProperties textureProperties;
-						textureProperties.SRGB = false;
-						textureProperties.GenerateMips = true;
-						AssetHandle albedoAssetHandle = AssetManager::GetMetadata(parentPath).Handle;
-#if OLD_RENDERER
-						Ref<Texture2D> texture = AssetManager::OverrideAsset<Texture2D>(albedoAssetHandle, texturePath, textureProperties);
-						if (texture->Loaded())
-						{
-							materialAsset->SetRoughness(1.f);
-							materialAsset->SetRoughnessMap(texture);
-						}
-						else
-						{
-							NV_CORE_ERROR("Could not load Roughness texture: {0}", texturePath);
-						}
-#endif
-					}
-					else
-					{
-						float shininess;
-						if (aiMaterial->Get(AI_MATKEY_SHININESS, shininess) != aiReturn_SUCCESS)
-							shininess = 80.0f; // Default value
-
-						float roughness = 1.0f - glm::sqrt(shininess / 100.0f);
-
-						materialAsset->SetRoughness(roughness);
-						materialAsset->SetRoughnessMap(whiteTexture);
-					}
-					///////////////////////////
-					/// METALNESS
-					///////////////////////////
-					bool metalnessTextureFound = false;
-					for (uint32_t i = 0; i < aiMaterial->mNumProperties; i++)
-					{
-						auto prop = aiMaterial->mProperties[i];
-						if (prop->mType == aiPTI_String)
-						{
-							uint32_t strLength = *(uint32_t*)prop->mData;
-							std::string str(prop->mData + 4, strLength);
-
-							std::string key = prop->mKey.data;
-							if (key == "$raw.ReflectionFactor|file")
-							{
-								metalnessTextureFound = true;
-								std::filesystem::path path = m_Properties.Filepath;
-								auto parentPath = path.parent_path();
-								parentPath /= str;
-								std::string texturePath = parentPath.string();
-								NV_MESH_LOG("    Metalness map path = {0}", texturePath);
-								TextureProperties textureProperties;
-								textureProperties.SRGB = false;
-								textureProperties.GenerateMips = true;
-								AssetHandle albedoAssetHandle = AssetManager::GetMetadata(parentPath).Handle;
-#if OLD_RENDERER
-								Ref<Texture2D> texture = AssetManager::OverrideAsset<Texture2D>(albedoAssetHandle, texturePath, textureProperties);
-								if (texture->Loaded())
-								{
-									materialAsset->SetMetalness(1.f);
-									materialAsset->SetMetalnessMap(texture);
-								}
-								else
-								{
-									NV_CORE_ERROR("Could not load Metallic texture: {0}", texturePath);
-								}
-#endif
-								break;
-							}
-						}
-					}
-					if (!metalnessTextureFound)
-					{
-						NV_MESH_LOG("	No Metalness map associated");
-
-						float metalness;
-						if (aiMaterial->Get(AI_MATKEY_REFLECTIVITY, metalness) != aiReturn_SUCCESS)
-							metalness = 0.0f;
-
-						materialAsset->SetMetalness(metalness);
-						materialAsset->SetMetalnessMap(whiteTexture);
-					}
-
-					AssetImporter::Serialize(materialAsset);
-
-				}
+				NV_CORE_WARN("Submesh {0} has invalid material index {1}; falling back to slot 0", submesh.MeshName, submesh.MaterialIndex);
+				submesh.MaterialIndex = 0;
 			}
 		}
-#endif
-
 	}
 
 	////////////////////////////////////////////////////////
@@ -398,10 +271,21 @@ namespace cerberus
 		: m_MeshSource(meshSource)
 	{
 		const auto& meshMaterials = meshSource->GetMaterialsAsset();
-		m_Materials = CreateRef<MaterialTable>(meshMaterials.size());
+
+		uint32_t materialSlotCount = (uint32_t)meshMaterials.size();
+		for (const Submesh& submesh : meshSource->GetSubmeshes())
+			materialSlotCount = std::max(materialSlotCount, submesh.MaterialIndex + 1);
+
+		materialSlotCount = std::max(materialSlotCount, 1u);
+		m_Materials = CreateRef<MaterialTable>(materialSlotCount);
 
 		for (uint32_t i = 0; i < meshMaterials.size(); i++)
+		{
+			if (!meshMaterials[i])
+				continue;
+
 			m_Materials->SetMaterial(i, meshMaterials[i]->Handle);
+		}
 	}
 
 	Mesh::Mesh(const Ref<MeshSource>& meshSource, const Ref<MaterialTable>& materialTable)

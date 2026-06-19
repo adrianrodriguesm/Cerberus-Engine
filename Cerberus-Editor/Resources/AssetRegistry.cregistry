@@ -17,6 +17,9 @@ Assets:
   - Handle: 624494486461864232
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_19.cmaterial
     Type: Material
+  - Handle: 644584897841359093
+    FilePath: Resources/Materials/Defaults/CerberusMaterials/CerberusMaterials_08 - Default.001.cmaterial
+    Type: Material
   - Handle: 667632242651293457
     FilePath: Resources/Textures/Ronaldo.jpg
     Type: Texture
@@ -35,8 +38,17 @@ Assets:
   - Handle: 1345260141031308295
     FilePath: Resources/Meshes/Source/Sponza/3827035219084910048.jpg
     Type: Texture
+  - Handle: 1452939269463137129
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_19 (02).cmaterial
+    Type: Material
+  - Handle: 1456726876974028262
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_11 (01).cmaterial
+    Type: Material
   - Handle: 1539516404338496980
     FilePath: Resources/Materials/Defaults/Torus/Torus_DefaultMaterial.cmaterial
+    Type: Material
+  - Handle: 1554416314559687311
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_5 (01).cmaterial
     Type: Material
   - Handle: 1612462722152889793
     FilePath: Resources/Scenes/IBL Showcase.cscene
@@ -65,15 +77,27 @@ Assets:
   - Handle: 2499149028730396324
     FilePath: Resources/Meshes/Source/Sponza/7268504077753552595.jpg
     Type: Texture
+  - Handle: 2598083707992902848
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_18 (02).cmaterial
+    Type: Material
   - Handle: 2758207603140435602
     FilePath: Resources/Meshes/Source/Sponza/15295713303328085182.jpg
     Type: Texture
+  - Handle: 2936515616725339202
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_23 (01).cmaterial
+    Type: Material
   - Handle: 2946087259490184239
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_21.cmaterial
     Type: Material
   - Handle: 2948340289431861393
     FilePath: Resources/Meshes/Source/Sponza/715093869573992647.jpg
     Type: Texture
+  - Handle: 3123573614271550347
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_22 (01).cmaterial
+    Type: Material
+  - Handle: 3267752599810054768
+    FilePath: Resources/Materials/Defaults/DamagedHelmet/DamagedHelmet_Material_MR.cmaterial
+    Type: Material
   - Handle: 3300666414885992116
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_22.cmaterial
     Type: Material
@@ -89,17 +113,35 @@ Assets:
   - Handle: 3487592352649968814
     FilePath: Resources/Editor/PNG-Icon.png
     Type: Texture
+  - Handle: 3697437705587680008
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_8 (02).cmaterial
+    Type: Material
   - Handle: 3755864322406133902
     FilePath: Resources/Meshes/Source/Sponza/white.png
     Type: Texture
+  - Handle: 3951918633091265104
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_3 (02).cmaterial
+    Type: Material
+  - Handle: 4002924038812353090
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_1 (01).cmaterial
+    Type: Material
   - Handle: 4063574727633971189
     FilePath: Resources/Meshes/Source/Sponza/8773302468495022225.jpg
     Type: Texture
+  - Handle: 4167576277046004187
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_13 (01).cmaterial
+    Type: Material
   - Handle: 4459955219163600948
     FilePath: Resources/Meshes/Source/Sponza/759203620573749278.jpg
     Type: Texture
   - Handle: 4508125439715924410
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_11.cmaterial
+    Type: Material
+  - Handle: 4636658853036677457
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_6 (01).cmaterial
+    Type: Material
+  - Handle: 4727905805536189608
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_13 (02).cmaterial
     Type: Material
   - Handle: 4814258618681984355
     FilePath: Resources/Meshes/Source/Sponza/8006627369776289000.png
@@ -113,9 +155,15 @@ Assets:
   - Handle: 4923329295495848478
     FilePath: Resources/Meshes/Source/Sponza/14267839433702832875.jpg
     Type: Texture
+  - Handle: 4962962432620600835
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_6 (02).cmaterial
+    Type: Material
   - Handle: 4992362982864492323
     FilePath: Resources/Meshes/Source/Sponza/7815564343179553343.jpg
     Type: Texture
+  - Handle: 4993021177322650677
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_15 (01).cmaterial
+    Type: Material
   - Handle: 5150568023071723546
     FilePath: Resources/Meshes/Source/Cerberus/Textures/Cerberus_R.png
     Type: Texture
@@ -125,11 +173,17 @@ Assets:
   - Handle: 5251829823553464429
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_14.cmaterial
     Type: Material
+  - Handle: 5308737474898675599
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_9 (01).cmaterial
+    Type: Material
   - Handle: 5360434479146091582
     FilePath: Resources/Meshes/Source/DamagedHelmet/DamagedHelmet.gltf
     Type: MeshSource
   - Handle: 5388152520102643491
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_23.cmaterial
+    Type: Material
+  - Handle: 5500022591294103076
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_20 (01).cmaterial
     Type: Material
   - Handle: 5527472722536471293
     FilePath: Resources/Meshes/Source/Sponza/755318871556304029.jpg
@@ -140,18 +194,39 @@ Assets:
   - Handle: 5720217116168469259
     FilePath: Resources/Meshes/Source/Default/Cone.fbx
     Type: MeshSource
+  - Handle: 5726434142458134064
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_21 (01).cmaterial
+    Type: Material
   - Handle: 5757263951125114725
     FilePath: Resources/Environment/birchwood_4k.hdr
     Type: EnvMap
+  - Handle: 5793742873232761304
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_17 (01).cmaterial
+    Type: Material
+  - Handle: 5799824310415664374
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_4 (01).cmaterial
+    Type: Material
+  - Handle: 6095182811893659649
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_0 (02).cmaterial
+    Type: Material
   - Handle: 6172894113097490430
     FilePath: Resources/Meshes/Source/Sponza/3455394979645218238.jpg
     Type: Texture
+  - Handle: 6217798315756328094
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_5 (02).cmaterial
+    Type: Material
   - Handle: 6269892616642238736
     FilePath: Resources/Meshes/Source/Sponza/5061699253647017043.png
     Type: Texture
   - Handle: 6351818378298874155
     FilePath: Resources/Meshes/Source/Sponza/13196865903111448057.jpg
     Type: Texture
+  - Handle: 6535594373649680471
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_20 (02).cmaterial
+    Type: Material
+  - Handle: 6573888830827323472
+    FilePath: Resources/Materials/Defaults/DamagedHelmet/DamagedHelmet_1 (02).cmaterial
+    Type: Material
   - Handle: 6618624406984203137
     FilePath: Resources/Meshes/Source/Cerberus/CerberusMaterials.fbx
     Type: MeshSource
@@ -176,6 +251,9 @@ Assets:
   - Handle: 7118303737358808468
     FilePath: Resources/Meshes/Default/Sphere.cmesh
     Type: Mesh
+  - Handle: 7521001972101329667
+    FilePath: Resources/Materials/Defaults/DamagedHelmet/DamagedHelmet_1.cmaterial
+    Type: Material
   - Handle: 7635467131256680532
     FilePath: Resources/Meshes/Source/Default/Capsule.fbx
     Type: MeshSource
@@ -194,15 +272,30 @@ Assets:
   - Handle: 7819270352573126076
     FilePath: Resources/Meshes/Default/Plane.cmesh
     Type: Mesh
+  - Handle: 7889606336333799610
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_24 (01).cmaterial
+    Type: Material
   - Handle: 7918014648360710985
     FilePath: Resources/Meshes/Source/DamagedHelmet/Default_normal.jpg
     Type: Texture
+  - Handle: 7982957868496849787
+    FilePath: Resources/Materials/Defaults/CerberusMaterials/CerberusMaterials_08 - Default.001 (01).cmaterial
+    Type: Material
+  - Handle: 7988068178838636372
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_25 (01).cmaterial
+    Type: Material
   - Handle: 8016661850085447379
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_20.cmaterial
+    Type: Material
+  - Handle: 8117248752684548504
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_15 (02).cmaterial
     Type: Material
   - Handle: 8216204498673315095
     FilePath: Resources/Meshes/Source/Default/Torus.fbx
     Type: MeshSource
+  - Handle: 8473387682547108392
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_3 (01).cmaterial
+    Type: Material
   - Handle: 8584050547211513463
     FilePath: Resources/Editor/Mesh-Icon.png
     Type: Texture
@@ -230,8 +323,23 @@ Assets:
   - Handle: 9471461081925630254
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_12.cmaterial
     Type: Material
+  - Handle: 9475905944678985376
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_19 (01).cmaterial
+    Type: Material
+  - Handle: 9633083553130141348
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_16 (02).cmaterial
+    Type: Material
+  - Handle: 9657477054415758569
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_9 (02).cmaterial
+    Type: Material
+  - Handle: 9673649911831561243
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_0 (01).cmaterial
+    Type: Material
   - Handle: 9778710795501810573
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_2.cmaterial
+    Type: Material
+  - Handle: 9867738781935586688
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_11 (02).cmaterial
     Type: Material
   - Handle: 9893639437936632527
     FilePath: Resources/Materials/Defaults/Plane/Plane_DefaultMaterial.cmaterial
@@ -272,6 +380,9 @@ Assets:
   - Handle: 10544065925188470782
     FilePath: Resources/Meshes/Source/Default/Cube.fbx
     Type: MeshSource
+  - Handle: 10594729556358877621
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_14 (01).cmaterial
+    Type: Material
   - Handle: 10603699043645715582
     FilePath: Resources/Scenes/Cerberus.cscene
     Type: Scene
@@ -290,15 +401,27 @@ Assets:
   - Handle: 10996828225799755403
     FilePath: Resources/Meshes/Source/Sponza/11872827283454512094.jpg
     Type: Texture
+  - Handle: 11033431374369840857
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_7 (01).cmaterial
+    Type: Material
   - Handle: 11039867159855569566
     FilePath: Resources/Meshes/Source/Sponza/466164707995436622.jpg
     Type: Texture
+  - Handle: 11058285492385858385
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_10 (01).cmaterial
+    Type: Material
+  - Handle: 11067479998843172431
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_22 (02).cmaterial
+    Type: Material
   - Handle: 11072886555166685258
     FilePath: Resources/Meshes/Source/Sponza/2299742237651021498.jpg
     Type: Texture
   - Handle: 11169387080040354592
     FilePath: Resources/Editor/Scene-Icon.png
     Type: Texture
+  - Handle: 11192896134154981008
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_16 (01).cmaterial
+    Type: Material
   - Handle: 11255639914133364044
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_25.cmaterial
     Type: Material
@@ -320,6 +443,9 @@ Assets:
   - Handle: 11906428688308501597
     FilePath: Resources/Meshes/Source/DamagedHelmet/Default_roughness.jpg
     Type: Texture
+  - Handle: 12013585191200712927
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_14 (02).cmaterial
+    Type: Material
   - Handle: 12120527172450138203
     FilePath: Resources/Environment/pink_sunrise_4k.hdr
     Type: EnvMap
@@ -332,12 +458,18 @@ Assets:
   - Handle: 12577969716276790822
     FilePath: Resources/Meshes/Source/Sponza/4601176305987539675.jpg
     Type: Texture
+  - Handle: 12711499856641134446
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_7 (02).cmaterial
+    Type: Material
   - Handle: 12852332826721841962
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_16.cmaterial
     Type: Material
   - Handle: 12901405554116588439
     FilePath: Resources/Meshes/Source/Sponza/11490520546946913238.jpg
     Type: Texture
+  - Handle: 12901514681338779009
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_25 (02).cmaterial
+    Type: Material
   - Handle: 12911451789408332098
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_7.cmaterial
     Type: Material
@@ -353,6 +485,9 @@ Assets:
   - Handle: 13073543180231650429
     FilePath: Resources/Meshes/Source/Sponza/10381718147657362067.jpg
     Type: Texture
+  - Handle: 13115236469984955483
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_25 (03).cmaterial
+    Type: Material
   - Handle: 13243429978294941343
     FilePath: Resources/Meshes/Source/Default/Plane.fbx
     Type: MeshSource
@@ -377,8 +512,17 @@ Assets:
   - Handle: 13854618050832145662
     FilePath: Resources/Meshes/Source/Sponza/9288698199695299068.jpg
     Type: Texture
+  - Handle: 13897044545161695494
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_24 (02).cmaterial
+    Type: Material
   - Handle: 13911666821683352692
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_1.cmaterial
+    Type: Material
+  - Handle: 13925800104104077011
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_12 (02).cmaterial
+    Type: Material
+  - Handle: 13933736729275873365
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_18 (01).cmaterial
     Type: Material
   - Handle: 13961784392485736266
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_5.cmaterial
@@ -398,6 +542,9 @@ Assets:
   - Handle: 14558541244077374761
     FilePath: Resources/Meshes/Source/Sponza/13982482287905699490.jpg
     Type: Texture
+  - Handle: 14814623761911339453
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_1 (02).cmaterial
+    Type: Material
   - Handle: 14844715360056455299
     FilePath: Resources/Meshes/Source/Sponza/5792855332885324923.jpg
     Type: Texture
@@ -410,6 +557,9 @@ Assets:
   - Handle: 14940902254493202912
     FilePath: Resources/Meshes/Source/Sponza/7441062115984513793.jpg
     Type: Texture
+  - Handle: 14964495120313722613
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_2 (02).cmaterial
+    Type: Material
   - Handle: 14989513012207313756
     FilePath: Resources/Editor/Refresh.png
     Type: Texture
@@ -422,6 +572,9 @@ Assets:
   - Handle: 15303906566730923736
     FilePath: Resources/Meshes/Source/Default/Sphere.fbx
     Type: MeshSource
+  - Handle: 15304001298221599145
+    FilePath: Resources/Materials/Defaults/DamagedHelmet/DamagedHelmet_1 (01).cmaterial
+    Type: Material
   - Handle: 15405043571165741544
     FilePath: Resources/Meshes/Source/Sponza/11968150294050148237.jpg
     Type: Texture
@@ -431,6 +584,12 @@ Assets:
   - Handle: 15495015530988317661
     FilePath: Resources/Meshes/Source/Sponza/6772804448157695701.jpg
     Type: Texture
+  - Handle: 15549171724285142261
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_10 (02).cmaterial
+    Type: Material
+  - Handle: 15733574807206261151
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_2 (01).cmaterial
+    Type: Material
   - Handle: 15838354034586252885
     FilePath: Resources/Meshes/Source/Sponza/Sponza.gltf
     Type: MeshSource
@@ -443,17 +602,35 @@ Assets:
   - Handle: 15928642934543143638
     FilePath: Resources/Meshes/Source/Sponza/2411100444841994089.jpg
     Type: Texture
+  - Handle: 16091410744734736875
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_21 (02).cmaterial
+    Type: Material
   - Handle: 16162982243639053922
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_24.cmaterial
     Type: Material
   - Handle: 16277723332892560461
     FilePath: Resources/Materials/Defaults/Example.cmaterial
     Type: Material
+  - Handle: 16324923908235608453
+    FilePath: Resources/Materials/Defaults/DamagedHelmet/DamagedHelmet_Material_MR (01).cmaterial
+    Type: Material
+  - Handle: 16426035786929478096
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_8 (01).cmaterial
+    Type: Material
+  - Handle: 16483142467537396126
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_4 (02).cmaterial
+    Type: Material
+  - Handle: 16682842825941536101
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_12 (01).cmaterial
+    Type: Material
   - Handle: 16725908152150666972
     FilePath: Resources/Editor/Cerberus-Icon.png
     Type: Texture
   - Handle: 16794969822055500100
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_10.cmaterial
+    Type: Material
+  - Handle: 16872354223213554039
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_17 (02).cmaterial
     Type: Material
   - Handle: 17150551078259290648
     FilePath: Resources/Meshes/Source/Cerberus/Textures/Cerberus_M.png
@@ -476,6 +653,9 @@ Assets:
   - Handle: 17744570400132898785
     FilePath: Resources/Meshes/Source/Sponza/8503262930880235456.jpg
     Type: Texture
+  - Handle: 17971182212518744347
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_23 (02).cmaterial
+    Type: Material
   - Handle: 18033217899969463576
     FilePath: Resources/Meshes/Source/Sponza/16299174074766089871.jpg
     Type: Texture

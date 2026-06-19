@@ -298,31 +298,50 @@ namespace cerberus
 	MaterialAsset::MaterialAsset()
 	{
 		m_Material = CreateRef<Material>(RendererResources::GetShaderLibrary().Get("PBR"));
-
-		// Set defaults
-		SetAlbedoColor(glm::vec3(0.8f));
-		//SetEmission(0.0f);
-		SetUseNormalMap(false);
-		SetMetalness(0.0f);
-		SetRoughness(0.4f);
-
-		// Maps
-#if OLD_RENDERER
-		SetAlbedoMap(Renderer::GetWhiteTexture());
-		SetNormalMap(Renderer::GetWhiteTexture());
-		SetMetalnessMap(Renderer::GetWhiteTexture());
-		SetRoughnessMap(Renderer::GetWhiteTexture());
-#endif
-
+		ApplyDataToMaterial();
 	}
 
 	MaterialAsset::MaterialAsset(Ref<Material> material)
 		: m_Material(material)
 	{
+		ApplyDataToMaterial();
 	}
 
 	MaterialAsset::~MaterialAsset()
 	{
+	}
+
+	void MaterialAsset::ApplyDataToMaterial()
+	{
+		if (!m_Material)
+			return;
+
+		m_Material->Set(s_AlbedoColorUniform, m_Data.AlbedoColor);
+		m_Material->Set(s_UseNormalMapUniform, m_Data.UseNormalMap);
+		m_Material->Set(s_MetalnessUniform, m_Data.Metalness);
+		m_Material->Set(s_RoughnessUniform, m_Data.Roughness);
+		m_Material->Set(s_EmissionUniform, m_Data.Emission);
+	}
+
+	GPUMaterialData MaterialAsset::BuildGPUMaterialData(
+		uint32_t albedoTextureIndex,
+		uint32_t normalTextureIndex,
+		uint32_t metalnessTextureIndex,
+		uint32_t roughnessTextureIndex) const
+	{
+		GPUMaterialData data{};
+		data.AlbedoColor = glm::vec4(m_Data.AlbedoColor, 1.0f);
+		data.Parameters = glm::vec4(
+			m_Data.Roughness,
+			m_Data.Metalness,
+			m_Data.Emission,
+			m_Data.UseNormalMap ? 1.0f : 0.0f);
+		data.TextureIndices = glm::uvec4(
+			albedoTextureIndex,
+			normalTextureIndex,
+			metalnessTextureIndex,
+			roughnessTextureIndex);
+		return data;
 	}
 
 	const std::string& MaterialAsset::GetName() const
@@ -332,143 +351,141 @@ namespace cerberus
 
 	glm::vec3& MaterialAsset::GetAlbedoColor()
 	{
-		return m_Material->GetVector3(s_AlbedoColorUniform);
+		return m_Data.AlbedoColor;
 	}
 
 	void MaterialAsset::SetAlbedoColor(const glm::vec3& color)
 	{
-		m_Material->Set(s_AlbedoColorUniform, color);
+		m_Data.AlbedoColor = color;
+		if (m_Material)
+			m_Material->Set(s_AlbedoColorUniform, color);
 	}
 
 	float& MaterialAsset::GetMetalness()
 	{
-		return m_Material->GetFloat(s_MetalnessUniform);
+		return m_Data.Metalness;
 	}
 
 	void MaterialAsset::SetMetalness(float value)
 	{
-		m_Material->Set(s_MetalnessUniform, value);
+		m_Data.Metalness = value;
+		if (m_Material)
+			m_Material->Set(s_MetalnessUniform, value);
 	}
 
 	float& MaterialAsset::GetRoughness()
 	{
-		return m_Material->GetFloat(s_RoughnessUniform);
+		return m_Data.Roughness;
 	}
 
 	void MaterialAsset::SetRoughness(float value)
 	{
-		m_Material->Set(s_RoughnessUniform, value);
+		m_Data.Roughness = value;
+		if (m_Material)
+			m_Material->Set(s_RoughnessUniform, value);
 	}
 
 	float& MaterialAsset::GetEmission()
 	{
-		return m_Material->GetFloat(s_EmissionUniform);
+		return m_Data.Emission;
 	}
 
 	void MaterialAsset::SetEmission(float value)
 	{
-		m_Material->Set(s_EmissionUniform, value);
+		m_Data.Emission = value;
+		if (m_Material)
+			m_Material->Set(s_EmissionUniform, value);
 	}
 
-	Ref<Texture2D> MaterialAsset::GetAlbedoMap()
+	AssetHandle MaterialAsset::GetAlbedoMapHandle() const
 	{
-#if OLD_RENDERER
-
-		return m_Material->TryGetTexture2D(s_AlbedoMapUniform);
-#endif
-		return nullptr;
+		return m_Data.Textures.AlbedoMap;
 	}
 
-	void MaterialAsset::SetAlbedoMap(Ref<Texture2D> texture)
+	void MaterialAsset::SetAlbedoMap(AssetHandle textureAsset)
 	{
-		m_Material->Set(s_AlbedoMapUniform, texture);
+		m_Data.Textures.AlbedoMap = textureAsset;
 	}
 
-	bool MaterialAsset::IsUsingAlbedoMap()
+	bool MaterialAsset::IsUsingAlbedoMap() const
 	{
-		return nullptr != GetAlbedoMap();
+		return m_Data.Textures.HasAlbedoMap();
 	}
 
 	void MaterialAsset::ClearAlbedoMap()
 	{
-		m_Material->Set(s_AlbedoMapUniform, RendererResources::GetWhiteTexture());
+		m_Data.Textures.AlbedoMap = 0;
 	}
 
-	Ref<Texture2D> MaterialAsset::GetNormalMap()
+	AssetHandle MaterialAsset::GetNormalMapHandle() const
 	{
-#if OLD_RENDERER
-		return m_Material->TryGetTexture2D(s_NormalMapUniform);
-#endif
-			return nullptr;
+		return m_Data.Textures.NormalMap;
 	}
 
-	void MaterialAsset::SetNormalMap(Ref<Texture2D> texture)
+	void MaterialAsset::SetNormalMap(AssetHandle textureAsset)
 	{
-		m_Material->Set(s_NormalMapUniform, texture);
+		m_Data.Textures.NormalMap = textureAsset;
+		m_Data.UseNormalMap = textureAsset != 0;
+		if (m_Material)
+			m_Material->Set(s_UseNormalMapUniform, m_Data.UseNormalMap);
 	}
 
-	bool MaterialAsset::IsUsingNormalMap()
+	bool MaterialAsset::IsUsingNormalMap() const
 	{
-		return m_Material->GetBool(s_UseNormalMapUniform);
+		return m_Data.UseNormalMap && m_Data.Textures.HasNormalMap();
 	}
 
 	void MaterialAsset::SetUseNormalMap(bool value)
 	{
-		m_Material->Set(s_UseNormalMapUniform, value);
+		m_Data.UseNormalMap = value;
+		if (m_Material)
+			m_Material->Set(s_UseNormalMapUniform, value);
 	}
 
 	void MaterialAsset::ClearNormalMap()
 	{
-		m_Material->Set(s_NormalMapUniform, RendererResources::GetWhiteTexture());
+		m_Data.Textures.NormalMap = 0;
+		SetUseNormalMap(false);
 	}
 
-	Ref<Texture2D> MaterialAsset::GetMetalnessMap()
+	AssetHandle MaterialAsset::GetMetalnessMapHandle() const
 	{
-#if OLD_RENDERER
-		return m_Material->TryGetTexture2D(s_MetalnessMapUniform);
-#endif
-		return nullptr;
+		return m_Data.Textures.MetalnessMap;
 	}
 
-	void MaterialAsset::SetMetalnessMap(Ref<Texture2D> texture)
+	void MaterialAsset::SetMetalnessMap(AssetHandle textureAsset)
 	{
-		m_Material->Set(s_MetalnessMapUniform, texture);
+		m_Data.Textures.MetalnessMap = textureAsset;
 	}
 
-	bool MaterialAsset::IsUsingMetalnessMap()
+	bool MaterialAsset::IsUsingMetalnessMap() const
 	{
-		return nullptr != GetMetalnessMap();
+		return m_Data.Textures.HasMetalnessMap();
 	}
 
 	void MaterialAsset::ClearMetalnessMap()
 	{
-		m_Material->Set(s_MetalnessMapUniform, RendererResources::GetWhiteTexture());
+		m_Data.Textures.MetalnessMap = 0;
 	}
 
-	Ref<Texture2D> MaterialAsset::GetRoughnessMap()
+	AssetHandle MaterialAsset::GetRoughnessMapHandle() const
 	{
-#if OLD_RENDERER
-		return m_Material->TryGetTexture2D(s_RoughnessMapUniform);
-#endif
-		return nullptr;
+		return m_Data.Textures.RoughnessMap;
 	}
 
-	void MaterialAsset::SetRoughnessMap(Ref<Texture2D> texture)
+	void MaterialAsset::SetRoughnessMap(AssetHandle textureAsset)
 	{
-		m_Material->Set(s_RoughnessMapUniform, texture);
+		m_Data.Textures.RoughnessMap = textureAsset;
 	}
 
-	bool MaterialAsset::IsUsingRoughnessMap()
+	bool MaterialAsset::IsUsingRoughnessMap() const
 	{
-#if OLD_RENDERER
-		return Renderer::GetWhiteTexture() != GetRoughnessMap();
-#endif
-		return false;
+		return m_Data.Textures.HasRoughnessMap();
 	}
 
 	void MaterialAsset::ClearRoughnessMap()
 	{
-		m_Material->Set(s_RoughnessMapUniform, RendererResources::GetWhiteTexture());
+		m_Data.Textures.RoughnessMap = 0;
 	}
 
 	///////////////////////////////////////////////////////////////

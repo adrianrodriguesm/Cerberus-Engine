@@ -36,7 +36,7 @@ namespace cerberus
 	struct MeshSourceProperties
 	{
 		std::filesystem::path Filepath;
-		// Specifice which submesh is associated with each material
+		// Optional imported/serialized material overrides keyed by submesh index.
 		std::map<uint32_t, AssetHandle> SubmeshMaterials;
 	};
 
@@ -69,10 +69,7 @@ namespace cerberus
 
 		std::vector<Ref<MaterialAsset>>& GetMaterialsAsset() { return m_MaterialsAsset; }
 		const std::vector<Ref<MaterialAsset>>& GetMaterialsAsset() const { return m_MaterialsAsset; }
-
-		Ref<VertexBuffer> GetVertexBuffer() { return m_VertexBuffer; }
-		Ref<IndexBuffer> GetIndexBuffer() { return m_IndexBuffer; }
-		const VertexBufferLayout& GetVertexBufferLayout() const { return m_VertexBufferLayout; }
+		uint32_t GetMaterialSlotCount() const { return (uint32_t)m_MaterialsAsset.size(); }
 
 		static AssetType GetStaticType() { return AssetType::MeshSource; }
 		AssetType GetAssetType() const { return GetStaticType(); }
@@ -84,17 +81,13 @@ namespace cerberus
 		void TraverseNodes(aiNode* node, const glm::mat4& parentTransform = glm::mat4(1.0f), uint32_t level = 0);
 	private:
 		MeshSourceProperties m_Properties;
-		std::unique_ptr<Assimp::Importer> m_Importer;
+		Scope<Assimp::Importer> m_Importer;
 
-		Ref<VertexBuffer> m_VertexBuffer;
-		VertexBufferLayout m_VertexBufferLayout;
-
-		Ref<IndexBuffer> m_IndexBuffer;
 		std::vector<Index> m_Indices;
 		std::vector<Vertex> m_Vertices;
 		std::vector<Submesh> m_Submeshes;
 
-		// Materials
+		// Imported material slots. Submesh::MaterialIndex indexes this array.
 		Ref<Shader> m_MeshShader;
 		std::vector<Ref<MaterialAsset>> m_MaterialsAsset;
 

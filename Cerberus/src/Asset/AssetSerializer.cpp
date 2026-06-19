@@ -18,17 +18,22 @@ namespace cerberus
 		out << YAML::Key << "MeshSourceImporter" << YAML::Value << YAML::BeginSeq;
 			
 				Ref<MeshSource> meshSource = std::dynamic_pointer_cast<MeshSource>(asset);
-				const auto& materialAsset = meshSource->GetMaterialsAsset();
+				const auto& materialAssets = meshSource->GetMaterialsAsset();
 				const auto& submeshes = meshSource->GetSubmeshes();
 				for (size_t i = 0; i < submeshes.size(); i++)
 				{
-#if OLD_RENDERER
+					const uint32_t materialIndex = submeshes[i].MaterialIndex;
+					if (materialIndex >= materialAssets.size() || !materialAssets[materialIndex])
+						continue;
+
+					AssetHandle materialHandle = materialAssets[materialIndex]->Handle;
+					if (!materialHandle)
+						continue;
+
 					out << YAML::BeginMap;
 					out << YAML::Key << "SubmeshIndex" << YAML::Value << i;
-					AssetHandle materialHandle = materialAsset[submeshes[i].MaterialIndex]->Handle;
 					out << YAML::Key << "MaterialHandle" << YAML::Value << (uint64_t)materialHandle;
-					out << YAML::EndMap;7
-#endif
+					out << YAML::EndMap;
 				}
 			
 			out << YAML::EndSeq;
@@ -61,10 +66,14 @@ namespace cerberus
 		MeshSourceProperties meshSourceProp;
 		for (auto submesh : submeshMaterials)
 		{
+			if (!submesh["SubmeshIndex"] || !submesh["MaterialHandle"])
+				continue;
+
 			uint32_t submeshIndex = submesh["SubmeshIndex"].as<uint32_t>();
 			AssetHandle materialHandle = 0;
 			materialHandle = submesh["MaterialHandle"].as<uint64_t>();
-			meshSourceProp.SubmeshMaterials[submeshIndex] = materialHandle;
+			if (materialHandle)
+				meshSourceProp.SubmeshMaterials[submeshIndex] = materialHandle;
 		}
 		return meshSourceProp;
 	}
@@ -356,42 +365,13 @@ namespace cerberus
 			out << YAML::Key << "UseNormalMap" << YAML::Value << material->IsUsingNormalMap();
 			out << YAML::Key << "Metalness" << YAML::Value << material->GetMetalness();
 			out << YAML::Key << "Roughness" << YAML::Value << material->GetRoughness();
-#if OLD_RENDERER
-			// Textures
-			{
-				Ref<Texture2D> albedoMap = material->GetAlbedoMap();
-				bool hasAlbedoMap = albedoMap ? (albedoMap != Renderer::GetWhiteTexture()) : false;
-				// OLD_RENDERER
-				// AssetHandle albedoMapHandle = hasAlbedoMap ? albedoMap->Handle : AssetHandle(0);
-				AssetHandle albedoMapHandle = AssetHandle();
-				out << YAML::Key << "AlbedoMapHandle" << YAML::Value << (uint64_t)albedoMapHandle;
-			}
-			{
-				Ref<Texture2D> normalMap = material->GetNormalMap();
-				bool hasNormalMap = normalMap ? (normalMap != Renderer::GetWhiteTexture()) : false;
-				// OLD_RENDERER
-				//AssetHandle normalMapHandle = hasNormalMap ? normalMap->Handle : AssetHandle(0);
-				AssetHandle normalMapHandle = AssetHandle();
-				out << YAML::Key << "NormalMapHandle" << YAML::Value << (uint64_t)normalMapHandle;
-			}
-			{
-				Ref<Texture2D> metalnessMap = material->GetMetalnessMap();
-				bool hasMetalnessMap = metalnessMap ? (metalnessMap != Renderer::GetWhiteTexture()) : false;
-				// OLD_RENDERER
-				//AssetHandle metalnessMapHandle = hasMetalnessMap ? metalnessMap->Handle : AssetHandle(0);
-				AssetHandle metalnessMapHandle =  AssetHandle();
-				out << YAML::Key << "MetalnessMapHandle" << YAML::Value << (uint64_t)metalnessMapHandle;
-			}
-			{
-				Ref<Texture2D> roughnessMap = material->GetRoughnessMap();
-				bool hasRoughnessMap = roughnessMap ? (roughnessMap != Renderer::GetWhiteTexture()) : false;
-				// OLD_RENDERER
-				//AssetHandle roughnessMapHandle = hasRoughnessMap ? roughnessMap->Handle : AssetHandle(0);
-				AssetHandle roughnessMapHandle = AssetHandle();
-				out << YAML::Key << "RoughnessMapHandle" << YAML::Value << (uint64_t)roughnessMapHandle;
-			}
+			out << YAML::Key << "Emission" << YAML::Value << material->GetEmission();
 
-#endif
+			// Texture asset handles. Runtime GPU texture handles / bindless indices are created later by RenderScene/MaterialProxy.
+			out << YAML::Key << "AlbedoMapHandle" << YAML::Value << (uint64_t)material->GetAlbedoMapHandle();
+			out << YAML::Key << "NormalMapHandle" << YAML::Value << (uint64_t)material->GetNormalMapHandle();
+			out << YAML::Key << "MetalnessMapHandle" << YAML::Value << (uint64_t)material->GetMetalnessMapHandle();
+			out << YAML::Key << "RoughnessMapHandle" << YAML::Value << (uint64_t)material->GetRoughnessMapHandle();
 
 			out << YAML::EndMap;
 		}
@@ -403,7 +383,6 @@ namespace cerberus
 
 	bool MaterialSerializer::TryToLoadData(const AssetMetadata& metadata, Ref<Asset>& asset)
 	{
-#if OLD_RENDERER
 		const auto& filepath = metadata.FilePath.string();
 		YAML::Node data = YAML::LoadFile(filepath);
 		if (!data["Material"])
@@ -411,45 +390,37 @@ namespace cerberus
 
 		Ref<MaterialAsset> material = CreateRef<MaterialAsset>();
 		YAML::Node rootNode = data["Material"];
-		// Albedo
-		{
-			glm::vec3 albedoColor = rootNode["AlbedoColor"].as<glm::vec3>();
-			material->SetAlbedoColor(albedoColor);
-			AssetHandle albedoTexHandle = rootNode["AlbedoMapHandle"].as<uint64_t>();
-			if(albedoTexHandle != 0)
-				material->SetAlbedoMap(AssetManager::GetAsset<Texture2D>(albedoTexHandle));
-		}
-		// Normal
-		{
-			bool useNormalMap = rootNode["UseNormalMap"].as<bool>();
-			material->SetUseNormalMap(useNormalMap);
-			AssetHandle normalTexHandle = rootNode["NormalMapHandle"].as<uint64_t>();
-			if(useNormalMap)
-				material->SetNormalMap(AssetManager::GetAsset<Texture2D>(normalTexHandle));
-		}
-		// Metalness
-		{
-			float metalness = rootNode["Metalness"].as<float>();
-			material->SetMetalness(metalness);
-			AssetHandle metalnessMapHandle = rootNode["MetalnessMapHandle"].as<uint64_t>();
-			if(metalnessMapHandle != 0)
-				material->SetMetalnessMap(AssetManager::GetAsset<Texture2D>(metalnessMapHandle));
-		}
-		// Roughness
-		{
-			float roughness = rootNode["Roughness"].as<float>();
-			material->SetRoughness(roughness);
-			AssetHandle roughnessMapHandle = rootNode["RoughnessMapHandle"].as<uint64_t>();
-			if(roughnessMapHandle != 0)
-				material->SetRoughnessMap(AssetManager::GetAsset<Texture2D>(roughnessMapHandle));
-		}
+
+		if (rootNode["AlbedoColor"])
+			material->SetAlbedoColor(rootNode["AlbedoColor"].as<glm::vec3>());
+
+		if (rootNode["UseNormalMap"])
+			material->SetUseNormalMap(rootNode["UseNormalMap"].as<bool>());
+
+		if (rootNode["Metalness"])
+			material->SetMetalness(rootNode["Metalness"].as<float>());
+
+		if (rootNode["Roughness"])
+			material->SetRoughness(rootNode["Roughness"].as<float>());
+
+		if (rootNode["Emission"])
+			material->SetEmission(rootNode["Emission"].as<float>());
+
+		if (rootNode["AlbedoMapHandle"])
+			material->SetAlbedoMap((AssetHandle)rootNode["AlbedoMapHandle"].as<uint64_t>());
+
+		if (rootNode["NormalMapHandle"])
+			material->SetNormalMap((AssetHandle)rootNode["NormalMapHandle"].as<uint64_t>());
+
+		if (rootNode["MetalnessMapHandle"])
+			material->SetMetalnessMap((AssetHandle)rootNode["MetalnessMapHandle"].as<uint64_t>());
+
+		if (rootNode["RoughnessMapHandle"])
+			material->SetRoughnessMap((AssetHandle)rootNode["RoughnessMapHandle"].as<uint64_t>());
 
 		material->Handle = metadata.Handle;
 		asset = material;
 		return true;
-#else
-		return false;
-#endif
 	}
 
 	void TextureSerializer::Serialize(const AssetMetadata& metadata, const Ref<Asset>& asset)
