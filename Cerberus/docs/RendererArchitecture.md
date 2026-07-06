@@ -73,3 +73,13 @@ Before introducing a RenderGraph, keep the current goal focused on making owners
 7. ImGuiRenderer owns Dear ImGui backend resources.
 8. CommandPool wraps renderer command pools; CommandBuffer and TransientCommandBuffer allocate through it.
 9. RenderQueueManager owns render command execution only.
+
+
+## Material ownership and render proxies
+
+- `MaterialAsset` owns serializable CPU-side values and texture **asset handles**.
+- `MeshSource` owns imported material slots; `Submesh::MaterialIndex` indexes those slots.
+- A `Mesh`/scene `MaterialTable` may override a source material slot per mesh instance.
+- `RenderScene` resolves the effective material for every registered submesh and creates a scene-local `MaterialProxy` entry.
+- `MeshInstanceProxy::MaterialProxyIndex` is the stable render-side material mapping. It is intentionally an index, not an asset pointer or raster bind group.
+- `MaterialProxy::GPUData` is the source for the future GPU material storage buffer and ray-tracing material lookup. Bindless texture indices are still invalid until the bindless texture-table phase.

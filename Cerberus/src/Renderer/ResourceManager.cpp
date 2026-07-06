@@ -89,6 +89,7 @@ namespace cerberus
 	{
 		return s_RMData->AccelerationStructures.Get(asHandle);
 	}
+
 	void ResourceManager::DestroyAccelerationStructure(const Handle<AccelerationStructure> handle)
 	{
 
@@ -125,9 +126,12 @@ namespace cerberus
 		return s_RMData->MeshSourceProxy.Get(meshSourceProxyHandle);
 	}
 
-	Handle<MeshInstanceProxy> ResourceManager::CreateMeshInstanceProxy(const Handle<MeshSourceProxy> meshSource, uint32_t submeshIndex)
+	Handle<MeshInstanceProxy> ResourceManager::CreateMeshInstanceProxy(
+		const Handle<MeshSourceProxy> meshSource,
+		uint32_t submeshIndex,
+		uint32_t materialProxyIndex)
 	{
-		return s_RMData->MeshInstanceProxy.Emplace(meshSource, submeshIndex, math::MatFactory::CreateIdentityMat4());
+		return s_RMData->MeshInstanceProxy.Emplace(meshSource, submeshIndex, materialProxyIndex);
 	}
 	void ResourceManager::DestroyMeshInstanceProxy(const Handle<MeshInstanceProxy> handle)
 	{

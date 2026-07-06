@@ -254,6 +254,9 @@ Assets:
   - Handle: 7521001972101329667
     FilePath: Resources/Materials/Defaults/DamagedHelmet/DamagedHelmet_1.cmaterial
     Type: Material
+  - Handle: 7612337354786331897
+    FilePath: Resources/Materials/Defaults/Sponza/Sponza_25 (04).cmaterial
+    Type: Material
   - Handle: 7635467131256680532
     FilePath: Resources/Meshes/Source/Default/Capsule.fbx
     Type: MeshSource
@@ -460,6 +463,9 @@ Assets:
     Type: Texture
   - Handle: 12711499856641134446
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_7 (02).cmaterial
+    Type: Material
+  - Handle: 12813576136082887965
+    FilePath: Resources/Materials/Defaults/DamagedHelmet/DamagedHelmet_1 (03).cmaterial
     Type: Material
   - Handle: 12852332826721841962
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_16.cmaterial

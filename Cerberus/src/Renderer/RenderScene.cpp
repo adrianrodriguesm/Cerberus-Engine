@@ -4,6 +4,8 @@
 #include "Renderer/DeferredResourceDeletionQueue.h"
 #include "Renderer/RendererContext.h"
 #include "Renderer/ResourceManager.h"
+#include "Renderer/RendererResources.h"
+#include "Asset/AssetManager.h"
 
 namespace cerberus
 {
@@ -12,10 +14,88 @@ namespace cerberus
 		Shutdown();
 	}
 
+	const MaterialProxy* RenderScene::GetMaterialProxy(uint32_t materialProxyIndex) const
+	{
+		if (materialProxyIndex == InvalidMaterialProxyIndex || materialProxyIndex >= m_MeshRegister.MaterialProxies.size())
+			return nullptr;
+
+		return &m_MeshRegister.MaterialProxies[materialProxyIndex];
+	}
+
+	Ref<MaterialAsset> RenderScene::ResolveMaterialAsset(
+		const Ref<MeshSource>& meshSource,
+		const Ref<MaterialTable>& materialTable,
+		uint32_t materialSlot) const
+	{
+		if (materialTable && materialTable->HasMaterial(materialSlot))
+		{
+			const AssetHandle materialHandle = materialTable->GetMaterial(materialSlot);
+			if (materialHandle != 0)
+			{
+				Ref<MaterialAsset> overrideMaterial = AssetManager::GetAsset<MaterialAsset>(materialHandle);
+				if (overrideMaterial)
+					return overrideMaterial;
+
+				NV_CORE_WARN("Mesh material override for slot {0} is invalid; using source/default material", materialSlot);
+			}
+		}
+
+		if (meshSource)
+		{
+			const auto& sourceMaterials = meshSource->GetMaterialsAsset();
+			if (materialSlot < sourceMaterials.size() && sourceMaterials[materialSlot])
+				return sourceMaterials[materialSlot];
+		}
+
+		return RendererResources::GetDefaultPBRMaterial();
+	}
+
+	uint32_t RenderScene::RegisterMaterialProxy(const Ref<MaterialAsset>& materialAsset)
+	{
+		Ref<MaterialAsset> resolvedMaterial = materialAsset ? materialAsset : RendererResources::GetDefaultPBRMaterial();
+		const Ref<MaterialAsset> defaultMaterial = RendererResources::GetDefaultPBRMaterial();
+
+		// Renderer-owned default resources have no AssetHandle. Keep a dedicated entry
+		// so every fallback submesh gets the same stable proxy index.
+		if (resolvedMaterial == defaultMaterial || resolvedMaterial->Handle == 0)
+		{
+			if (m_MeshRegister.DefaultMaterialProxyIndex == InvalidMaterialProxyIndex)
+			{
+				MaterialProxy proxy{};
+				proxy.SourceMaterialAsset = 0;
+				proxy.GPUData = resolvedMaterial->BuildGPUMaterialData();
+
+				m_MeshRegister.DefaultMaterialProxyIndex = static_cast<uint32_t>(m_MeshRegister.MaterialProxies.size());
+				m_MeshRegister.MaterialProxies.emplace_back(proxy);
+			}
+
+			return m_MeshRegister.DefaultMaterialProxyIndex;
+		}
+
+		const AssetHandle materialHandle = resolvedMaterial->Handle;
+		if (auto it = m_MeshRegister.MaterialRegistered.find(materialHandle); it != m_MeshRegister.MaterialRegistered.end())
+			return it->second;
+
+		MaterialProxy proxy{};
+		proxy.SourceMaterialAsset = materialHandle;
+		proxy.GPUData = resolvedMaterial->BuildGPUMaterialData();
+
+		const uint32_t materialProxyIndex = static_cast<uint32_t>(m_MeshRegister.MaterialProxies.size());
+		m_MeshRegister.MaterialProxies.emplace_back(proxy);
+		m_MeshRegister.MaterialRegistered[materialHandle] = materialProxyIndex;
+
+		return materialProxyIndex;
+	}
+
+	void RenderScene::ClearMaterialProxies()
+	{
+		m_MeshRegister.MaterialRegistered.clear();
+		m_MeshRegister.MaterialProxies.clear();
+		m_MeshRegister.DefaultMaterialProxyIndex = InvalidMaterialProxyIndex;
+	}
+
 	bool RenderScene::RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform)
 	{
-		(void)materialTable;
-
 		if (!mesh)
 			return false;
 
@@ -73,9 +153,18 @@ namespace cerberus
 		m_MeshRegister.ASRegisterInfo.UpdateTLAS = true;
 		m_MeshRegister.ASRegisterInfo.TLASNeedsSafeUpdate = true;
 
+		const Ref<MaterialTable> effectiveMaterialTable = materialTable ? materialTable : mesh->GetMaterialTable();
+
 		for (uint32_t submeshIndex = 0; submeshIndex < submeshesProxy.size(); submeshIndex++)
 		{
-			Handle<MeshInstanceProxy> meshInstanceHandle = ResourceManager::CreateMeshInstanceProxy(meshProxyHandle, submeshIndex);
+			const uint32_t materialSlot = submeshesProxy[submeshIndex].MaterialIndex;
+			Ref<MaterialAsset> materialAsset = ResolveMaterialAsset(meshSource, effectiveMaterialTable, materialSlot);
+			const uint32_t materialProxyIndex = RegisterMaterialProxy(materialAsset);
+
+			Handle<MeshInstanceProxy> meshInstanceHandle = ResourceManager::CreateMeshInstanceProxy(
+				meshProxyHandle,
+				submeshIndex,
+				materialProxyIndex);
 			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
 			CORE_ASSERT(meshInstance, "Invalid MeshInstanceProxy");
 
@@ -357,7 +446,7 @@ namespace cerberus
 		m_MeshRegister.MeshInstanceRegistered.clear();
 		m_MeshRegister.MeshSourceRegistered.clear();
 		m_MeshRegister.InstancePerMeshSourceRegistered.clear();
-		m_MeshRegister.MaterialRegistered.clear();
+		ClearMaterialProxies();
 		m_MeshRegister.MeshInstanceMap.clear();
 		m_MeshRegister.MeshInstanceCount = 0;
 	}
@@ -380,7 +469,8 @@ namespace cerberus
 			asInfo.PendingBLASToDestroy.empty() &&
 			asInfo.PendingMeshSourcesToDestroy.empty() &&
 			m_MeshRegister.MeshInstanceRegistered.empty() &&
-			m_MeshRegister.MeshSourceRegistered.empty())
+			m_MeshRegister.MeshSourceRegistered.empty() &&
+			m_MeshRegister.MaterialProxies.empty())
 		{
 			return;
 		}

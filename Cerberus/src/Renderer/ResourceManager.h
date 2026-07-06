@@ -43,7 +43,10 @@ namespace cerberus
 		static void DestroyMeshSourceProxy(const Handle<MeshSourceProxy> meshSourceProxyHandle);
 		static MeshSourceProxy* GetMeshSourceProxy(const Handle<MeshSourceProxy> meshSourceProxyHandle);
 
-		static Handle<MeshInstanceProxy> CreateMeshInstanceProxy(Handle<MeshSourceProxy> meshSource, uint32_t submeshIndex);
+		static Handle<MeshInstanceProxy> CreateMeshInstanceProxy(
+			Handle<MeshSourceProxy> meshSource,
+			uint32_t submeshIndex,
+			uint32_t materialProxyIndex = InvalidMaterialProxyIndex);
 		static void DestroyMeshInstanceProxy(const Handle<MeshInstanceProxy> meshInstance);
 		static MeshInstanceProxy* GetMeshInstanceProxy(const Handle<MeshInstanceProxy> meshInstance);
 

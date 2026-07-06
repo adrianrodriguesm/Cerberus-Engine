@@ -3,6 +3,7 @@
 #include "Core/Handle.h"
 #include "Renderer/AccelerationStructure.h"
 #include "Renderer/Resources/MeshProxy.h"
+#include "Renderer/Resources/MaterialProxy.h"
 #include "Renderer/Material.h"
 #include "Renderer/Mesh.h"
 
@@ -31,12 +32,23 @@ namespace cerberus
 		bool HasValidTLAS() const { return m_MeshRegister.ASRegisterInfo.TLAS.IsValid(); }
 		Handle<AccelerationStructure> GetTLAS() const { return m_MeshRegister.ASRegisterInfo.TLAS; }
 
+		// Render-friendly material table. MeshInstanceProxy::MaterialProxyIndex indexes this array.
+		const std::vector<MaterialProxy>& GetMaterialProxies() const { return m_MeshRegister.MaterialProxies; }
+		const MaterialProxy* GetMaterialProxy(uint32_t materialProxyIndex) const;
+
 		// Explicit shutdown is useful because the owning SceneRenderer can decide to
 		// wait for the GPU before releasing render-scene resources. Safe to call more
 		// than once.
 		void Shutdown();
 
 	private:
+		Ref<MaterialAsset> ResolveMaterialAsset(
+			const Ref<MeshSource>& meshSource,
+			const Ref<MaterialTable>& materialTable,
+			uint32_t materialSlot) const;
+		uint32_t RegisterMaterialProxy(const Ref<MaterialAsset>& materialAsset);
+		void ClearMaterialProxies();
+
 		void BuildPendingBLAS();
 		void BuildOrUpdateTLAS();
 		void FlushPendingRTASDeletes();
@@ -68,7 +80,12 @@ namespace cerberus
 			std::unordered_map<MeshSourceHandle, Handle<MeshSourceProxy>> MeshSourceRegistered;
 			std::unordered_map<MeshHandle, std::vector<MeshHandle>> InstancePerMeshSourceRegistered;
 
-			std::unordered_map<AssetHandle, Handle<BindGroup>> MaterialRegistered;
+			// MaterialAsset handle -> RenderScene-local MaterialProxy table index.
+			// The default material is stored separately because it is a renderer resource and
+			// therefore intentionally has no persistent AssetHandle.
+			std::unordered_map<AssetHandle, uint32_t> MaterialRegistered;
+			std::vector<MaterialProxy> MaterialProxies;
+			uint32_t DefaultMaterialProxyIndex = InvalidMaterialProxyIndex;
 
 			// Mesh Source Proxy -> Submesh index -> Submesh instance
 			std::unordered_map<Handle<MeshSourceProxy>, std::unordered_map<uint32_t, std::vector<Handle<MeshInstanceProxy>>>> MeshInstanceMap;
