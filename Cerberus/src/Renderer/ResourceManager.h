@@ -33,7 +33,7 @@ namespace cerberus
 
 		static Handle<AccelerationStructure> CreateAccelerationStructure(const AccelerationStructureSpecification& asSpecification);
 		static void DestroyAccelerationStructure(const Handle<AccelerationStructure> as);
-		static AccelerationStructure* GetAccelerationStructure(const Handle<AccelerationStructure>& as);
+		static AccelerationStructure* GetAccelerationStructure(const Handle<AccelerationStructure> as);
 		
 		static Handle<GPUBuffer> CreateBuffer(const GPUBufferSpecification& gpuBufferSpec);
 		static void DestroyBuffer(const Handle<GPUBuffer> buffer);

@@ -85,7 +85,7 @@ namespace cerberus
 		return s_RMData->AccelerationStructures.Emplace(asSpecification);
 	}
 
-	AccelerationStructure* ResourceManager::GetAccelerationStructure(const Handle<AccelerationStructure>& asHandle)
+	AccelerationStructure* ResourceManager::GetAccelerationStructure(const Handle<AccelerationStructure> asHandle)
 	{
 		return s_RMData->AccelerationStructures.Get(asHandle);
 	}
