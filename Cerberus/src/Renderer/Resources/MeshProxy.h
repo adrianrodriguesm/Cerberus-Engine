@@ -6,13 +6,15 @@
 #include "Renderer/Resources/MaterialProxy.h"
 namespace cerberus
 {
+	class AccelerationStructure;
+
 	struct SubmeshSourceProxy
 	{
 		uint32_t BaseVertex;
 		uint32_t BaseIndex, IndexCount;
 		uint32_t MaterialIndex;
 		glm::mat4 Transform = math::MatFactory::CreateIdentityMat4();
-		Handle<struct AccelerationStructure> BLAS;
+		Handle<AccelerationStructure> BLAS;
 		//std::vector<Handle<MeshInstanceProxy>> Instances;
 		SubmeshSourceProxy() = default;
 		SubmeshSourceProxy(uint32_t baseVertex, uint32_t baseIndex, uint32_t indexCount)
