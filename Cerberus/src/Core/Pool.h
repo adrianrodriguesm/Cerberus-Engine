@@ -2,6 +2,7 @@
 #include <stack>
 #include <new>
 #include <utility>
+#include <algorithm>
 #include "Core/Handle.h"
 namespace cerberus
 {

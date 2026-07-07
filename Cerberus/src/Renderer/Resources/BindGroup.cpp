@@ -316,7 +316,6 @@ namespace cerberus
 	void BindGroup::SetAccelerationStructure(const Handle<AccelerationStructure> asHandle, uint32_t bindingPoint)
 	{
 		AccelerationStructure* accelerationStructure = ResourceManager::GetAccelerationStructure(asHandle);
-		//AccelerationStructure* accelerationStructure = nullptr;
 
 		CORE_ASSERT(accelerationStructure, "BindGroup::SetAccelerationStructure received invalid AccelerationStructure handle");
 
