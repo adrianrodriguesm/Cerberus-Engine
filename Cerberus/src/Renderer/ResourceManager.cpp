@@ -90,6 +90,13 @@ namespace cerberus
 		return s_RMData->AccelerationStructures.Get(asHandle);
 	}
 
+	AccelerationStructure* ResourceManager::GetAccelerationStructureError(const Handle<AccelerationStructure> asHandle)
+	{
+		// Alias for GetAccelerationStructure, kept for binary compatibility with
+		// compiled objects that reference this symbol name.
+		return GetAccelerationStructure(asHandle);
+	}
+
 	void ResourceManager::DestroyAccelerationStructure(const Handle<AccelerationStructure> handle)
 	{
 
@@ -343,5 +350,4 @@ namespace cerberus
 		DescriptorManager::ResetTransientFramePools();
 	}
 }
-
 

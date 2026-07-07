@@ -17,7 +17,7 @@ namespace cerberus
 		SceneRendererSpecification rendererSpec;
 		rendererSpec.SwapChainTarget = false;
 		rendererSpec.Resolution = { resolution.first, resolution.second };
-		m_SceneRenderer = CreateRef<SceneRenderer>(m_Scene, rendererSpec);
+		m_SceneRenderer = CreateRef<PathTracerSceneRenderer>(m_Scene, rendererSpec);
 		m_Camera = FlyingCamera(45.f, resolution.first / resolution.second, 0.1f, 1000.f);
 	}
 
