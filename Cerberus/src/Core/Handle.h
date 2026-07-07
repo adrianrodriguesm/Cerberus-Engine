@@ -33,7 +33,7 @@ namespace cerberus
 		UUID_16 m_ID = 0;
 		uint16_t m_Index = 0;
 
-		template<typename U> friend class Pool;
+		friend class Pool<T>;
 	};
 }
 
