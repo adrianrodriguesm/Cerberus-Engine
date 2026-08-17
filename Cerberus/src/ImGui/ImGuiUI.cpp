@@ -4,20 +4,34 @@
 #include "Renderer/ResourceManager.h"
 namespace cerberus::ui
 {
-	void ImageButton(const Ref<Texture2D>& texture, const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1, const ImVec4& tint_col, const ImVec4& background_col)
+	void ImageButton(Handle<Texture2D> textureHandle, const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1, const ImVec4& tint_col, const ImVec4& background_col)
 	{
+		Texture2D* texture = ResourceManager::GetTexture2D(textureHandle);
+		if (!texture)
+			return;
+
 		Handle<ImageView> imgViewHandle = texture->GetImageView();
 		ImageView* imgView = ResourceManager::GetImageView(imgViewHandle);
+		if (!imgView)
+			return;
+		imgView->UpdateDescriptor();
 		const VkDescriptorImageInfo& imageInfo = imgView->GetImageDescriptorInfo();
 		if (!imageInfo.imageView)
 			return;
 		const auto textureID = ImGui_ImplVulkan_AddTexture(imageInfo.sampler, imageInfo.imageView, imageInfo.imageLayout);
 		ImGui::ImageButton(textureID, size, uv0, uv1, 0, background_col, tint_col);
 	}
-	void Image(const Ref<Texture2D>& texture, const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1, const ImVec4& tint_col, const ImVec4& border_col)
+	void Image(Handle<Texture2D> textureHandle, const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1, const ImVec4& tint_col, const ImVec4& border_col)
 	{
+		Texture2D* texture = ResourceManager::GetTexture2D(textureHandle);
+		if (!texture)
+			return;
+
 		Handle<ImageView> imgViewHandle = texture->GetImageView();
 		ImageView* imgView = ResourceManager::GetImageView(imgViewHandle);
+		if (!imgView)
+			return;
+		imgView->UpdateDescriptor();
 		const VkDescriptorImageInfo& imageInfo = imgView->GetImageDescriptorInfo();
 		if (!imageInfo.imageView)
 			return;
@@ -25,11 +39,28 @@ namespace cerberus::ui
 		ImGui::Image(textureID, size, uv0, uv1, tint_col, border_col);
 
 	}
+	void ImageButton(const Ref<Texture2D>& texture, const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1, const ImVec4& tint_col, const ImVec4& background_col)
+	{
+		const ImTextureID textureID = GetTextureID(texture);
+		if (!textureID)
+			return;
+
+		ImGui::ImageButton(textureID, size, uv0, uv1, 0, background_col, tint_col);
+	}
+	void Image(const Ref<Texture2D>& texture, const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1, const ImVec4& tint_col, const ImVec4& border_col)
+	{
+		const ImTextureID textureID = GetTextureID(texture);
+		if (!textureID)
+			return;
+
+		ImGui::Image(textureID, size, uv0, uv1, tint_col, border_col);
+	}
 	void Image(const Handle<ImageView> image, const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1, const ImVec4& tint_col, const ImVec4& border_col)
 	{
 		ImageView* imgView = ResourceManager::GetImageView(image);
 		if (!imgView)
 			return;
+		imgView->UpdateDescriptor();
 		const VkDescriptorImageInfo& desInfo = imgView->GetImageDescriptorInfo();
 		const auto textureID = ImGui_ImplVulkan_AddTexture(desInfo.sampler, desInfo.imageView, desInfo.imageLayout);
 		ImGui::Image(textureID, size, uv0, uv1, tint_col, border_col);

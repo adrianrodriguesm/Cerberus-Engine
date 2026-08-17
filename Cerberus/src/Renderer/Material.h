@@ -72,9 +72,7 @@ namespace cerberus
 		void Set(const std::string& name, const glm::mat4& value);
 
 		void Set(const std::string& name, const Handle<TextureCube>& texture);
-		void Set(const std::string& name, const Handle<Texture2D>& texture);
 		void Set(const std::string& name, const Ref<Image>& image);
-		//void Set(const std::string& name, const Ref<Texture2D>& texture, uint32_t arrayIndex);
 
 		template <typename T>
 		void Set(const std::string& name, const T& value)
@@ -98,10 +96,8 @@ namespace cerberus
 		glm::mat3& GetMatrix3(const std::string& name);
 		glm::mat4& GetMatrix4(const std::string& name);
 
-		Ref<Texture2D> GetTexture2D(const std::string& name);
 		Ref<TextureCube> GetTextureCube(const std::string& name);
 
-		Ref<Texture2D> TryGetTexture2D(const std::string& name);
 		Ref<TextureCube> TryGetTextureCube(const std::string& name);
 
 		template<typename T>
@@ -140,7 +136,7 @@ namespace cerberus
 	private:
 		enum class PendingDescriptorType
 		{
-			None = 0, Texture2D, TextureCube, Image2D
+			None = 0, TextureCube, Image2D
 		};
 		struct PendingDescriptor
 		{
@@ -260,5 +256,4 @@ namespace cerberus
 
 	};
 }
-
 

@@ -112,7 +112,7 @@ namespace cerberus
 			// Vertex
 			for (uint32_t i = 0; i < mesh->mNumVertices; i++)
 			{
-				Vertex vertex;
+				Vertex vertex{};
 				vertex.Position = { mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z };
 				vertex.Normal = { mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z };
 
@@ -169,7 +169,73 @@ namespace cerberus
 			return std::max(materialSlotCount, 1u);
 		};
 
-		auto createMaterialAsset = [this](uint32_t materialIndex, aiMaterial* aiMaterial) -> Ref<MaterialAsset>
+		auto importMaterialTexture = [this](aiMaterial* sourceMaterial, aiTextureType textureType) -> AssetHandle
+		{
+			if (!sourceMaterial || sourceMaterial->GetTextureCount(textureType) == 0)
+				return 0;
+
+			aiString importedTexturePath;
+			if (sourceMaterial->GetTexture(textureType, 0, &importedTexturePath) != AI_SUCCESS)
+				return 0;
+
+			std::filesystem::path texturePath = importedTexturePath.C_Str();
+			if (texturePath.empty())
+				return 0;
+
+			// Assimp uses *N for textures embedded in the source file. TextureAsset is
+			// currently file-backed, so do not register an unloadable handle.
+			if (texturePath.string().front() == '*')
+			{
+				NV_CORE_WARN("Embedded mesh texture {0} is not supported yet", texturePath.string());
+				return 0;
+			}
+
+			if (texturePath.is_relative())
+				texturePath = m_Properties.Filepath.parent_path() / texturePath;
+
+			texturePath = texturePath.lexically_normal();
+			if (!std::filesystem::exists(texturePath))
+			{
+				NV_CORE_WARN("Mesh texture does not exist: {0}", texturePath.string());
+				return 0;
+			}
+
+			return AssetManager::ImportAsset(texturePath);
+		};
+
+		auto importSourceMaterialTextures = [&importMaterialTexture](const Ref<MaterialAsset>& materialAsset, aiMaterial* sourceMaterial) -> bool
+		{
+			if (!materialAsset || !sourceMaterial)
+				return false;
+
+			bool changed = false;
+			if (materialAsset->GetAlbedoMapHandle() == 0)
+			{
+				const AssetHandle albedoMap = importMaterialTexture(sourceMaterial, aiTextureType_DIFFUSE);
+				if (albedoMap != 0)
+				{
+					materialAsset->SetAlbedoMap(albedoMap);
+					changed = true;
+				}
+			}
+
+			if (materialAsset->GetNormalMapHandle() == 0)
+			{
+				AssetHandle normalMap = importMaterialTexture(sourceMaterial, aiTextureType_NORMALS);
+				if (normalMap == 0)
+					normalMap = importMaterialTexture(sourceMaterial, aiTextureType_HEIGHT);
+
+				if (normalMap != 0)
+				{
+					materialAsset->SetNormalMap(normalMap);
+					changed = true;
+				}
+			}
+
+			return changed;
+		};
+
+		auto createMaterialAsset = [this, &importSourceMaterialTextures](uint32_t materialIndex, aiMaterial* aiMaterial) -> Ref<MaterialAsset>
 		{
 			const std::string meshSourceName = m_Properties.Filepath.stem().string();
 
@@ -207,9 +273,8 @@ namespace cerberus
 			materialAsset->SetMetalness(metalness);
 			materialAsset->SetRoughness(roughness);
 
-			// Texture import is intentionally kept for a later phase. This step restores
-			// material slots and scalar/color material data without depending on the old
-			// Ref<Texture2D>-based material path.
+			importSourceMaterialTextures(materialAsset, aiMaterial);
+
 			AssetImporter::Serialize(materialAsset);
 
 			NV_MESH_LOG("  Created material asset {0} (Slot = {1})", filename, materialIndex);
@@ -244,12 +309,16 @@ namespace cerberus
 
 		for (uint32_t materialIndex = 0; materialIndex < m_MaterialsAsset.size(); materialIndex++)
 		{
-			if (m_MaterialsAsset[materialIndex])
-				continue;
-
 			aiMaterial* aiMaterial = nullptr;
 			if (m_Scene && m_Scene->HasMaterials() && materialIndex < m_Scene->mNumMaterials)
 				aiMaterial = m_Scene->mMaterials[materialIndex];
+
+			if (m_MaterialsAsset[materialIndex])
+			{
+				if (importSourceMaterialTextures(m_MaterialsAsset[materialIndex], aiMaterial))
+					AssetImporter::Serialize(m_MaterialsAsset[materialIndex]);
+				continue;
+			}
 
 			m_MaterialsAsset[materialIndex] = createMaterialAsset(materialIndex, aiMaterial);
 		}

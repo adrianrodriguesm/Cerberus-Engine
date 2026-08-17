@@ -425,20 +425,21 @@ namespace cerberus
 
 	void TextureSerializer::Serialize(const AssetMetadata& metadata, const Ref<Asset>& asset)
 	{
-		Ref<Texture2D> texture = std::dynamic_pointer_cast<Texture2D>(asset);
-		const auto& textureProp = texture->GetTextureProperties();
+		Ref<TextureAsset> texture = std::dynamic_pointer_cast<TextureAsset>(asset);
+		CORE_ASSERT(texture, "TextureSerializer received a non-TextureAsset resource");
+		const TextureMetadata& textureMetadata = texture->GetTextureMetadata();
 		const auto& filepath = (metadata.FilePath.string() + ".meta");
 		YAML::Emitter out;
 		out << YAML::BeginMap; // Texture2D
 		out << YAML::Key << "TextureImporter";
 		{
 			out << YAML::BeginMap;
-			out << YAML::Key << "Name" << YAML::Value << textureProp.DebugName;
-			out << YAML::Key << "GeneratesMips" << YAML::Value << textureProp.GenerateMips;
-			out << YAML::Key << "SRGB" << YAML::Value << textureProp.SRGB;
-			out << YAML::Key << "SamplerWrap" << YAML::Value << utils::SamplerWrapToString(textureProp.SamplerWrap);
-			out << YAML::Key << "SamplerFilter" << YAML::Value << utils::SamplerFilterToString(textureProp.SamplerFilter);
-			out << YAML::Key << "Anisotropy" << YAML::Value << textureProp.Anisotropy;
+			out << YAML::Key << "Name" << YAML::Value << textureMetadata.DebugName;
+			out << YAML::Key << "GeneratesMips" << YAML::Value << textureMetadata.GenerateMips;
+			out << YAML::Key << "SRGB" << YAML::Value << textureMetadata.SRGB;
+			out << YAML::Key << "SamplerWrap" << YAML::Value << utils::SamplerWrapToString(textureMetadata.SamplerWrap);
+			out << YAML::Key << "SamplerFilter" << YAML::Value << utils::SamplerFilterToString(textureMetadata.SamplerFilter);
+			out << YAML::Key << "Anisotropy" << YAML::Value << textureMetadata.Anisotropy;
 			out << YAML::EndMap;
 		}
 		out << YAML::EndMap; // Texture2D
@@ -476,17 +477,26 @@ namespace cerberus
 
 	bool TextureSerializer::TryToLoadData(const AssetMetadata& metadata, Ref<Asset>& asset)
 	{
-#if OLD_RENDERER
 		TextureProperties textureProp = LoadTextureImportSettings(metadata.FilePath);
 
-		Ref<TextureAsset> texture = CreateRef<TextureAsset>(metadata.FilePath.string(), textureProp);
+		TextureMetadata textureMetadata;
+		textureMetadata.DebugName = textureProp.DebugName == "None"
+			? metadata.FilePath.stem().string()
+			: textureProp.DebugName;
+		textureMetadata.FilePath = metadata.FilePath;
+		textureMetadata.TextureType = TextureType::Texture2D;
+		textureMetadata.SamplerWrap = textureProp.SamplerWrap;
+		textureMetadata.SamplerFilter = textureProp.SamplerFilter;
+		textureMetadata.GenerateMips = textureProp.GenerateMips;
+		textureMetadata.SRGB = textureProp.SRGB;
+		textureMetadata.Storage = textureProp.Storage;
+		textureMetadata.Anisotropy = textureProp.Anisotropy;
+
+		Ref<TextureAsset> texture = CreateRef<TextureAsset>(textureMetadata);
 
 		texture->Handle = metadata.Handle;
 		asset = texture;
 
 		return texture->Loaded();
-#else
-		return false;
-#endif
 	}
 }

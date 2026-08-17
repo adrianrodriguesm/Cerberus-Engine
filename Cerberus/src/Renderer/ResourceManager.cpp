@@ -4,6 +4,7 @@
 #include "Core/Pool.h"
 #include "Renderer/DescriptorManager.h"
 #include "Renderer/DeferredResourceDeletionQueue.h"
+#include "Renderer/TextureAsset.h"
 namespace cerberus
 {
 	struct ResourceManagerData
@@ -215,6 +216,12 @@ namespace cerberus
 	VkDescriptorSet ResourceManager::AllocatePersistentDescriptorSet(Handle<BindGroupLayout> handle)
 	{
 		return AllocateDescriptorSet(handle, DescriptorAllocationLifetime::Persistent);
+	}
+
+	Handle<Texture2D> ResourceManager::CreateTexture2D(const Ref<TextureAsset>& textureAsset, TextureColorSpace colorSpace)
+	{
+		CORE_ASSERT(textureAsset && textureAsset->Loaded(), "Cannot create Texture2D from an unloaded TextureAsset");
+		return s_RMData->Textures2D.Emplace(textureAsset, colorSpace);
 	}
 
 	Handle<Texture2D> ResourceManager::CreateTexture2D(ImageFormat format, const uint32_t width, const uint32_t height, const void* data, TextureProperties properties)

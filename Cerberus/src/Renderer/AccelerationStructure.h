@@ -74,7 +74,7 @@ namespace cerberus
 		 // - The resulting TLAS will be stored in m_tlas
 		 // - update is to rebuild the Tlas with updated matrices
 		void BeginTLASBuild(VkBuildAccelerationStructureFlagsKHR flags, bool motion = false);
-		void SubmitMeshInstance(const Handle<MeshInstanceProxy>& meshInstance);
+		void SubmitMeshInstance(const Handle<MeshInstanceProxy>& meshInstance, uint32_t instanceCustomIndex);
 		void EndTLASBuild(Handle<AccelerationStructure>& outTLAS);
 		//--------------------------------------------------------------------------------------------------
 		// - There will be one BLAS per geometry (e.g mesh, submesh, etc) submission 

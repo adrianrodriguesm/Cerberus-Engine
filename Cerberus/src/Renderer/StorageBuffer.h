@@ -11,7 +11,7 @@ namespace cerberus
 		StorageBuffer(uint32_t size, uint32_t binding, BufferUsageType bufferUsage = BufferUsageType::Static, uint64_t aligment = 0);
 		~StorageBuffer();
 
-		void SetData(void* data, uint32_t size, uint32_t offset);
+		void SetData(const void* data, uint32_t size, uint32_t offset);
 		uint32_t GetBindingPoint() const { return m_BindingPoint; }
 		uint64_t GetAligmentData() const { return m_AligmentData; }
 		BufferUsageType GetBufferUsageType() const { return m_BufferUsageType; }

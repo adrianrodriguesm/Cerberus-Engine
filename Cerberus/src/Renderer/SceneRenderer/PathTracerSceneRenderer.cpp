@@ -25,6 +25,8 @@ namespace cerberus
 	static constexpr uint32_t RT_TLAS_BINDING = 1;
 	static constexpr uint32_t RT_CAMERA_BINDING = 2;
 	static constexpr uint32_t RT_MATERIALS_BINDING = 3;
+	static constexpr uint32_t RT_INSTANCES_BINDING = 4;
+	static constexpr uint32_t RT_TEXTURES_BINDING = 5;
 
 	static constexpr bool RT_RAYGEN_ONLY = false;
 
@@ -45,6 +47,12 @@ namespace cerberus
 			m_ViewportResolution = { 1920, 1080 };
 
 		m_RenderScene = CreateScope<RenderScene>();
+
+		const VkPhysicalDeviceLimits physicalDeviceLimits = RendererContext::GetCurrentDevice()->GetPhysicalDeviceLimits();
+		CORE_ASSERT(
+			physicalDeviceLimits.maxPerStageDescriptorSampledImages >= MaxRayTracingTextureCount &&
+			physicalDeviceLimits.maxDescriptorSetSampledImages >= MaxRayTracingTextureCount,
+			"The selected GPU cannot expose the fixed RT texture table to one shader stage");
 
 		// ---------------------------------------------------------------------
 		// RT SMOKE TEST PATH
@@ -175,9 +183,8 @@ namespace cerberus
 			rtBindGroup->SetUniformBuffer(m_UniformBufferSetCamera, RT_CAMERA_BINDING);
 		}
 
-		// GPU material table for RT path.
-		// The closest-hit shader reads this buffer now, but material lookup is still
-		// temporary: 2D.5 will connect hit geometry/submesh data to the correct material index.
+		// GPU material table for RT. The per-instance buffer maps each TLAS hit to
+		// the material selected by its mesh/submesh.
 		{
 			StorageBufferSetSpecification materialBufferSpec;
 			materialBufferSpec.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
@@ -198,6 +205,30 @@ namespace cerberus
 			CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
 
 			rtBindGroup->SetStorageBuffer(m_RT_MaterialBufferSet, RT_MATERIALS_BINDING);
+		}
+
+		// Per-TLAS-instance data. gl_InstanceCustomIndexEXT indexes this table in
+		// closest-hit, which resolves the material selected by the mesh/submesh.
+		{
+			StorageBufferSetSpecification instanceBufferSpec;
+			instanceBufferSpec.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
+			instanceBufferSpec.Size = sizeof(RayTracingInstanceData);
+			instanceBufferSpec.BindingPoint = RT_INSTANCES_BINDING;
+			instanceBufferSpec.BufferUsage = BufferUsageType::Static;
+
+			m_RT_InstanceBufferSet = CreateRef<StorageBufferSet>(instanceBufferSpec);
+
+			RayTracingInstanceData fallbackInstance{};
+			for (uint32_t frameIndex = 0; frameIndex < ResourceManager::GetRendererConfig().FramesInFlight; frameIndex++)
+			{
+				Ref<StorageBuffer> instanceBuffer = m_RT_InstanceBufferSet->Get(frameIndex);
+				instanceBuffer->SetData(&fallbackInstance, sizeof(RayTracingInstanceData), 0);
+			}
+
+			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
+			CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
+
+			rtBindGroup->SetStorageBuffer(m_RT_InstanceBufferSet, RT_INSTANCES_BINDING);
 		}
 
 		if constexpr (ENABLE_RASTER_TEST_PATH)
@@ -298,6 +329,49 @@ namespace cerberus
 			CORE_ASSERT(materialBuffer, "Invalid RT material storage buffer");
 			materialBuffer->SetData(gpuMaterials.data(), uploadSize, 0);
 		}
+	}
+
+
+	void PathTracerSceneRenderer::UpdateRTInstanceBuffer()
+	{
+		CORE_ASSERT(m_RT_InstanceBufferSet, "RT instance buffer set is not initialized");
+		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+
+		const std::vector<RayTracingInstanceData>& rtInstances = m_RenderScene->GetRayTracingInstances();
+		CORE_ASSERT(!rtInstances.empty(), "A valid TLAS must have at least one RT instance descriptor");
+
+		const uint32_t uploadSize = static_cast<uint32_t>(rtInstances.size() * sizeof(RayTracingInstanceData));
+
+		for (uint32_t frameIndex = 0; frameIndex < ResourceManager::GetRendererConfig().FramesInFlight; frameIndex++)
+		{
+			Ref<StorageBuffer> instanceBuffer = m_RT_InstanceBufferSet->Get(frameIndex);
+			CORE_ASSERT(instanceBuffer, "Invalid RT instance storage buffer");
+			instanceBuffer->SetData(rtInstances.data(), uploadSize, 0);
+		}
+	}
+
+	void PathTracerSceneRenderer::UpdateRTTextureTable()
+	{
+		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+
+		std::vector<Handle<ImageView>> textureImageViews;
+		const std::vector<Handle<Texture2D>>& textures = m_RenderScene->GetRayTracingTextures();
+		CORE_ASSERT(textures.size() <= MaxRayTracingTextureCount, "RT texture table capacity exceeded");
+		textureImageViews.reserve(textures.size());
+
+		for (Handle<Texture2D> textureHandle : textures)
+		{
+			Texture2D* texture = ResourceManager::GetTexture2D(textureHandle);
+			CORE_ASSERT(texture, "RenderScene RT texture table contains an invalid Texture2D");
+			textureImageViews.push_back(texture->GetImageView());
+		}
+
+		Texture2D* fallbackTexture = ResourceManager::GetTexture2D(RendererResources::GetWhiteTexture());
+		CORE_ASSERT(fallbackTexture, "Renderer white fallback texture is invalid");
+
+		BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
+		CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
+		rtBindGroup->SetImageViewArray(textureImageViews, fallbackTexture->GetImageView(), RT_TEXTURES_BINDING);
 	}
 
 
@@ -552,6 +626,8 @@ namespace cerberus
 				return;
 
 			UpdateRTMaterialBuffer();
+			UpdateRTInstanceBuffer();
+			UpdateRTTextureTable();
 
 			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
 			CORE_ASSERT(rtBindGroup, "Invalid RT bind group");

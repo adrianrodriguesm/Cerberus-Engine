@@ -61,7 +61,10 @@ namespace cerberus
 		static void DestroyBindGroup(const Handle<BindGroup> handle);
 		static BindGroup* GetBindGroup(const Handle<BindGroup> handle);
 
-		// TODO: new Textures and Images
+		// TextureAsset owns source pixels; Texture2D owns the corresponding GPU resource.
+		static Handle<Texture2D> CreateTexture2D(
+			const Ref<TextureAsset>& textureAsset,
+			TextureColorSpace colorSpace = TextureColorSpace::AssetDefault);
 		static Handle<Texture2D> CreateTexture2D(ImageFormat format, const uint32_t width, const uint32_t height, const void* data, TextureProperties properties = {});
 		static void DestroyTexture2D(const Handle<Texture2D> handle);
 		static Texture2D* GetTexture2D(const Handle<Texture2D> handle);

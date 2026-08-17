@@ -64,7 +64,7 @@ namespace cerberus
 			return buffer;
 		}
 
-		void Write(void* data, uint32_t size, uint32_t offset = 0)
+		void Write(const void* data, uint32_t size, uint32_t offset = 0)
 		{
 			CORE_ASSERT(offset + size <= Size, "Buffer overflow!");
 			memcpy((byte*)Data + offset, data, size);

@@ -41,24 +41,11 @@ namespace cerberus
 	private:
 		void UpdateUBOData();
 		void UpdateRTMaterialBuffer();
+		void UpdateRTInstanceBuffer();
+		void UpdateRTTextureTable();
 		void FlushRenderPasses();
 
 	private:
-		// CPU-side mirror of the ObjDesc struct used in ray tracing shaders.
-		// One entry per mesh instance / submesh instance.
-		struct RayTracingObjectDesc
-		{
-			uint64_t VertexBufferAddress;
-			uint64_t IndexBufferAddress;
-			uint64_t MaterialBufferAddress;
-			uint64_t MaterialIndexBufferAddress;
-
-			uint32_t FirstIndex;
-			int32_t  BaseVertex;
-			uint32_t TextureArrayOffset;
-			uint32_t Reserved;
-		};
-
 		struct SceneData
 		{
 			SceneRendererCamera SceneRendererCamera;
@@ -84,14 +71,6 @@ namespace cerberus
 			glm::vec4 Params;
 		};
 
-		struct ShaderVertex
-		{
-			glm::vec3 pos;
-			glm::vec3 nrm;
-			glm::vec3 color;
-			glm::vec2 texCoord;
-		};
-
 	private:
 		SceneRendererSpecification m_Specification;
 
@@ -107,8 +86,8 @@ namespace cerberus
 
 		Ref<UniformBufferSet> m_UniformBufferSet;
 		Ref<UniformBufferSet> m_UniformBufferSetCamera;
-		Ref<StorageBufferSet> m_RayTracingObjectDescSet;
 		Ref<StorageBufferSet> m_RT_MaterialBufferSet;
+		Ref<StorageBufferSet> m_RT_InstanceBufferSet;
 
 		// Renderer-side representation of the logical scene.
 		Scope<RenderScene> m_RenderScene;

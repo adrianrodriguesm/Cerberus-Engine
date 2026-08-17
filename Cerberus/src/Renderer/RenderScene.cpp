@@ -5,6 +5,8 @@
 #include "Renderer/RendererContext.h"
 #include "Renderer/ResourceManager.h"
 #include "Renderer/RendererResources.h"
+#include "Renderer/Texture.h"
+#include "Renderer/TextureAsset.h"
 #include "Asset/AssetManager.h"
 
 namespace cerberus
@@ -66,7 +68,7 @@ namespace cerberus
 				MaterialProxy proxy{};
 				proxy.SourceMaterialAsset = 0;
 				proxy.GPUMaterialIndex = materialProxyIndex;
-				proxy.GPUData = resolvedMaterial->BuildGPUMaterialData();
+				proxy.GPUData = BuildMaterialGPUData(resolvedMaterial);
 
 				m_MeshRegister.DefaultMaterialProxyIndex = materialProxyIndex;
 				m_MeshRegister.MaterialProxies.emplace_back(proxy);
@@ -84,7 +86,7 @@ namespace cerberus
 		MaterialProxy proxy{};
 		proxy.SourceMaterialAsset = materialHandle;
 		proxy.GPUMaterialIndex = materialProxyIndex;
-		proxy.GPUData = resolvedMaterial->BuildGPUMaterialData();
+		proxy.GPUData = BuildMaterialGPUData(resolvedMaterial);
 
 		m_MeshRegister.MaterialProxies.emplace_back(proxy);
 		m_MeshRegister.MaterialRegistered[materialHandle] = materialProxyIndex;
@@ -92,11 +94,73 @@ namespace cerberus
 		return materialProxyIndex;
 	}
 
+	uint32_t RenderScene::RegisterTextureProxy(AssetHandle textureAssetHandle, bool srgb)
+	{
+		if (textureAssetHandle == 0)
+			return InvalidMaterialTextureIndex;
+
+		auto& registeredTextures = srgb
+			? m_MeshRegister.SRGBTextureRegistered
+			: m_MeshRegister.LinearTextureRegistered;
+
+		if (auto it = registeredTextures.find(textureAssetHandle); it != registeredTextures.end())
+			return it->second;
+
+		Ref<TextureAsset> textureAsset = AssetManager::GetAsset<TextureAsset>(textureAssetHandle);
+		if (!textureAsset || !textureAsset->Loaded())
+		{
+			NV_CORE_WARN("Material texture asset {0} could not be loaded", (uint64_t)textureAssetHandle);
+			return InvalidMaterialTextureIndex;
+		}
+
+		CORE_ASSERT(m_MeshRegister.GPUTextures.size() < MaxRayTracingTextureCount, "RT texture table capacity exceeded");
+
+		Handle<Texture2D> gpuTexture = ResourceManager::CreateTexture2D(
+			textureAsset,
+			srgb ? TextureColorSpace::SRGB : TextureColorSpace::Linear);
+		CORE_ASSERT(gpuTexture.IsValid(), "Failed to create GPU texture for RT material table");
+
+		const uint32_t textureIndex = static_cast<uint32_t>(m_MeshRegister.GPUTextures.size());
+		m_MeshRegister.GPUTextures.push_back(gpuTexture);
+		registeredTextures[textureAssetHandle] = textureIndex;
+		return textureIndex;
+	}
+
+	GPUMaterialData RenderScene::BuildMaterialGPUData(const Ref<MaterialAsset>& materialAsset)
+	{
+		CORE_ASSERT(materialAsset, "Cannot build GPU data for a null MaterialAsset");
+
+		const uint32_t albedoTextureIndex = RegisterTextureProxy(materialAsset->GetAlbedoMapHandle(), true);
+		const uint32_t normalTextureIndex = RegisterTextureProxy(materialAsset->GetNormalMapHandle(), false);
+		const uint32_t metalnessTextureIndex = RegisterTextureProxy(materialAsset->GetMetalnessMapHandle(), false);
+		const uint32_t roughnessTextureIndex = RegisterTextureProxy(materialAsset->GetRoughnessMapHandle(), false);
+
+		return materialAsset->BuildGPUMaterialData(
+			albedoTextureIndex,
+			normalTextureIndex,
+			metalnessTextureIndex,
+			roughnessTextureIndex);
+	}
+
 	void RenderScene::ClearMaterialProxies()
 	{
+		ClearTextureProxies();
 		m_MeshRegister.MaterialRegistered.clear();
 		m_MeshRegister.MaterialProxies.clear();
 		m_MeshRegister.DefaultMaterialProxyIndex = InvalidMaterialProxyIndex;
+	}
+
+	void RenderScene::ClearTextureProxies()
+	{
+		for (Handle<Texture2D> texture : m_MeshRegister.GPUTextures)
+		{
+			if (texture.IsValid())
+				ResourceManager::DestroyTexture2D(texture);
+		}
+
+		m_MeshRegister.GPUTextures.clear();
+		m_MeshRegister.SRGBTextureRegistered.clear();
+		m_MeshRegister.LinearTextureRegistered.clear();
 	}
 
 	bool RenderScene::RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform)
@@ -345,6 +409,7 @@ namespace cerberus
 
 		if (m_MeshRegister.MeshInstanceCount == 0)
 		{
+			m_RayTracingInstances.clear();
 			ResetRayTracingDirtyFlags();
 			return;
 		}
@@ -355,17 +420,52 @@ namespace cerberus
 			VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR);
 
 		uint32_t submittedTLASInstances = 0;
+		m_RayTracingInstances.clear();
+		m_RayTracingInstances.reserve(m_MeshRegister.MeshInstanceCount);
 
 		for (const auto& [meshAssetHandle, meshInstances] : m_MeshRegister.MeshInstanceRegistered)
 		{
 			(void)meshAssetHandle;
 			for (uint32_t i = 0; i < meshInstances.size(); i++)
 			{
-				asBuilder.SubmitMeshInstance(meshInstances[i]);
+				MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstances[i]);
+				CORE_ASSERT(meshInstance, "Invalid MeshInstanceProxy while building TLAS instance data");
+
+				const MaterialProxy* materialProxy = GetMaterialProxy(meshInstance->MaterialProxyIndex);
+				CORE_ASSERT(materialProxy, "MeshInstanceProxy references an invalid MaterialProxy");
+				CORE_ASSERT(materialProxy->GPUMaterialIndex != InvalidMaterialProxyIndex, "MaterialProxy has no GPU material index");
+
+				MeshSourceProxy* meshSourceProxy = ResourceManager::GetMeshSourceProxy(meshInstance->MeshSource);
+				CORE_ASSERT(meshSourceProxy, "MeshInstanceProxy references an invalid MeshSourceProxy");
+				CORE_ASSERT(meshInstance->SubmeshIndex < meshSourceProxy->Submeshes.size(), "MeshInstanceProxy references an invalid submesh");
+
+				GPUBuffer* vertexBuffer = ResourceManager::GetBuffer(meshSourceProxy->VertexBuffer->GetGPUBuffer());
+				GPUBuffer* indexBuffer = ResourceManager::GetBuffer(meshSourceProxy->IndexBuffer->GetGPUBuffer());
+				CORE_ASSERT(vertexBuffer && indexBuffer, "RT mesh has invalid geometry buffers");
+
+				const VkDeviceAddress vertexBufferAddress = vertexBuffer->GetDeviceAddress();
+				const VkDeviceAddress indexBufferAddress = indexBuffer->GetDeviceAddress();
+				CORE_ASSERT(vertexBufferAddress != 0, "RT vertex buffer has no device address");
+				CORE_ASSERT(indexBufferAddress != 0, "RT index buffer has no device address");
+				CORE_ASSERT((vertexBufferAddress & 7ull) == 0, "RT vertex buffer address is not 8-byte aligned");
+				CORE_ASSERT((indexBufferAddress & 7ull) == 0, "RT index buffer address is not 8-byte aligned");
+
+				const SubmeshSourceProxy& submesh = meshSourceProxy->Submeshes[meshInstance->SubmeshIndex];
+
+				const uint32_t instanceCustomIndex = static_cast<uint32_t>(m_RayTracingInstances.size());
+				RayTracingInstanceData& instanceData = m_RayTracingInstances.emplace_back();
+				instanceData.VertexBufferAddress = vertexBufferAddress;
+				instanceData.IndexBufferAddress = indexBufferAddress;
+				instanceData.MaterialIndex = materialProxy->GPUMaterialIndex;
+				instanceData.FirstIndex = submesh.BaseIndex;
+				instanceData.BaseVertex = submesh.BaseVertex;
+
+				asBuilder.SubmitMeshInstance(meshInstances[i], instanceCustomIndex);
 				submittedTLASInstances++;
 			}
 		}
 
+		CORE_ASSERT(m_RayTracingInstances.size() == submittedTLASInstances, "RT instance data is out of sync with TLAS instances");
 		NV_CORE_INFO("RT submitted TLAS instances: {}", submittedTLASInstances);
 
 		asBuilder.EndTLASBuild(asInfo.TLAS);
@@ -452,6 +552,7 @@ namespace cerberus
 		m_MeshRegister.MeshSourceRegistered.clear();
 		m_MeshRegister.InstancePerMeshSourceRegistered.clear();
 		ClearMaterialProxies();
+		m_RayTracingInstances.clear();
 		m_MeshRegister.MeshInstanceMap.clear();
 		m_MeshRegister.MeshInstanceCount = 0;
 	}
@@ -475,7 +576,9 @@ namespace cerberus
 			asInfo.PendingMeshSourcesToDestroy.empty() &&
 			m_MeshRegister.MeshInstanceRegistered.empty() &&
 			m_MeshRegister.MeshSourceRegistered.empty() &&
-			m_MeshRegister.MaterialProxies.empty())
+			m_MeshRegister.MaterialProxies.empty() &&
+			m_MeshRegister.GPUTextures.empty() &&
+			m_RayTracingInstances.empty())
 		{
 			return;
 		}

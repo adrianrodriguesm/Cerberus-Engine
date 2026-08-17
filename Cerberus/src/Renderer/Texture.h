@@ -5,6 +5,17 @@
 #include "Asset/Asset.h"
 namespace cerberus
 {
+	class TextureAsset;
+
+	// Texture assets store source pixels. GPU textures select how those pixels are
+	// interpreted when the Vulkan image is created.
+	enum class TextureColorSpace : uint8_t
+	{
+		AssetDefault = 0,
+		Linear,
+		SRGB
+	};
+
 	struct TextureProperties
 	{
 		SamplerWrap SamplerWrap = SamplerWrap::Repeat;
@@ -34,6 +45,7 @@ namespace cerberus
 	{
 	public:
 		Texture2D(ImageFormat format, const uint32_t width, const uint32_t height, const void* data, TextureProperties properties = {});
+		Texture2D(const Ref<TextureAsset>& textureAsset, TextureColorSpace colorSpace = TextureColorSpace::AssetDefault);
 		Texture2D(Texture2D&& other) noexcept;
 		Texture2D(const Texture2D&) = delete;
 		Texture2D& operator=(const Texture2D&) = delete;
@@ -49,13 +61,14 @@ namespace cerberus
 		virtual uint32_t GetHeight() const override;
 		virtual uint64_t GetHash() const override;
 
-		const Buffer& GetWriteableBuffer() const { return m_ImageData; }
-		bool Loaded() const { return m_ImageData; }
+		bool Loaded() const { return m_Image.IsValid() && m_ImageView.IsValid(); }
 
 		const TextureProperties& GetTextureProperties() const { return m_Properties; }
+		AssetHandle GetSourceAssetHandle() const { return m_TextureAsset; }
 		uint32_t GetMipLevelCount() const;
 		virtual std::pair<uint32_t, uint32_t> GetMipSize(uint32_t mip) const override;
 	private:
+		void Initialize(ImageFormat format, uint32_t width, uint32_t height, const void* data);
 		void Invalidate(ImageFormat format, const uint32_t width, const uint32_t height);
 		void GenerateMips();
 	private:

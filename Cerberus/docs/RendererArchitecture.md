@@ -82,4 +82,19 @@ Before introducing a RenderGraph, keep the current goal focused on making owners
 - A `Mesh`/scene `MaterialTable` may override a source material slot per mesh instance.
 - `RenderScene` resolves the effective material for every registered submesh and creates a scene-local `MaterialProxy` entry.
 - `MeshInstanceProxy::MaterialProxyIndex` is the stable render-side material mapping. It is intentionally an index, not an asset pointer or raster bind group.
-- `MaterialProxy::GPUData` is the source for the future GPU material storage buffer and ray-tracing material lookup. Bindless texture indices are still invalid until the bindless texture-table phase.
+- `MaterialProxy::GPUData` is uploaded to the scene-local GPU material storage buffer.
+- Cerberus currently builds one TLAS instance per submesh. `gl_InstanceCustomIndexEXT` indexes `RayTracingInstanceData`, which maps that hit back to the submesh's `MaterialProxy::GPUMaterialIndex`.
+- `RayTracingInstanceData` also carries vertex/index buffer device addresses and submesh offsets. Closest-hit combines those with `gl_PrimitiveID` and barycentrics to reconstruct world position, geometric/shading normals and UVs.
+- Closest-hit returns surface data and material parameters through `HitPayload`; path integration and BSDF sampling belong to raygen.
+- `RenderScene` resolves material texture asset handles into scene-local GPU `Texture2D` resources. `GPUMaterialData::TextureIndices` indexes the fixed RT texture table at set 0/binding 5.
+- The RT texture table is fully populated with valid fallback descriptors, so this first bindless phase only needs non-uniform sampled-image indexing; partially-bound and update-after-bind descriptors are not required yet.
+- Closest-hit samples albedo, roughness, metalness and tangent-space normals with `textureLod(..., 0)`. Ray-cone/texture-footprint mip selection remains a later path-tracing phase.
+- Assimp material import currently resolves external diffuse and normal-map files. Embedded source-file textures remain unsupported.
+
+## Texture2D ownership
+
+- `TextureAsset` is the CPU/file asset: decoded pixels plus import metadata. It does not own Vulkan resources.
+- `Texture2D` is the GPU resource owned by `ResourceManager`. The asset-backed creation path accepts an explicit `TextureColorSpace`, so one source asset can be resident as sRGB color data or linear material data without mutating the asset.
+- `RenderScene` no longer rebuilds texture properties manually; it resolves the asset and asks `ResourceManager` to create the GPU texture.
+- Texture2D image views, samplers, ImGui access and the generated BRDF LUT now use handles and the current resource/bind-group path. Their old `OLD_RENDERER` branches have been removed.
+- `TextureCube` and environment-map migration are intentionally the next phase; the remaining `OLD_RENDERER` texture blocks belong to that path.

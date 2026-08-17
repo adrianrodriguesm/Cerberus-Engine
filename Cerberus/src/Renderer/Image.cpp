@@ -161,15 +161,6 @@ namespace cerberus
 			ResourceAllocator allocator("VulkanImage2D");
 			allocator.DestroyImage(image, allocation);
 		});
-
-#if OLD_RENDERER
-		Renderer::SubmitResourceFree([image = m_Image, allocation = m_MemoryAlloc]() mutable
-		{
-			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-			ResourceAllocator allocator("VulkanImage2D");
-			allocator.DestroyImage(image, allocation);
-		});
-#endif
 		m_Image = nullptr;
 		m_MemoryAlloc = nullptr;
 	}
@@ -227,74 +218,6 @@ namespace cerberus
 		utils::InsertImageMemoryBarrier(cmdbuffer, m_Image, srcAccessMask, dstAccessMask, m_CurrentImgLayout, newImageLayout, srcStageMask, dstStageMask, subresourceRange);
 		m_CurrentImgLayout = newImageLayout;
 	}
-
-#if 0
-	void Image2D::CreatePerLayerImageViews()
-	{
-		CORE_ASSERT(m_Specification.Layers > 1, "");
-		VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-
-		VkImageAspectFlags aspectMask = Image::IsDepthFormat(m_Specification.Format) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
-		/** /
-		if (m_Specification.Format == ImageFormat::DEPTH24STENCIL8)
-			aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-		/**/
-		const VkFormat vulkanFormat = utils::VulkanImageFormat(m_Specification.Format);
-		m_PerLayerImageViews.resize(m_Specification.Layers);
-		for (uint32_t layer = 0; layer < m_Specification.Layers; layer++)
-		{
-			VkImageViewCreateInfo imageViewCreateInfo = {};
-			imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			imageViewCreateInfo.format = vulkanFormat;
-			imageViewCreateInfo.flags = 0;
-			// The subresource range describes the set of mip levels (and array layers) that can be accessed through this image view
-			// In this case each image view access one layer of the image
-			imageViewCreateInfo.subresourceRange = {};
-			imageViewCreateInfo.subresourceRange.aspectMask = aspectMask;
-			imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-			imageViewCreateInfo.subresourceRange.levelCount = m_Specification.Mips;
-			imageViewCreateInfo.subresourceRange.baseArrayLayer = layer;
-			imageViewCreateInfo.subresourceRange.layerCount = 1;
-			imageViewCreateInfo.image = m_Info.Image;
-			VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCreateInfo, nullptr, &m_PerLayerImageViews[layer]));
-		}
-
-	}
-	void Image2D::CreatePerSpecificLayerImageViews(const std::vector<uint32_t>& layerIndices)
-	{
-		CORE_ASSERT(m_Specification.Layers > 1, "");
-		VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-
-		VkImageAspectFlags aspectMask = Image::IsDepthFormat(m_Specification.Format) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
-		if (m_Specification.Format == ImageFormat::DEPTH24STENCIL8)
-			aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-
-		const VkFormat vulkanFormat = utils::VulkanImageFormat(m_Specification.Format);
-
-		if (m_PerLayerImageViews.empty())
-			m_PerLayerImageViews.resize(m_Specification.Layers);
-
-		for (uint32_t layer : layerIndices)
-		{
-			VkImageViewCreateInfo imageViewCreateInfo = {};
-			imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-			imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			imageViewCreateInfo.format = vulkanFormat;
-			imageViewCreateInfo.flags = 0;
-			// The subresource range describes the set of mip levels (and array layers) that can be accessed through this image view
-			// In this case each image view access one layer of the image
-			imageViewCreateInfo.subresourceRange = {};
-			imageViewCreateInfo.subresourceRange.aspectMask = aspectMask;
-			imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-			imageViewCreateInfo.subresourceRange.levelCount = m_Specification.Mips;
-			imageViewCreateInfo.subresourceRange.baseArrayLayer = layer;
-			imageViewCreateInfo.subresourceRange.layerCount = 1;
-			imageViewCreateInfo.image = m_Info.Image;
-			VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCreateInfo, nullptr, &m_PerLayerImageViews[layer]));
-		}
-	}
-#endif
 
 	ImageView::ImageView(const ImageViewProperties& imgViewProp)
 		: m_Properties(imgViewProp)
@@ -363,18 +286,6 @@ namespace cerberus
 			if (sampler)
 				vkDestroySampler(vulkanDevice, sampler, nullptr);
 		});
-
-#if OLD_RENDERER
-		Renderer::SubmitResourceFree([imageView = m_ImageView, sampler = m_Sampler]() mutable
-		{
-			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-			NV_CORE_WARN("Image2D::Release ImageView = {0}", (const void*)imageView);
-			vkDestroyImageView(vulkanDevice, imageView, nullptr);
-
-			if (sampler)
-				vkDestroySampler(vulkanDevice, sampler, nullptr);
-		});
-#endif
 		m_ImageView = nullptr;
 
 
@@ -451,28 +362,5 @@ namespace cerberus
 			// Update Descriptor
 			UpdateDescriptor();
 		}
-
-		// TODO: Move to TextureStorage class
-#if OLD_RENDERER
-		if (m_Properties.Usage == ImageUsage::Storage)
-		{
-			// Transition image to GENERAL layout
-			TransientCommandBuffer commandBuffer = Renderer::BeginTransientCommandBuffer();
-
-			VkImageSubresourceRange subresourceRange = {};
-			subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			subresourceRange.baseMipLevel = 0;
-			subresourceRange.levelCount = m_Properties.MipCount;
-			subresourceRange.layerCount = m_Properties.LayerCount;
-
-			utils::InsertImageMemoryBarrier(commandBuffer, vkImage,
-				0, 0,
-				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
-				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-				subresourceRange);
-
-			commandBuffer.SubmitAndWait();
-		}
-#endif
 	}
 }

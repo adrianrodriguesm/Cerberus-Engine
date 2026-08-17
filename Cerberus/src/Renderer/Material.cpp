@@ -152,29 +152,6 @@ namespace cerberus
 		m_ResidentDescriptors[binding]->WriteDescriptorSet.pImageInfo = &image->GetVulkanDescriptorInfo();
 #endif
 	}
-	void Material::Set(const std::string& name, const Handle<Texture2D>& texture)
-	{
-#if OLD_RENDERER
-		const ShaderResourceDeclaration* resource = FindResourceDeclaration(name);
-		CORE_ASSERT(resource, "Resource does not exist!");
-
-		uint32_t binding = resource->GetRegister();
-		// Texture is already set
-		if (binding < m_Textures.size() && m_Textures[binding] && texture->GetHash() == m_Textures[binding]->GetHash())
-			return;
-
-		if (binding >= m_Textures.size())
-			m_Textures.resize(binding + 1);
-
-		m_Textures[binding] = texture;
-
-		const VkWriteDescriptorSet* writeDescriptorSet = m_Shader->GetWriteDescriptorSet(name, 0);
-		CORE_ASSERT(writeDescriptorSet, "Descriptor set not found!");
-		m_ResidentDescriptors[binding] = std::make_shared<PendingDescriptor>(PendingDescriptor{ PendingDescriptorType::Texture2D, *writeDescriptorSet,  std::static_pointer_cast<Texture>(texture) });
-		m_ResidentDescriptors[binding]->WriteDescriptorSet.pImageInfo = &texture->GetVulkanDescriptorInfo();
-#endif
-	}
-
 	void Material::Set(const std::string& name, const Handle<TextureCube>& texture)
 	{
 #if OLD_RENDERER
@@ -275,19 +252,9 @@ namespace cerberus
 		return Get<glm::mat4>(name);
 	}
 
-	Ref<Texture2D> Material::GetTexture2D(const std::string& name)
-	{
-		return GetResource<Texture2D>(name);
-	}
-
 	Ref<TextureCube> Material::GetTextureCube(const std::string& name)
 	{
 		return GetResource<TextureCube>(name);
-	}
-
-	Ref<Texture2D> Material::TryGetTexture2D(const std::string& name)
-	{
-		return TryGetResource<Texture2D>(name);
 	}
 
 	Ref<TextureCube> Material::TryGetTextureCube(const std::string& name)

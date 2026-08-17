@@ -1,11 +1,57 @@
 #include "pch.h"
 #include "Texture.h"
-#include "stb_image.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/ComputePipeline.h"
 #include "Renderer/ResourceManager.h"
+#include "Renderer/TextureAsset.h"
+#include "Renderer/RendererResources.h"
+#include "Renderer/RenderQueueManager.h"
+#include "Renderer/ShaderCompiler.h"
 namespace cerberus
 {
+	namespace
+	{
+		const TextureAsset& RequireLoadedTextureAsset(const Ref<TextureAsset>& textureAsset)
+		{
+			CORE_ASSERT(textureAsset && textureAsset->Loaded(), "Texture2D requires a loaded TextureAsset");
+			return *textureAsset;
+		}
+
+		bool ResolveTextureSRGB(const TextureMetadata& metadata, TextureColorSpace colorSpace)
+		{
+			switch (colorSpace)
+			{
+			case TextureColorSpace::Linear: return false;
+			case TextureColorSpace::SRGB: return true;
+			case TextureColorSpace::AssetDefault: return metadata.SRGB;
+			}
+
+			CORE_ASSERT(false, "Unknown TextureColorSpace");
+			return metadata.SRGB;
+		}
+
+		TextureProperties BuildTextureProperties(const TextureMetadata& metadata, TextureColorSpace colorSpace)
+		{
+			TextureProperties properties;
+			properties.DebugName = metadata.DebugName;
+			properties.SamplerWrap = metadata.SamplerWrap;
+			properties.SamplerFilter = metadata.SamplerFilter;
+			properties.GenerateMips = metadata.GenerateMips;
+			properties.SRGB = ResolveTextureSRGB(metadata, colorSpace);
+			properties.Storage = metadata.Storage;
+			properties.Anisotropy = metadata.Anisotropy;
+			return properties;
+		}
+
+		ImageFormat ResolveTextureFormat(const TextureAsset& textureAsset, bool srgb)
+		{
+			ImageFormat format = textureAsset.GetFormat();
+			if (format == ImageFormat::RGBA || format == ImageFormat::SRGBA)
+				return srgb ? ImageFormat::SRGBA : ImageFormat::RGBA;
+
+			return format;
+		}
+	}
 
 	namespace utils
 	{
@@ -56,20 +102,35 @@ namespace cerberus
 	Texture2D::Texture2D(ImageFormat format, const uint32_t width, const uint32_t height, const void* data, TextureProperties properties)
 		: m_Properties(properties)
 	{
+		Initialize(format, width, height, data);
+	}
+
+	Texture2D::Texture2D(const Ref<TextureAsset>& textureAsset, TextureColorSpace colorSpace)
+	{
+		const TextureAsset& sourceAsset = RequireLoadedTextureAsset(textureAsset);
+		const TextureMetadata& metadata = sourceAsset.GetTextureMetadata();
+		m_Properties = BuildTextureProperties(metadata, colorSpace);
+		m_TextureAsset = sourceAsset.Handle;
+
+		Initialize(
+			ResolveTextureFormat(sourceAsset, ResolveTextureSRGB(metadata, colorSpace)),
+			sourceAsset.GetWidth(),
+			sourceAsset.GetHeight(),
+			sourceAsset.GetPixelData().Data);
+	}
+
+	void Texture2D::Initialize(ImageFormat format, uint32_t width, uint32_t height, const void* data)
+	{
 		uint32_t imageSize = Image::GetImageMemorySize(format, width, height);
-		if (imageSize)
+		if (data && imageSize)
 			m_ImageData = Buffer::Copy(data, imageSize);
 
-		// Check if the image was succesfully loaded
-		if (!m_ImageData.Data)
-		{
-			CORE_ASSERT(false, "Falied to load image!");
-			return;
-		}
+		CORE_ASSERT(m_ImageData.Data || m_Properties.Storage, "Texture2D requires source data unless it is a storage texture");
+		CORE_ASSERT(!m_Properties.Storage || !m_Properties.GenerateMips, "Storage Texture2D mip generation is not supported yet");
 
 		ImageSpecification imageSpec;
-		imageSpec.DebugName = "Texture2D";
-		imageSpec.Usage = ImageUsage::Sampler;
+		imageSpec.DebugName = m_Properties.DebugName;
+		imageSpec.Usage = m_Properties.Storage ? ImageUsage::Storage : ImageUsage::Sampler;
 		imageSpec.Format = format;
 		imageSpec.Width = width;
 		imageSpec.Height = height;
@@ -87,21 +148,8 @@ namespace cerberus
 		viewProp.Image = m_Image;
 		m_ImageView = ResourceManager::CreateImageView(viewProp);
 		Invalidate(format, width, height);
-/** /
-		Texture2D* instance = this;
-		Renderer::Submit([instance]()
-		{
-			instance->Invalidate();
-		});
-/**/
 	}
-#if 0
-	Texture2D::Texture2D(const Ref<Image2D>& image2D)
-		: m_Image(image2D), m_Format(image2D->GetSpecification().Format), m_Width(image2D->GetSpecification().Width), 
-		m_Height(image2D->GetSpecification().Height)
-	{
-	}
-#endif
+
 	Texture2D::~Texture2D()
 	{
 		ResourceManager::DestroyImageView(m_ImageView);
@@ -175,7 +223,6 @@ namespace cerberus
 
 	void Texture2D::Invalidate(ImageFormat format, const uint32_t width, const uint32_t height)
 	{
-		VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 		ImageView* imgView = ResourceManager::GetImageView(m_ImageView);
 		ImageViewProperties& viewProp = imgView->GetProperties();
 
@@ -188,17 +235,41 @@ namespace cerberus
 		imageSpec.Mips = m_Properties.GenerateMips ? GetMipLevelCount() : 1;
 		image->Invalidate();
 		// Invalidate ImageView
-		SamplerSpecification samplerSpec = { m_Properties.SamplerWrap, m_Properties.SamplerFilter };
+		SamplerSpecification samplerSpec{};
+		samplerSpec.SamplerWrap = m_Properties.SamplerWrap;
+		samplerSpec.SamplerFilter = m_Properties.SamplerFilter;
+		samplerSpec.Anisotropy = m_Properties.Anisotropy;
+		samplerSpec.MinLOD = 0.0f;
+		samplerSpec.MaxLOD = static_cast<float>(imageSpec.Mips);
 		samplerSpec.ShaderResource = true;
 		viewProp.Image = m_Image;
 		viewProp.SamplerSpec = samplerSpec;
 		imgView->Invalidate();
 
+		if (!m_ImageData.Data)
+		{
+			CORE_ASSERT(m_Properties.Storage, "Texture2D without source data must be a storage texture");
+			TransientCommandBuffer layoutCommandBuffer = Renderer::BeginTransientCommandBuffer();
+			VkImageSubresourceRange subresourceRange{};
+			subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			subresourceRange.levelCount = imageSpec.Mips;
+			subresourceRange.layerCount = 1;
+			image->InsertImageMemoryBarrier(
+				layoutCommandBuffer,
+				0,
+				VK_ACCESS_SHADER_WRITE_BIT,
+				VK_IMAGE_LAYOUT_GENERAL,
+				VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+				VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+				subresourceRange);
+			layoutCommandBuffer.SubmitAndWait();
+			imgView->UpdateDescriptor();
+			return;
+		}
+
 		VkImage vkImage = image->GetHandle();
-		VkImageView vkImageView = imgView->GetHandle();
 
 		VkDeviceSize size = (uint64_t)m_ImageData.Size;
-		uint32_t mipCount = m_Properties.GenerateMips ? GetMipLevelCount() : 1;
 		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		// STAGING BUFFER
 		////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -252,7 +323,7 @@ namespace cerberus
 		else
 		{
 			dstLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			dstPipelineStgFlags = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			dstPipelineStgFlags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 		}
 
 		// Once the data has been uploaded we transfer to the texture image to the shader read layout, so it can be sampled from
@@ -266,6 +337,10 @@ namespace cerberus
 
 		if (m_Properties.GenerateMips)
 			GenerateMips();
+
+		// TextureAsset owns persistent source pixels. Texture2D only keeps this
+		// temporary copy for the staging upload.
+		m_ImageData.Release();
 	}
 
 	uint32_t Texture2D::GetMipLevelCount() const
@@ -365,7 +440,7 @@ namespace cerberus
 		utils::InsertImageMemoryBarrier(blitCmd, vkImage,
 			VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT, 
 			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
 			subresourceRange);
 
 		blitCmd.SubmitAndWait();
@@ -878,46 +953,63 @@ namespace cerberus
 
 	Handle<Texture2D> TextureFactory::CreateBRDF()
 	{
-#if OLD_RENDERER
-		uint32_t brdfSize = Renderer::GetRendererConfig().BrdfLutSize;
-		ImageSpecification spec;
-		spec.DebugName = "BRDF";
-		spec.Format = ImageFormat::RG16F;
-		spec.Height = brdfSize;
-		spec.Width = brdfSize;
-		spec.Mips = 1;
-		spec.Usage = ImageUsage::Storage;
-		spec.SamplerSpec.SamplerWrap = SamplerWrap::Clamp;
-		Ref<Image2D> brdfImage = CreateRef<Image2D>(spec);
-		Ref<Texture2D> brdfTex = CreateRef<Texture2D>(brdfImage);
+		const uint32_t brdfSize = Renderer::GetRendererConfig().BrdfLutSize;
 
-		Ref<Shader> shader = Renderer::GetShaderLibrary().Get("BRDF");
-		Ref<ComputePipeline> brdfPipeline = CreateRef<ComputePipeline>(shader);
-		Renderer::Submit([brdfPipeline, shader, brdfImage, brdfTex, brdfSize]()
+		TextureProperties properties;
+		properties.DebugName = "BRDF LUT";
+		properties.SamplerWrap = SamplerWrap::Clamp;
+		properties.SamplerFilter = SamplerFilter::Linear;
+		properties.GenerateMips = false;
+		properties.Storage = true;
+
+		Handle<Texture2D> brdfTexture = ResourceManager::CreateTexture2D(
+			ImageFormat::RG16F,
+			brdfSize,
+			brdfSize,
+			nullptr,
+			properties);
+
+		Texture2D* texture = ResourceManager::GetTexture2D(brdfTexture);
+		CORE_ASSERT(texture, "Failed to create BRDF LUT Texture2D");
+
+		Ref<Shader> shader = RendererResources::GetShaderLibrary().Get("BRDF");
+		CORE_ASSERT(shader, "BRDF compute shader is not loaded");
+
+		BindGroupLayout::BindGroupLayoutInfo layoutInfo = ShaderReflection::ReflectLayoutInfo(shader, 0);
+		CORE_ASSERT(!layoutInfo.ImageStorages.empty(), "BRDF shader has no storage-image binding");
+
+		uint32_t outputBinding = layoutInfo.ImageStorages.front().BindingPoint;
+		for (const BindGroupLayout::ImageBinding& binding : layoutInfo.ImageStorages)
 		{
-			VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-			brdfImage->Invalidate();
-			// Descriptors
-			VkWriteDescriptorSet writeDescriptor;
-			VkDescriptorSet descriptorSet = Renderer::AllocateDescriptorSet(shader->GetDescriptorSetLayout(0));
-			// Set descriptor for the Output Cubemap
-			writeDescriptor = *shader->GetWriteDescriptorSet("o_LUT", 0);
-			writeDescriptor.dstSet = descriptorSet;
-			writeDescriptor.pImageInfo = &brdfImage->GetVulkanDescriptorInfo();
-			// Update descriptors
-			vkUpdateDescriptorSets(device, 1, &writeDescriptor, 0, NULL);
-			// Compute Pass
-			brdfPipeline->Begin();
+			if (binding.Name == "o_LUT")
 			{
-				uint32_t wordGroupXY = brdfSize / 32;
-				brdfPipeline->Dispatch(wordGroupXY, wordGroupXY, 6, descriptorSet);
+				outputBinding = binding.BindingPoint;
+				break;
 			}
-			brdfPipeline->End();
-		});
+		}
 
-		return brdfTex;
-#endif
-		return Handle<Texture2D>();
+		Handle<BindGroupLayout> bindGroupLayout = ResourceManager::CreateBindGroupLayout(layoutInfo);
+		BindGroupSpecification bindGroupSpec;
+		bindGroupSpec.BindGroupLayout = bindGroupLayout;
+		bindGroupSpec.Lifetime = DescriptorAllocationLifetime::Transient;
+		Handle<BindGroup> bindGroupHandle = ResourceManager::CreateBindGroup(bindGroupSpec);
+
+		BindGroup* bindGroup = ResourceManager::GetBindGroup(bindGroupHandle);
+		CORE_ASSERT(bindGroup, "Failed to create BRDF bind group");
+		bindGroup->SetImageView(texture->GetImageView(), outputBinding);
+		bindGroup->Update(0);
+
+		Ref<ComputePipeline> brdfPipeline = CreateRef<ComputePipeline>(shader);
+		RenderQueueManager::ExecuteRenderQueue();
+
+		brdfPipeline->Begin();
+		const uint32_t workGroupCount = (brdfSize + 31u) / 32u;
+		brdfPipeline->Dispatch(workGroupCount, workGroupCount, 1, bindGroup->GetHandle(0));
+		brdfPipeline->End();
+
+		ResourceManager::DestroyBindGroup(bindGroupHandle);
+		ResourceManager::DestroyBindGroupLayout(bindGroupLayout);
+		return brdfTexture;
 	}
 
 	Handle<Texture2D> TextureFactory::CreateTexture2DWithColor(const glm::ivec4& color)

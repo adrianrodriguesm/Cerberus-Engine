@@ -61,18 +61,28 @@ namespace cerberus
 		m_MotionTLAS = motion;
 	}
 
-	void AccelerationStructureBuilder::SubmitMeshInstance(const Handle<MeshInstanceProxy>& meshInstanceHandle)
+	void AccelerationStructureBuilder::SubmitMeshInstance(
+		const Handle<MeshInstanceProxy>& meshInstanceHandle,
+		uint32_t instanceCustomIndex)
 	{
 		MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
+		CORE_ASSERT(meshInstance, "Invalid MeshInstanceProxy submitted to TLAS");
+		CORE_ASSERT(instanceCustomIndex <= 0x00FFFFFFu, "TLAS instance custom index exceeds Vulkan's 24-bit limit");
+
 		MeshSourceProxy* meshSourceProxy = ResourceManager::GetMeshSourceProxy(meshInstance->MeshSource);
+		CORE_ASSERT(meshSourceProxy, "Invalid MeshSourceProxy submitted to TLAS");
+		CORE_ASSERT(meshInstance->SubmeshIndex < meshSourceProxy->Submeshes.size(), "Invalid submesh index submitted to TLAS");
+
 		SubmeshSourceProxy& submeshProxy = meshSourceProxy->Submeshes[meshInstance->SubmeshIndex];
 
 		AccelerationStructure* blas = ResourceManager::GetAccelerationStructure(submeshProxy.BLAS);
+		CORE_ASSERT(blas, "Invalid BLAS submitted to TLAS");
+
 		VkTransformMatrixKHR transformKRH = utils::TransformFromGLMToKHRMatrix(meshInstance->WorldTransform);
 
 		VkAccelerationStructureInstanceKHR instance{};
 		instance.transform = transformKRH;											// Position of the instance
-		instance.instanceCustomIndex = static_cast<uint32_t>(m_TLASInstances.size());	// gl_InstanceCustomIndexEXT
+		instance.instanceCustomIndex = instanceCustomIndex;								// gl_InstanceCustomIndexEXT
 		instance.accelerationStructureReference = blas->GetDeviceAddress();
 		instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
 		instance.mask = 0xFF;       //  Only be hit if rayMask & instance.mask != 0

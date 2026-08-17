@@ -84,6 +84,10 @@ namespace cerberus
 		void SetUniformBuffer(const Ref<UniformBufferSet> uboSet, uint32_t bindingPoint);
 		void SetStorageBuffer(const Ref<StorageBufferSet> storageBufferSet, uint32_t bindingPoint);
 		void SetImageView(const Handle<ImageView> imgView, uint32_t bindingPoint);
+		void SetImageViewArray(
+			const std::vector<Handle<ImageView>>& imageViews,
+			const Handle<ImageView> fallbackImageView,
+			uint32_t bindingPoint);
 		void SetAccelerationStructure(const Handle<AccelerationStructure> as, uint32_t bindingPoint);
 
 		void Update(uint32_t frameIndex);
@@ -98,6 +102,8 @@ namespace cerberus
 		};
 
 		std::vector<std::vector<AccelerationStructureDescriptorState>> m_AccelerationStructureDescriptorStates;
+		// Frame -> write descriptor -> stable image-info storage for descriptor arrays.
+		std::vector<std::vector<std::vector<VkDescriptorImageInfo>>> m_ImageArrayDescriptorStates;
 	private:
 		Handle<BindGroupLayout> m_BindGroupLayout;
 		std::vector<VkDescriptorSet> m_Descriptors;

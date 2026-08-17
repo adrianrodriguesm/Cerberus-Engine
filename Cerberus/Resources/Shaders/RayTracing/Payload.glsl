@@ -3,7 +3,23 @@
 
 struct HitPayload
 {
-    vec3 hitValue;
+    vec3 WorldPosition;
+    float HitT;
+
+    vec3 ShadingNormal;
+    float Roughness;
+
+    vec3 GeometricNormal;
+    float Metalness;
+
+    vec3 Albedo;
+    uint MaterialIndex;
+
+    vec3 Emission;
+    uint Hit;
+
+    vec2 TexCoord;
+    vec2 Padding;
 };
 
 #endif // CERBERUS_RT_PAYLOAD_GLSL

@@ -253,15 +253,33 @@ namespace cerberus
 		// RAY TRACING FEATURES
 		// If a pNext(Chain) has been passed, we need to add it to the device creation info
 		VkPhysicalDeviceFeatures2 physicalDeviceFeatures2{};
-		// Enable features required for ray tracing using feature chaining via pNext		
+
+		VkPhysicalDeviceDescriptorIndexingFeatures supportedDescriptorIndexingFeatures{};
+		supportedDescriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+
+		VkPhysicalDeviceFeatures2 supportedDeviceFeatures{};
+		supportedDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+		supportedDeviceFeatures.pNext = &supportedDescriptorIndexingFeatures;
+		vkGetPhysicalDeviceFeatures2(m_PhysicalDevice->GetVulkanPhysicalDevice(), &supportedDeviceFeatures);
+
+		CORE_ASSERT(
+			supportedDescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing,
+			"The selected GPU does not support non-uniform sampled-image array indexing required by the RT texture table");
+
+		VkPhysicalDeviceDescriptorIndexingFeatures enabledDescriptorIndexingFeatures{};
+		enabledDescriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+		enabledDescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+
+		// Enable features required for ray tracing using feature chaining via pNext
 		VkPhysicalDeviceBufferDeviceAddressFeatures enabledBufferDeviceAddresFeatures = {};
 		enabledBufferDeviceAddresFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
 		enabledBufferDeviceAddresFeatures.bufferDeviceAddress = VK_TRUE;
+		enabledDescriptorIndexingFeatures.pNext = &enabledBufferDeviceAddresFeatures;
 
 		VkPhysicalDeviceRayTracingPipelineFeaturesKHR enabledRayTracingPipelineFeatures{};
 		enabledRayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
 		enabledRayTracingPipelineFeatures.rayTracingPipeline = VK_TRUE;
-		enabledRayTracingPipelineFeatures.pNext = &enabledBufferDeviceAddresFeatures;
+		enabledRayTracingPipelineFeatures.pNext = &enabledDescriptorIndexingFeatures;
 
 		VkPhysicalDeviceAccelerationStructureFeaturesKHR enabledAccelerationStructureFeatures{};
 		enabledAccelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;

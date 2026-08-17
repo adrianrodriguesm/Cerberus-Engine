@@ -180,10 +180,12 @@ namespace cerberus
 		m_Descriptors.resize(framesInFlight);
 
 		m_AccelerationStructureDescriptorStates.resize(framesInFlight);
+		m_ImageArrayDescriptorStates.resize(framesInFlight);
 
 		for (uint32_t frameIndex = 0; frameIndex < framesInFlight; frameIndex++)
 		{
 			m_AccelerationStructureDescriptorStates[frameIndex].resize(m_WriteDescriptors[frameIndex].size());
+			m_ImageArrayDescriptorStates[frameIndex].resize(m_WriteDescriptors[frameIndex].size());
 
 			for (auto& state : m_AccelerationStructureDescriptorStates[frameIndex])
 			{
@@ -349,14 +351,74 @@ namespace cerberus
 						writeDescriptor.descriptorType == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
 						"BindGroup::SetImageView called on non-image descriptor binding"
 					);
+					CORE_ASSERT(writeDescriptor.descriptorCount == 1, "Use SetImageViewArray for image-array bindings");
 
 					writeDescriptor.pImageInfo = &imgView->GetImageDescriptorInfo();
+					writeDescriptor.descriptorCount = 1;
 					foundBinding = true;
 				}
 			}
 		}
 
 		CORE_ASSERT(foundBinding, "BindGroup::SetImageView binding point not found in layout");
+	}
+
+	void BindGroup::SetImageViewArray(
+		const std::vector<Handle<ImageView>>& imageViewHandles,
+		const Handle<ImageView> fallbackImageViewHandle,
+		uint32_t bindingPoint)
+	{
+		ImageView* fallbackImageView = ResourceManager::GetImageView(fallbackImageViewHandle);
+		CORE_ASSERT(fallbackImageView, "BindGroup::SetImageViewArray received an invalid fallback ImageView");
+
+		fallbackImageView->UpdateDescriptor();
+		const VkDescriptorImageInfo fallbackDescriptor = fallbackImageView->GetImageDescriptorInfo();
+		CORE_ASSERT(fallbackDescriptor.imageView != VK_NULL_HANDLE, "BindGroup::SetImageViewArray fallback imageView is VK_NULL_HANDLE");
+
+		const uint32_t framesInFlight = ResourceManager::GetRendererConfig().FramesInFlight;
+		bool foundBinding = false;
+
+		for (uint32_t frameIndex = 0; frameIndex < framesInFlight; frameIndex++)
+		{
+			auto& writeDescriptors = m_WriteDescriptors[frameIndex];
+			auto& arrayStates = m_ImageArrayDescriptorStates[frameIndex];
+			CORE_ASSERT(writeDescriptors.size() == arrayStates.size(), "BindGroup image-array descriptor state size mismatch");
+
+			for (uint32_t writeIndex = 0; writeIndex < writeDescriptors.size(); writeIndex++)
+			{
+				VkWriteDescriptorSet& writeDescriptor = writeDescriptors[writeIndex];
+				if (writeDescriptor.dstBinding != bindingPoint)
+					continue;
+
+				CORE_ASSERT(
+					writeDescriptor.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
+					writeDescriptor.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					"BindGroup::SetImageViewArray called on a non-sampled-image binding");
+
+				const uint32_t descriptorCapacity = writeDescriptor.descriptorCount;
+				CORE_ASSERT(descriptorCapacity > 0, "BindGroup image-array binding has zero descriptors");
+				CORE_ASSERT(imageViewHandles.size() <= descriptorCapacity, "BindGroup image array exceeds the reflected shader capacity");
+
+				std::vector<VkDescriptorImageInfo>& descriptors = arrayStates[writeIndex];
+				descriptors.assign(descriptorCapacity, fallbackDescriptor);
+
+				for (uint32_t imageIndex = 0; imageIndex < imageViewHandles.size(); imageIndex++)
+				{
+					ImageView* imageView = ResourceManager::GetImageView(imageViewHandles[imageIndex]);
+					CORE_ASSERT(imageView, "BindGroup::SetImageViewArray received an invalid ImageView");
+
+					imageView->UpdateDescriptor();
+					descriptors[imageIndex] = imageView->GetImageDescriptorInfo();
+					CORE_ASSERT(descriptors[imageIndex].imageView != VK_NULL_HANDLE, "BindGroup image array contains a VK_NULL_HANDLE imageView");
+				}
+
+				writeDescriptor.pImageInfo = descriptors.data();
+				writeDescriptor.descriptorCount = descriptorCapacity;
+				foundBinding = true;
+			}
+		}
+
+		CORE_ASSERT(foundBinding, "BindGroup::SetImageViewArray binding point not found in layout");
 	}
 
 	void BindGroup::SetAccelerationStructure(const Handle<AccelerationStructure> asHandle, uint32_t bindingPoint)
@@ -436,7 +498,7 @@ namespace cerberus
 			case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
 			case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
 			{
-				if (!write.pImageInfo || write.pImageInfo->imageView == VK_NULL_HANDLE)
+				if (!write.pImageInfo)
 				{
 					NV_CORE_ERROR(
 						"BindGroup invalid image descriptor. Binding={}, Type={}, Frame={}, pImageInfo={}, imageView={}",
@@ -444,10 +506,15 @@ namespace cerberus
 						(uint32_t)write.descriptorType,
 						frameIndex,
 						(void*)write.pImageInfo,
-						write.pImageInfo ? (void*)write.pImageInfo->imageView : nullptr
+						nullptr
 					);
 
-					CORE_ASSERT(false, "BindGroup tried to update image descriptor with null imageView");
+					CORE_ASSERT(false, "BindGroup tried to update image descriptor without image info");
+				}
+
+				for (uint32_t descriptorIndex = 0; descriptorIndex < write.descriptorCount; descriptorIndex++)
+				{
+					CORE_ASSERT(write.pImageInfo[descriptorIndex].imageView != VK_NULL_HANDLE, "BindGroup image descriptor contains a null imageView");
 				}
 
 				break;

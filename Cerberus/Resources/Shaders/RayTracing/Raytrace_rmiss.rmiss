@@ -9,5 +9,6 @@ layout(location = 0) rayPayloadInEXT HitPayload Payload;
 
 void main()
 {
-    Payload.hitValue = vec3(0.02, 0.04, 0.08);
+    Payload.Emission = vec3(0.02, 0.04, 0.08);
+    Payload.Hit = 0u;
 }

@@ -36,6 +36,10 @@ namespace cerberus
 		s_ResourcesData->ShaderLibrary->Load("Resources/Shaders/PreDepth.glsl", false);
 		s_ResourcesData->ShaderLibrary->Load("Resources/Shaders/ShadowMap.glsl", false);
 
+		// Texture factories such as the BRDF LUT reflect and execute compute shaders,
+		// so shader creation must finish before default GPU textures are built.
+		RenderQueueManager::ExecuteRenderQueue();
+
 		// Textures
 		s_ResourcesData->BlackCubeTexture = TextureFactory::CreateTextureCubeWithColor({ 0, 0, 0, 0 });
 		s_ResourcesData->BlackTexture = TextureFactory::CreateTexture2DWithColor({ 0, 0, 0, 0 });
@@ -50,10 +54,6 @@ namespace cerberus
 		s_ResourcesData->EmptyEnvironment->RadianceMap = s_ResourcesData->BlackCubeTexture;
 		s_ResourcesData->EmptyEnvironment->DebugName = "Empty Environment";
 #endif
-
-		// Default materials require shader reflection data. ShaderLibrary::Load queues shader reload work,
-		// so flush the init-time render queue before creating materials that query uniforms.
-		RenderQueueManager::ExecuteRenderQueue();
 
 		s_ResourcesData->DefaultMaterial = CreateRef<MaterialAsset>();
 		s_ResourcesData->DefaultMaterial->SetAlbedoColor({ 1.f, 0, 1.f });

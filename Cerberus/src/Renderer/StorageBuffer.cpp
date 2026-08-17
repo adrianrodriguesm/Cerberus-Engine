@@ -17,7 +17,7 @@ namespace cerberus
 		Release();
 	}
 
-	void StorageBuffer::SetData(void* data, uint32_t size, uint32_t offset)
+	void StorageBuffer::SetData(const void* data, uint32_t size, uint32_t offset)
 	{
 		const uint32_t requiredSize = offset + size;
 		if (requiredSize > m_Size)

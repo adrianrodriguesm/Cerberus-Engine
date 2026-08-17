@@ -138,10 +138,61 @@ namespace cerberus::ui
         return ImColor::HSV(hue, sat, std::min(val * multiplier, 1.0f));
     }
 
-    ImTextureID GetTextureID(Ref<Texture2D> texture);
+    ImTextureID GetTextureID(Handle<Texture2D> texture);
+    ImTextureID GetTextureID(const Ref<Texture2D>& texture);
 
     namespace draw
     {
+        static void DrawButtonImage(Handle<Texture2D> imageNormal, Handle<Texture2D> imageHovered, Handle<Texture2D> imagePressed,
+            ImU32 tintNormal, ImU32 tintHovered, ImU32 tintPressed,
+            ImVec2 rectMin, ImVec2 rectMax)
+        {
+            auto* drawList = ImGui::GetWindowDrawList();
+            if (ImGui::IsItemActive())
+                drawList->AddImage(GetTextureID(imagePressed), rectMin, rectMax, ImVec2(0, 0), ImVec2(1, 1), tintPressed);
+            else if (ImGui::IsItemHovered())
+                drawList->AddImage(GetTextureID(imageHovered), rectMin, rectMax, ImVec2(0, 0), ImVec2(1, 1), tintHovered);
+            else
+                drawList->AddImage(GetTextureID(imageNormal), rectMin, rectMax, ImVec2(0, 0), ImVec2(1, 1), tintNormal);
+        };
+
+        static void DrawButtonImage(Handle<Texture2D> imageNormal, Handle<Texture2D> imageHovered, Handle<Texture2D> imagePressed,
+            ImU32 tintNormal, ImU32 tintHovered, ImU32 tintPressed,
+            ImRect rectangle)
+        {
+            DrawButtonImage(imageNormal, imageHovered, imagePressed, tintNormal, tintHovered, tintPressed, rectangle.Min, rectangle.Max);
+        };
+
+        static void DrawButtonImage(Handle<Texture2D> image,
+            ImU32 tintNormal, ImU32 tintHovered, ImU32 tintPressed,
+            ImVec2 rectMin, ImVec2 rectMax)
+        {
+            DrawButtonImage(image, image, image, tintNormal, tintHovered, tintPressed, rectMin, rectMax);
+        };
+
+        static void DrawButtonImage(Handle<Texture2D> image,
+            ImU32 tintNormal, ImU32 tintHovered, ImU32 tintPressed,
+            ImRect rectangle)
+        {
+            DrawButtonImage(image, image, image, tintNormal, tintHovered, tintPressed, rectangle.Min, rectangle.Max);
+        };
+
+
+        static void DrawButtonImage(Handle<Texture2D> imageNormal, Handle<Texture2D> imageHovered, Handle<Texture2D> imagePressed,
+            ImU32 tintNormal, ImU32 tintHovered, ImU32 tintPressed)
+        {
+            DrawButtonImage(imageNormal, imageHovered, imagePressed, tintNormal, tintHovered, tintPressed, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+        };
+
+        static void DrawButtonImage(Handle<Texture2D> image,
+            ImU32 tintNormal, ImU32 tintHovered, ImU32 tintPressed)
+        {
+            DrawButtonImage(image, image, image, tintNormal, tintHovered, tintPressed, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+        };
+
+        // Compatibility path for editor icons that are still owned through Ref.
+        // New renderer resources use Handle<Texture2D>, but both forms resolve to
+        // the same ResourceManager-owned ImageView representation.
         static void DrawButtonImage(const Ref<Texture2D>& imageNormal, const Ref<Texture2D>& imageHovered, const Ref<Texture2D>& imagePressed,
             ImU32 tintNormal, ImU32 tintHovered, ImU32 tintPressed,
             ImVec2 rectMin, ImVec2 rectMax)
@@ -175,7 +226,6 @@ namespace cerberus::ui
         {
             DrawButtonImage(image, image, image, tintNormal, tintHovered, tintPressed, rectangle.Min, rectangle.Max);
         };
-
 
         static void DrawButtonImage(const Ref<Texture2D>& imageNormal, const Ref<Texture2D>& imageHovered, const Ref<Texture2D>& imagePressed,
             ImU32 tintNormal, ImU32 tintHovered, ImU32 tintPressed)

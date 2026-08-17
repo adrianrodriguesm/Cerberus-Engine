@@ -17,7 +17,8 @@ void main()
     vec3 origin = Camera.Position.xyz;
     vec3 direction = GetCameraRayDirection(vec2(gl_LaunchIDEXT.xy), vec2(gl_LaunchSizeEXT.xy));
 
-    Payload.hitValue = vec3(0.0, 0.0, 0.0);
+    Payload.Emission = vec3(0.0);
+    Payload.Hit = 0u;
 
     traceRayEXT(
         TLAS,
@@ -33,5 +34,11 @@ void main()
         0
     );
 
-    imageStore(RTOutput, pixel, vec4(Payload.hitValue, 1.0));
+    // Unlit material validation. This lets us verify material lookup and texture
+    // sampling before the iterative path integrator is introduced.
+    vec3 radiance = Payload.Hit != 0u
+        ? Payload.Albedo + Payload.Emission
+        : Payload.Emission;
+
+    imageStore(RTOutput, pixel, vec4(radiance, 1.0));
 }
