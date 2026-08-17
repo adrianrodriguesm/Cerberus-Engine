@@ -2,6 +2,7 @@
 #include "StorageBuffer.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/ResourceManager.h"
+#include <algorithm>
 namespace cerberus
 {
 	StorageBuffer::StorageBuffer(uint32_t size, uint32_t binding, BufferUsageType bufferUsage, uint64_t aligment)
@@ -18,34 +19,62 @@ namespace cerberus
 
 	void StorageBuffer::SetData(void* data, uint32_t size, uint32_t offset)
 	{
-		if (offset + size > m_Size)
+		const uint32_t requiredSize = offset + size;
+		if (requiredSize > m_Size)
 		{
+			Buffer resizedData;
+			resizedData.Allocate(requiredSize);
+			resizedData.ZeroInitialize();
+
+			if (m_LocalData.Data && m_LocalData.Size > 0)
+				memcpy(resizedData.Data, m_LocalData.Data, std::min(m_LocalData.Size, requiredSize));
+
+			m_LocalData.Release();
+			m_LocalData = resizedData;
+
+			m_Size = requiredSize;
+			m_AligmentData = (m_BufferUsageType == BufferUsageType::Dynamic) ? m_AligmentData : m_Size;
 			Invalidate();
 		}
+		else if (!m_LocalData.Data)
+		{
+			m_LocalData.Allocate(m_Size);
+			m_LocalData.ZeroInitialize();
+		}
+
 		m_LocalData.Write(data, size, offset);
+
 		GPUBuffer* buffer = ResourceManager::GetBuffer(m_StorageBuffer);
+		CORE_ASSERT(buffer, "Invalid StorageBuffer GPU buffer");
+
 		ResourceAllocator allocator("StorageBuffer");
 		// Copy data to staging buffer
-		// 1. Create pointer to   a point in normal memory and  "Map" the uniform buffer memory to that point
+		// 1. Create pointer to a point in normal memory and "Map" the storage buffer memory to that point
 		uint8_t* destData = allocator.MapMemory<uint8_t>(buffer->Allocation);
 		// 2. Copy memory to the point
-		memcpy(destData, (byte*)m_LocalData.Data + offset, m_LocalData.Size);
-		// 3. Unmap the uniform buffer memory
+		memcpy(destData, m_LocalData.Data, m_LocalData.Size);
+		// 3. Unmap the storage buffer memory
 		allocator.UnmapMemory(buffer->Allocation);
 	}
 	void StorageBuffer::Release()
 	{
-		if (m_Size > 0)
+		if (m_StorageBuffer.IsValid())
 		{
-			Handle<GPUBuffer> StorageBuffer = m_StorageBuffer;
-			ResourceManager::DestroyBuffer(StorageBuffer);
-			m_LocalData.Release();
+			Handle<GPUBuffer> storageBuffer = m_StorageBuffer;
+			ResourceManager::DestroyBuffer(storageBuffer);
+			m_StorageBuffer = {};
 		}
 
+		m_LocalData.Release();
 	}
 	void StorageBuffer::Invalidate()
 	{
-		Release();
+		if (m_StorageBuffer.IsValid())
+		{
+			Handle<GPUBuffer> storageBuffer = m_StorageBuffer;
+			ResourceManager::DestroyBuffer(storageBuffer);
+			m_StorageBuffer = {};
+		}
 
 		auto vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 

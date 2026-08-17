@@ -3,6 +3,7 @@
 #include "Core/Handle.h"
 #include "Renderer/Shader.h"
 #include "Renderer/UniformBufferSet.h"
+#include "Renderer/StorageBufferSet.h"
 #include "Renderer/Image.h"
 namespace cerberus
 {
@@ -81,6 +82,7 @@ namespace cerberus
 		~BindGroup();
 
 		void SetUniformBuffer(const Ref<UniformBufferSet> uboSet, uint32_t bindingPoint);
+		void SetStorageBuffer(const Ref<StorageBufferSet> storageBufferSet, uint32_t bindingPoint);
 		void SetImageView(const Handle<ImageView> imgView, uint32_t bindingPoint);
 		void SetAccelerationStructure(const Handle<AccelerationStructure> as, uint32_t bindingPoint);
 

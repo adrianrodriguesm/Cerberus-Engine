@@ -15,6 +15,11 @@ namespace cerberus
 	struct MaterialProxy
 	{
 		AssetHandle SourceMaterialAsset = 0;
+
+		// For now, this is the same as the RenderScene material proxy table index.
+		// Later this can diverge if the renderer compacts, sorts, or aliases GPU material entries.
+		uint32_t GPUMaterialIndex = InvalidMaterialProxyIndex;
+
 		GPUMaterialData GPUData{};
 	};
 }

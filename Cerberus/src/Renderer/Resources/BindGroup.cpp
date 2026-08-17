@@ -10,6 +10,7 @@ namespace cerberus
 	{
 		if (UniformBuffers.size() != other.UniformBuffers.size() ||
 			StorageBuffers.size() != other.StorageBuffers.size() ||
+			AccelerationStructures.size() != other.AccelerationStructures.size() ||
 			ImageSamplers.size() != other.ImageSamplers.size()   ||
 			ImageStorages.size() != other.ImageStorages.size()   ||
 			Set != other.Set)
@@ -30,6 +31,14 @@ namespace cerberus
 			if (other.StorageBuffers[i].BindingPoint != StorageBuffers[i].BindingPoint)
 				return false;
 			if (other.StorageBuffers[i].ShaderStage != StorageBuffers[i].ShaderStage)
+				return false;
+		}
+
+		for (uint32_t i = 0; i < AccelerationStructures.size(); i++)
+		{
+			if (other.AccelerationStructures[i].BindingPoint != AccelerationStructures[i].BindingPoint)
+				return false;
+			if (other.AccelerationStructures[i].ShaderStage != AccelerationStructures[i].ShaderStage)
 				return false;
 		}
 
@@ -268,6 +277,43 @@ namespace cerberus
 
 		CORE_ASSERT(foundBinding, "BindGroup::SetUniformBuffer binding point not found in layout");
 	}
+
+
+	void BindGroup::SetStorageBuffer(const Ref<StorageBufferSet> storageBufferSet, uint32_t bindingPoint)
+	{
+		CORE_ASSERT(storageBufferSet, "BindGroup::SetStorageBuffer received null StorageBufferSet");
+
+		uint32_t framesInFlight = ResourceManager::GetRendererConfig().FramesInFlight;
+
+		bool foundBinding = false;
+
+		for (uint32_t frameIndex = 0; frameIndex < framesInFlight; frameIndex++)
+		{
+			Ref<StorageBuffer> storageBuffer = storageBufferSet->Get(frameIndex);
+
+			CORE_ASSERT(storageBuffer, "BindGroup::SetStorageBuffer received null StorageBuffer");
+
+			auto& writeDescriptors = m_WriteDescriptors[frameIndex];
+
+			for (auto& writeDescriptor : writeDescriptors)
+			{
+				if (writeDescriptor.dstBinding == bindingPoint)
+				{
+					CORE_ASSERT(
+						writeDescriptor.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+						"BindGroup::SetStorageBuffer called on a non-storage-buffer binding"
+					);
+
+					writeDescriptor.pBufferInfo = &storageBuffer->GetBufferDescriptorInfo();
+					writeDescriptor.descriptorCount = 1;
+					foundBinding = true;
+				}
+			}
+		}
+
+		CORE_ASSERT(foundBinding, "BindGroup::SetStorageBuffer binding point not found in layout");
+	}
+
 
 	void BindGroup::SetImageView(const Handle<ImageView> imgViewHandle, uint32_t bindingPoint)
 	{

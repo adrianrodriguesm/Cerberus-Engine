@@ -61,11 +61,14 @@ namespace cerberus
 		{
 			if (m_MeshRegister.DefaultMaterialProxyIndex == InvalidMaterialProxyIndex)
 			{
+				const uint32_t materialProxyIndex = static_cast<uint32_t>(m_MeshRegister.MaterialProxies.size());
+
 				MaterialProxy proxy{};
 				proxy.SourceMaterialAsset = 0;
+				proxy.GPUMaterialIndex = materialProxyIndex;
 				proxy.GPUData = resolvedMaterial->BuildGPUMaterialData();
 
-				m_MeshRegister.DefaultMaterialProxyIndex = static_cast<uint32_t>(m_MeshRegister.MaterialProxies.size());
+				m_MeshRegister.DefaultMaterialProxyIndex = materialProxyIndex;
 				m_MeshRegister.MaterialProxies.emplace_back(proxy);
 			}
 
@@ -76,11 +79,13 @@ namespace cerberus
 		if (auto it = m_MeshRegister.MaterialRegistered.find(materialHandle); it != m_MeshRegister.MaterialRegistered.end())
 			return it->second;
 
+		const uint32_t materialProxyIndex = static_cast<uint32_t>(m_MeshRegister.MaterialProxies.size());
+
 		MaterialProxy proxy{};
 		proxy.SourceMaterialAsset = materialHandle;
+		proxy.GPUMaterialIndex = materialProxyIndex;
 		proxy.GPUData = resolvedMaterial->BuildGPUMaterialData();
 
-		const uint32_t materialProxyIndex = static_cast<uint32_t>(m_MeshRegister.MaterialProxies.size());
 		m_MeshRegister.MaterialProxies.emplace_back(proxy);
 		m_MeshRegister.MaterialRegistered[materialHandle] = materialProxyIndex;
 

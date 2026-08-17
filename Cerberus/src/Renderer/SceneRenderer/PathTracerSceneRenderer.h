@@ -40,6 +40,7 @@ namespace cerberus
 
 	private:
 		void UpdateUBOData();
+		void UpdateRTMaterialBuffer();
 		void FlushRenderPasses();
 
 	private:
@@ -107,6 +108,7 @@ namespace cerberus
 		Ref<UniformBufferSet> m_UniformBufferSet;
 		Ref<UniformBufferSet> m_UniformBufferSetCamera;
 		Ref<StorageBufferSet> m_RayTracingObjectDescSet;
+		Ref<StorageBufferSet> m_RT_MaterialBufferSet;
 
 		// Renderer-side representation of the logical scene.
 		Scope<RenderScene> m_RenderScene;

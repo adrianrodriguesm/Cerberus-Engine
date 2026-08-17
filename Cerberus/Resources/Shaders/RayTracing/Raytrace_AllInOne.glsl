@@ -95,10 +95,29 @@ struct HitPayload
     vec3 hitValue;
 };
 
+struct GPUMaterialData
+{
+    vec4 AlbedoColor;
+    vec4 Parameters;
+    uvec4 TextureIndices;
+};
+
+layout(std430, set = 0, binding = 3) readonly buffer MaterialBuffer
+{
+    GPUMaterialData Materials[];
+} MaterialTable;
+
 hitAttributeEXT vec2 HitAttribs;
 layout(location = 0) rayPayloadInEXT HitPayload Payload;
 
 void main()
 {
-    Payload.hitValue = vec3(1.0 - HitAttribs.x - HitAttribs.y, HitAttribs.x, HitAttribs.y);
+    vec3 barycentric = vec3(
+        1.0 - HitAttribs.x - HitAttribs.y,
+        HitAttribs.x,
+        HitAttribs.y
+    );
+
+    GPUMaterialData material = MaterialTable.Materials[0];
+    Payload.hitValue = material.AlbedoColor.rgb * (0.25 + 0.75 * barycentric) + vec3(material.Parameters.z);
 }

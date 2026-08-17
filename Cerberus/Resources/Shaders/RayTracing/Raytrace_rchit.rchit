@@ -4,6 +4,7 @@
 #extension GL_EXT_nonuniform_qualifier : enable
 
 #include "Payload.glsl"
+#include "Material.glsl"
 
 hitAttributeEXT vec2 HitAttribs;
 layout(location = 0) rayPayloadInEXT HitPayload Payload;
@@ -16,7 +17,11 @@ void main()
         HitAttribs.y
     );
 
-    // Basic barycentric visualization. This keeps the shader independent from
-    // vertex/index buffers until the object-data system is ready.
-    Payload.hitValue = barycentric;
+    // Temporary material validation path.
+    // 2D.5 will resolve the correct material from hit geometry/submesh data.
+    GPUMaterialData material = MaterialTable.Materials[0];
+    vec3 baseColor = material.AlbedoColor.rgb;
+    float emission = material.Parameters.z;
+
+    Payload.hitValue = baseColor * (0.25 + 0.75 * barycentric) + vec3(emission);
 }

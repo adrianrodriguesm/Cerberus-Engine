@@ -24,6 +24,7 @@ namespace cerberus
 	static constexpr uint32_t RT_OUTPUT_BINDING = 16;
 	static constexpr uint32_t RT_TLAS_BINDING = 1;
 	static constexpr uint32_t RT_CAMERA_BINDING = 2;
+	static constexpr uint32_t RT_MATERIALS_BINDING = 3;
 
 	static constexpr bool RT_RAYGEN_ONLY = false;
 
@@ -174,6 +175,31 @@ namespace cerberus
 			rtBindGroup->SetUniformBuffer(m_UniformBufferSetCamera, RT_CAMERA_BINDING);
 		}
 
+		// GPU material table for RT path.
+		// The closest-hit shader reads this buffer now, but material lookup is still
+		// temporary: 2D.5 will connect hit geometry/submesh data to the correct material index.
+		{
+			StorageBufferSetSpecification materialBufferSpec;
+			materialBufferSpec.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
+			materialBufferSpec.Size = sizeof(GPUMaterialData);
+			materialBufferSpec.BindingPoint = RT_MATERIALS_BINDING;
+			materialBufferSpec.BufferUsage = BufferUsageType::Static;
+
+			m_RT_MaterialBufferSet = CreateRef<StorageBufferSet>(materialBufferSpec);
+
+			GPUMaterialData fallbackMaterial{};
+			for (uint32_t frameIndex = 0; frameIndex < ResourceManager::GetRendererConfig().FramesInFlight; frameIndex++)
+			{
+				Ref<StorageBuffer> materialBuffer = m_RT_MaterialBufferSet->Get(frameIndex);
+				materialBuffer->SetData(&fallbackMaterial, sizeof(GPUMaterialData), 0);
+			}
+
+			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
+			CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
+
+			rtBindGroup->SetStorageBuffer(m_RT_MaterialBufferSet, RT_MATERIALS_BINDING);
+		}
+
 		if constexpr (ENABLE_RASTER_TEST_PATH)
 		{
 			// The old raster test path is intentionally disabled during the RT smoke test.
@@ -238,6 +264,40 @@ namespace cerberus
 	void PathTracerSceneRenderer::EndScene()
 	{
 
+	}
+
+
+
+	void PathTracerSceneRenderer::UpdateRTMaterialBuffer()
+	{
+		CORE_ASSERT(m_RT_MaterialBufferSet, "RT material buffer set is not initialized");
+
+		std::vector<GPUMaterialData> gpuMaterials;
+
+		if (m_RenderScene)
+		{
+			const auto& materialProxies = m_RenderScene->GetMaterialProxies();
+			gpuMaterials.reserve(materialProxies.size());
+
+			for (const MaterialProxy& materialProxy : materialProxies)
+			{
+				gpuMaterials.push_back(materialProxy.GPUData);
+			}
+		}
+
+		if (gpuMaterials.empty())
+		{
+			gpuMaterials.emplace_back();
+		}
+
+		const uint32_t uploadSize = static_cast<uint32_t>(gpuMaterials.size() * sizeof(GPUMaterialData));
+
+		for (uint32_t frameIndex = 0; frameIndex < ResourceManager::GetRendererConfig().FramesInFlight; frameIndex++)
+		{
+			Ref<StorageBuffer> materialBuffer = m_RT_MaterialBufferSet->Get(frameIndex);
+			CORE_ASSERT(materialBuffer, "Invalid RT material storage buffer");
+			materialBuffer->SetData(gpuMaterials.data(), uploadSize, 0);
+		}
 	}
 
 
@@ -490,6 +550,8 @@ namespace cerberus
 			// Nothing left to trace. Do not bind/trace an invalid TLAS.
 			if (!m_RenderScene->HasValidTLAS())
 				return;
+
+			UpdateRTMaterialBuffer();
 
 			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
 			CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
