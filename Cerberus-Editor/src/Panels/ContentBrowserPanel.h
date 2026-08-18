@@ -71,6 +71,7 @@ namespace cerberus
 
 		static ContentBrowserPanel& Get() { return *s_Instance; }
 	private:
+		Handle<Texture2D> LoadIcon(const std::filesystem::path& filepath);
 		void UpdateInput();
 		void RenderItems();
 		void RenderTopBar(float height);
@@ -102,12 +103,12 @@ namespace cerberus
 			return asset;
 		}
 	private:
-		Ref<Texture2D> m_FileIcon, m_DirectoryIcon, m_RefreshButtonIcon, m_BackButtonIcon;
+		Handle<Texture2D> m_FileIcon, m_DirectoryIcon, m_RefreshButtonIcon, m_BackButtonIcon;
 		Ref<DirectoryInfo> m_BaseDirectory; // AssetDirectory
 		Ref<DirectoryInfo> m_CurrentDirectory;
 		std::unordered_map<AssetHandle, Ref<DirectoryInfo>> m_Directories;
 		ContentBrowserItemList m_CurrentItemList;
-		std::unordered_map<std::string, Ref<Texture2D>> m_IconMap;
+		std::unordered_map<std::string, Handle<Texture2D>> m_IconMap;
 		bool m_IsAnyItemHovered;
 	private:
 		friend class ContentBrowserItem;

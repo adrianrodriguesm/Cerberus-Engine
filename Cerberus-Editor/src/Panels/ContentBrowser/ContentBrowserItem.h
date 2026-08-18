@@ -51,7 +51,7 @@ namespace cerberus
 			Directory, Asset
 		};
 	public:
-		ContentBrowserItem(ItemType type, AssetHandle id, const std::string& name, const Ref<Texture2D>& icon);
+		ContentBrowserItem(ItemType type, AssetHandle id, const std::string& name, Handle<Texture2D> icon);
 		virtual ~ContentBrowserItem() {}
 
 		void OnRenderBegin();
@@ -66,7 +66,7 @@ namespace cerberus
 		AssetHandle GetID() const { return m_ID; }
 		ItemType GetType() const { return m_Type; }
 		const std::string& GetName() const { return m_Name; }
-		const Ref<Texture2D>& GetIcon() const { return m_Icon; }
+		Handle<Texture2D> GetIcon() const { return m_Icon; }
 
 		virtual void Activate(CBItemActionResult& actionResult) = 0;
 		void StartRenaming();
@@ -102,7 +102,7 @@ namespace cerberus
 		ItemType m_Type;
 		AssetHandle m_ID;
 		std::string m_Name;
-		Ref<Texture2D> m_Icon;
+		Handle<Texture2D> m_Icon;
 
 		bool m_IsSelected = false;
 		bool m_IsRenaming = false;
@@ -127,7 +127,7 @@ namespace cerberus
 	class ContentBrowserDirectory : public ContentBrowserItem
 	{
 	public:
-		ContentBrowserDirectory(const Ref<DirectoryInfo>& directoryInfo, const Ref<Texture2D>& icon);
+		ContentBrowserDirectory(const Ref<DirectoryInfo>& directoryInfo, Handle<Texture2D> icon);
 		virtual ~ContentBrowserDirectory();
 
 		Ref<DirectoryInfo>& GetDirectoryInfo() { return m_DirectoryInfo; }
@@ -149,7 +149,7 @@ namespace cerberus
 	class ContentBrowserAsset : public ContentBrowserItem
 	{
 	public:
-		ContentBrowserAsset(const AssetMetadata& assetInfo, const Ref<Texture2D>& icon);
+		ContentBrowserAsset(const AssetMetadata& assetInfo, Handle<Texture2D> icon);
 		virtual ~ContentBrowserAsset();
 
 		const AssetMetadata& GetAssetInfo() const { return m_AssetInfo; }

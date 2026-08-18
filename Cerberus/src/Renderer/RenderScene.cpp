@@ -142,6 +142,33 @@ namespace cerberus
 			roughnessTextureIndex);
 	}
 
+	bool RenderScene::UpdateMaterialProxy(const Ref<MaterialAsset>& materialAsset)
+	{
+		if (!materialAsset)
+			return false;
+
+		uint32_t materialProxyIndex = InvalidMaterialProxyIndex;
+		const Ref<MaterialAsset> defaultMaterial = RendererResources::GetDefaultPBRMaterial();
+		if (materialAsset == defaultMaterial || materialAsset->Handle == 0)
+		{
+			materialProxyIndex = m_MeshRegister.DefaultMaterialProxyIndex;
+		}
+		else
+		{
+			auto materialIt = m_MeshRegister.MaterialRegistered.find(materialAsset->Handle);
+			if (materialIt == m_MeshRegister.MaterialRegistered.end())
+				return false;
+
+			materialProxyIndex = materialIt->second;
+		}
+
+		if (materialProxyIndex == InvalidMaterialProxyIndex || materialProxyIndex >= m_MeshRegister.MaterialProxies.size())
+			return false;
+
+		m_MeshRegister.MaterialProxies[materialProxyIndex].GPUData = BuildMaterialGPUData(materialAsset);
+		return true;
+	}
+
 	void RenderScene::ClearMaterialProxies()
 	{
 		ClearTextureProxies();
@@ -242,6 +269,46 @@ namespace cerberus
 			meshInstanceProxies.push_back(meshInstanceHandle);
 			m_MeshRegister.MeshInstanceMap[meshProxyHandle][submeshIndex].push_back(meshInstanceHandle);
 			m_MeshRegister.MeshInstanceCount++;
+		}
+
+		return true;
+	}
+
+	bool RenderScene::UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable)
+	{
+		if (!mesh)
+			return false;
+
+		auto registeredMesh = m_MeshRegister.MeshInstanceRegistered.find(mesh->Handle);
+		if (registeredMesh == m_MeshRegister.MeshInstanceRegistered.end())
+			return false;
+
+		const Ref<MeshSource> meshSource = mesh->GetMeshSource();
+		if (!meshSource)
+			return false;
+
+		for (Handle<MeshInstanceProxy> meshInstanceHandle : registeredMesh->second)
+		{
+			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
+			if (!meshInstance)
+				continue;
+
+			MeshSourceProxy* meshSourceProxy = ResourceManager::GetMeshSourceProxy(meshInstance->MeshSource);
+			if (!meshSourceProxy || meshInstance->SubmeshIndex >= meshSourceProxy->Submeshes.size())
+				continue;
+
+			const uint32_t materialSlot = meshSourceProxy->Submeshes[meshInstance->SubmeshIndex].MaterialIndex;
+			const Ref<MaterialAsset> materialAsset = ResolveMaterialAsset(meshSource, materialTable, materialSlot);
+			const uint32_t materialProxyIndex = RegisterMaterialProxy(materialAsset);
+			meshInstance->MaterialProxyIndex = materialProxyIndex;
+
+			if (meshInstance->RayTracingInstanceIndex != InvalidRayTracingInstanceIndex &&
+				meshInstance->RayTracingInstanceIndex < m_RayTracingInstances.size())
+			{
+				const MaterialProxy* materialProxy = GetMaterialProxy(materialProxyIndex);
+				CORE_ASSERT(materialProxy, "Updated mesh material has no MaterialProxy");
+				m_RayTracingInstances[meshInstance->RayTracingInstanceIndex].MaterialIndex = materialProxy->GPUMaterialIndex;
+			}
 		}
 
 		return true;
@@ -453,6 +520,7 @@ namespace cerberus
 				const SubmeshSourceProxy& submesh = meshSourceProxy->Submeshes[meshInstance->SubmeshIndex];
 
 				const uint32_t instanceCustomIndex = static_cast<uint32_t>(m_RayTracingInstances.size());
+				meshInstance->RayTracingInstanceIndex = instanceCustomIndex;
 				RayTracingInstanceData& instanceData = m_RayTracingInstances.emplace_back();
 				instanceData.VertexBufferAddress = vertexBufferAddress;
 				instanceData.IndexBufferAddress = indexBufferAddress;

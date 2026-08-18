@@ -7,6 +7,7 @@
 namespace cerberus
 {
 	class AccelerationStructure;
+	static constexpr uint32_t InvalidRayTracingInstanceIndex = 0xFFFFFFFFu;
 
 	struct SubmeshSourceProxy
 	{
@@ -79,6 +80,8 @@ namespace cerberus
 		uint32_t SubmeshIndex;
 		// Index into RenderScene's MaterialProxy table.
 		uint32_t MaterialProxyIndex = InvalidMaterialProxyIndex;
+		// Index used by gl_InstanceCustomIndexEXT in the current TLAS.
+		uint32_t RayTracingInstanceIndex = InvalidRayTracingInstanceIndex;
 		glm::mat4 WorldTransform;
 
 		MeshInstanceProxy(const Handle<MeshSourceProxy>& meshSource, uint32_t submeshIndex, uint32_t materialProxyIndex,

@@ -5,7 +5,6 @@
 #include "ImGui/ImGuiUI.h"
 #include "Utils/FileDialogs.h"
 #include "Utils/FileSystem.h"
-#include "Renderer/Renderer.h"
 namespace cerberus
 {
 	static std::filesystem::path s_AssetPath;
@@ -16,7 +15,12 @@ namespace cerberus
 	}
 	void ScenePropertiesPanel::OnImGuiRender(bool& isOpen)
 	{
-		ImGui::Begin("Properties Panel", &isOpen);
+		if (!ImGui::Begin("Properties Panel", &isOpen))
+		{
+			ImGui::End();
+			return;
+		}
+
 		m_SceneContext->m_Registry.each([&](const auto& entityID)
 		{
 			Entity entity = { entityID , m_SceneContext.get() };
@@ -246,7 +250,7 @@ namespace cerberus
 			ui::EndPropertyGrid();
 		});
 
-		DrawComponent<MeshComponent>("MESH", entity, [](auto& component)
+		DrawComponent<MeshComponent>("MESH", entity, [this](auto& component)
 		{
 			ui::BeginPropertyGrid();
 			auto& meshHandle = component.MeshHandle;
@@ -260,42 +264,41 @@ namespace cerberus
 				const auto& meshMaterialTable = mesh->GetMaterialTable();
 				uint32_t materialCount = meshMaterialTable->GetMaterialCount();
 				// New mesh update the material table
-				if (succeeded)
+				if (succeeded || !component.MaterialTable)
 					component.MaterialTable = CreateRef<MaterialTable>(meshMaterialTable);
 
 				ui::PropertyAssetReferenceSettings settings;
 				settings.AdvanceToNextColumn = false;
 				settings.WidthOffset = ImGui::GetStyle().ItemSpacing.x + 28.0f;
-#if OLD_RENDERER
 				for (size_t i = 0; i < materialCount; i++)
 				{
-					Ref<MaterialAsset> materialAsset =  AssetManager::GetAsset<MaterialAsset>(component.MaterialTable->GetMaterial(i));
-						
 					std::string label = fmt::format("[Material {0}]", i);
-					AssetHandle materialAssetHandle = materialAsset->Handle;
+					AssetHandle materialAssetHandle = component.MaterialTable->HasMaterial(static_cast<uint32_t>(i))
+						? component.MaterialTable->GetMaterial(static_cast<uint32_t>(i))
+						: AssetHandle(0);
 
-					ui::PropertyAssetReferenceTarget<MaterialAsset>(label.c_str(), materialAssetHandle, [i, materialTable = component.MaterialTable](Ref<MaterialAsset> materialAsset) mutable
+					const bool materialChanged = ui::PropertyAssetReferenceTarget<MaterialAsset>(label.c_str(), materialAssetHandle, [i, materialTable = component.MaterialTable](Ref<MaterialAsset> materialAsset) mutable
 					{
-						materialTable->SetMaterial(i, materialAsset->Handle);
+						materialTable->SetMaterial(static_cast<uint32_t>(i), materialAsset->Handle);
 					}, settings);
 
 
 					ImGui::SameLine();
 					float prevItemHeight = ImGui::GetItemRectSize().y;
-
+					bool materialCleared = false;
+					if (ImGui::Button(fmt::format("X##Material{}", i).c_str(), { prevItemHeight, prevItemHeight }))
 					{
-#if OLD_RENDERER
-						/** /
-						ui::ScopedFont boldFont(ImGui::GetIO().Fonts->Fonts[0]);
-						if (ImGui::Button("X", { prevItemHeight, prevItemHeight }))
-							component.MaterialTable->SetMaterial(i, Renderer::GetDefaultPBRMaterial()->Handle);
-						/**/
-#endif
+						if (component.MaterialTable->HasMaterial(static_cast<uint32_t>(i)))
+							component.MaterialTable->ClearMaterial(static_cast<uint32_t>(i));
+						materialCleared = true;
 					}
+
+					if ((materialChanged || materialCleared) && m_MaterialTableChangedCallback)
+						m_MaterialTableChangedCallback(mesh, component.MaterialTable);
+
 					ImGui::NextColumn();
 					
 				}
-#endif
 				ui::EndPropertyGrid();
 				ui::EndTreeNode();
 			}

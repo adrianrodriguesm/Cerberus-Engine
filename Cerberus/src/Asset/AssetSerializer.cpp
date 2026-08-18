@@ -194,8 +194,14 @@ namespace cerberus
 				Ref<MaterialAsset> defaultMaterial = RendererResources::GetDefaultPBRMaterial();
 				for (uint32_t i = 0; i < materialTable->GetMaterialCount(); i++)
 				{
-					Ref<MaterialAsset> material = AssetManager::GetAsset<MaterialAsset>(materialTable->GetMaterial(i));
-					AssetHandle handle = (material != defaultMaterial) ? material->Handle : (AssetHandle)0;
+					AssetHandle handle = 0;
+					if (materialTable->HasMaterial(i))
+					{
+						const AssetHandle sourceHandle = materialTable->GetMaterial(i);
+						Ref<MaterialAsset> material = AssetManager::GetAsset<MaterialAsset>(sourceHandle);
+						if (material && material != defaultMaterial)
+							handle = material->Handle;
+					}
 					out << YAML::Key << i << YAML::Value << handle;
 
 				}
@@ -289,18 +295,14 @@ namespace cerberus
 					if (meshComponent["MaterialTable"])
 					{
 						YAML::Node materialTableNode = meshComponent["MaterialTable"];
-						Ref<MaterialAsset> defaultPBRMaterial = RendererResources::GetDefaultPBRMaterial();
 						for (auto materialEntry : materialTableNode)
 						{
 							uint32_t index = materialEntry.first.as<uint32_t>();
 							AssetHandle materialAssetHandle = materialEntry.second.as<AssetHandle>();
 							if (materialAssetHandle && AssetManager::IsAssetHandleValid(materialAssetHandle))
 								mc.MaterialTable->SetMaterial(index, materialAssetHandle);
-							// OLD_RENDERER
-							/** /
 							else
-								mc.MaterialTable->SetMaterial(index, defaultPBRMaterial);
-							/**/
+								mc.MaterialTable->SetMaterial(index, 0);
 						}
 					}
 

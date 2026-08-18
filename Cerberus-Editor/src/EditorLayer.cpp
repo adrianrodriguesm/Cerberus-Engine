@@ -29,15 +29,31 @@ namespace cerberus
 		Ref<ScenePropertiesPanel> scenePropertiesPanel = CreateRef<ScenePropertiesPanel>(m_Scene);
 		Ref<SceneHierarchyPanel> sceneHierarchyPanel = CreateRef<SceneHierarchyPanel>(m_Scene);
 		Ref<ContentBrowserPanel> contentBrowserPanel = CreateRef<ContentBrowserPanel>();
+
+		AssetEditorManager::SetAssetModifiedCallback([this](const Ref<Asset>& asset)
+		{
+			if (!m_SceneRenderer || !asset || asset->GetAssetType() != AssetType::Material)
+				return;
+
+			m_SceneRenderer->OnMaterialAssetChanged(std::dynamic_pointer_cast<MaterialAsset>(asset));
+		});
+
+		scenePropertiesPanel->SetMaterialTableChangedCallback([this](const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable)
+		{
+			if (m_SceneRenderer)
+				m_SceneRenderer->UpdateMeshMaterials(mesh, materialTable);
+		});
+
 		sceneHierarchyPanel->SetSelectionChangedCallback(m_SelectionChangedCallback);
 		m_EditorPanelManager = CreateRef<EditorPanelManager>();
 		m_EditorPanelManager->AddPanel("ScenePropertiesPanel", { true, scenePropertiesPanel });
 		m_EditorPanelManager->AddPanel("SceneHierarchyPanel", { true, sceneHierarchyPanel });
-		//m_EditorPanelManager->AddPanel("ContentBrowserPanel", { true, contentBrowserPanel });
+		m_EditorPanelManager->AddPanel("ContentBrowserPanel", { true, contentBrowserPanel });
 	}
 
 	void EditorLayer::OnDetach()
 	{
+		AssetEditorManager::SetAssetModifiedCallback(nullptr);
 		m_EditorPanelManager->Shutdown();
 		AssetEditorManager::Shutdown();
 	}
@@ -49,9 +65,7 @@ namespace cerberus
 		UI_Viewport();
 		m_SceneRenderer->OnImGuiRender();
 		m_EditorPanelManager->OnImGuiRender();
-#if OLD_RENDERER
 		AssetEditorManager::OnImGuiRender();
-#endif
 	}
 
 	void EditorLayer::OnEvent(Event& event)
@@ -206,6 +220,23 @@ namespace cerberus
 				ImGui::Separator();
 				if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S")) { SaveScene(); }
 				ImGui::Separator();
+				ImGui::EndMenu();
+			}
+
+			if (ImGui::BeginMenu("Window"))
+			{
+				auto& panels = m_EditorPanelManager->GetPanels();
+				auto panelToggle = [&panels](const char* label, const char* panelID)
+				{
+					auto panelIt = panels.find(panelID);
+					if (panelIt != panels.end())
+						ImGui::MenuItem(label, nullptr, &panelIt->second.IsOpen);
+				};
+
+				panelToggle("Scene Properties", "ScenePropertiesPanel");
+				panelToggle("Scene Hierarchy", "SceneHierarchyPanel");
+				panelToggle("Content Browser", "ContentBrowserPanel");
+
 				ImGui::EndMenu();
 			}
 			ImGui::EndMenuBar();

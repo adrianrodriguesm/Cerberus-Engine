@@ -7,6 +7,12 @@ namespace cerberus::ui
 {
 	namespace
 	{
+		struct TextureIDCache
+		{
+			int ImGuiFrame = -1;
+			std::unordered_map<Handle<ImageView>, ImTextureID> TextureIDs;
+		};
+
 		ImTextureID GetImageViewTextureID(Handle<ImageView> imageViewHandle)
 		{
 			ImageView* imageView = ResourceManager::GetImageView(imageViewHandle);
@@ -15,11 +21,35 @@ namespace cerberus::ui
 
 			imageView->UpdateDescriptor();
 			const VkDescriptorImageInfo& imageInfo = imageView->GetImageDescriptorInfo();
-			if (!imageInfo.imageView)
+			if (!imageInfo.sampler || !imageInfo.imageView || imageInfo.imageLayout == VK_IMAGE_LAYOUT_UNDEFINED)
 				return nullptr;
 
-			return ImGui_ImplVulkan_AddTexture(imageInfo.sampler, imageInfo.imageView, imageInfo.imageLayout);
+			static TextureIDCache cache;
+			const int currentImGuiFrame = ImGui::GetFrameCount();
+			if (cache.ImGuiFrame != currentImGuiFrame)
+			{
+				cache.ImGuiFrame = currentImGuiFrame;
+				cache.TextureIDs.clear();
+			}
+
+			auto cachedTexture = cache.TextureIDs.find(imageViewHandle);
+			if (cachedTexture != cache.TextureIDs.end())
+				return cachedTexture->second;
+
+			const ImTextureID textureID = ImGui_ImplVulkan_AddTexture(
+				imageInfo.sampler,
+				imageInfo.imageView,
+				imageInfo.imageLayout);
+			if (textureID)
+				cache.TextureIDs.emplace(imageViewHandle, textureID);
+
+			return textureID;
 		}
+	}
+
+	ImTextureID GetTextureID(Handle<ImageView> imageView)
+	{
+		return GetImageViewTextureID(imageView);
 	}
 
 	ImTextureID GetTextureID(Handle<Texture2D> textureHandle)

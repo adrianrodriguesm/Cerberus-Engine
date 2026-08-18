@@ -23,11 +23,16 @@ namespace cerberus
 	class AssetEditorManager
 	{
 	public:
+		using AssetModifiedCallback = std::function<void(const Ref<Asset>&)>;
+
 		static void Init();
 		static void Shutdown();
 		static void OnImGuiRender();
 		static void OpenEditor(const Ref<Asset>& asset);
+		static void SetAssetModifiedCallback(AssetModifiedCallback callback);
+		static void NotifyAssetModified(const Ref<Asset>& asset);
 	private:
 		static std::unordered_map<AssetType, Scope<AssetEditorPanel>> s_AssetEditorPanels;
+		static AssetModifiedCallback s_AssetModifiedCallback;
 	};
 }

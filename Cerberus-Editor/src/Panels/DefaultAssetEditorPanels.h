@@ -14,8 +14,22 @@ namespace cerberus
 		virtual void Render() override;
 		virtual void OnClose() override;
 	private:
-		Ref<Texture2D> m_CheckerboardTex;
+		struct TextureSlotEditResult
+		{
+			bool Changed = false;
+			AssetHandle TextureAsset = 0;
+		};
+
+		Handle<Texture2D> GetTexturePreview(AssetHandle textureAsset, TextureColorSpace colorSpace);
+		TextureSlotEditResult DrawTextureSlot(const char* id, AssetHandle textureAsset, TextureColorSpace colorSpace);
+		void DestroyTexturePreviews();
+		void CommitChanges();
+
+		Handle<Texture2D> m_CheckerboardTex;
+		std::unordered_map<AssetHandle, Handle<Texture2D>> m_SRGBTexturePreviews;
+		std::unordered_map<AssetHandle, Handle<Texture2D>> m_LinearTexturePreviews;
 		Ref<MaterialAsset> m_Material;
+		bool m_IsDirty = false;
 	};
 
 	class MeshPanel : public AssetEditorPanel

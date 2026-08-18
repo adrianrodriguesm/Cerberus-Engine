@@ -31,6 +31,8 @@ namespace cerberus
 		virtual bool RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) override;
 		virtual bool UnregisterMesh(const Ref<Mesh>& mesh) override;
 		virtual void UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform) override;
+		virtual bool UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable) override;
+		virtual void OnMaterialAssetChanged(const Ref<MaterialAsset>& materialAsset) override;
 
 		virtual bool IsRegistered(const Ref<Mesh>& mesh) override;
 

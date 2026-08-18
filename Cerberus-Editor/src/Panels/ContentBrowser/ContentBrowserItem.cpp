@@ -14,7 +14,7 @@ namespace cerberus
 
 	
 
-	ContentBrowserItem::ContentBrowserItem(ItemType type, AssetHandle id, const std::string& name, const Ref<Texture2D>& icon)
+	ContentBrowserItem::ContentBrowserItem(ItemType type, AssetHandle id, const std::string& name, Handle<Texture2D> icon)
 		: m_Type(type), m_ID(id), m_Name(name), m_Icon(icon)
 	{
 	}
@@ -158,7 +158,7 @@ namespace cerberus
 		drawList->AddRect(itemRect.Min, itemRect.Max, colors::theme::propertyField, 6.0f, directory ? 0 : ImDrawFlags_RoundCornersBottom, 2.0f);
 	}
 
-	ContentBrowserDirectory::ContentBrowserDirectory(const Ref<DirectoryInfo>& directoryInfo, const Ref<Texture2D>& icon)
+	ContentBrowserDirectory::ContentBrowserDirectory(const Ref<DirectoryInfo>& directoryInfo, Handle<Texture2D> icon)
 		: ContentBrowserItem(ContentBrowserItem::ItemType::Directory, directoryInfo->Handle, directoryInfo->FilePath.filename().string(), icon), m_DirectoryInfo(directoryInfo)
 	{
 	}
@@ -281,7 +281,7 @@ namespace cerberus
 		}
 	}
 
-	ContentBrowserAsset::ContentBrowserAsset(const AssetMetadata& assetInfo, const Ref<Texture2D>& icon)
+	ContentBrowserAsset::ContentBrowserAsset(const AssetMetadata& assetInfo, Handle<Texture2D> icon)
 		: ContentBrowserItem(ContentBrowserItem::ItemType::Asset, assetInfo.Handle, assetInfo.FilePath.stem().string(), icon), m_AssetInfo(assetInfo)
 	{
 	}

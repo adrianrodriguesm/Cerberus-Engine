@@ -138,6 +138,7 @@ namespace cerberus::ui
         return ImColor::HSV(hue, sat, std::min(val * multiplier, 1.0f));
     }
 
+    ImTextureID GetTextureID(Handle<ImageView> imageView);
     ImTextureID GetTextureID(Handle<Texture2D> texture);
     ImTextureID GetTextureID(const Ref<Texture2D>& texture);
 
@@ -147,13 +148,15 @@ namespace cerberus::ui
             ImU32 tintNormal, ImU32 tintHovered, ImU32 tintPressed,
             ImVec2 rectMin, ImVec2 rectMax)
         {
-            auto* drawList = ImGui::GetWindowDrawList();
-            if (ImGui::IsItemActive())
-                drawList->AddImage(GetTextureID(imagePressed), rectMin, rectMax, ImVec2(0, 0), ImVec2(1, 1), tintPressed);
-            else if (ImGui::IsItemHovered())
-                drawList->AddImage(GetTextureID(imageHovered), rectMin, rectMax, ImVec2(0, 0), ImVec2(1, 1), tintHovered);
-            else
-                drawList->AddImage(GetTextureID(imageNormal), rectMin, rectMax, ImVec2(0, 0), ImVec2(1, 1), tintNormal);
+            const bool isActive = ImGui::IsItemActive();
+            const bool isHovered = ImGui::IsItemHovered();
+            const Handle<Texture2D> image = isActive ? imagePressed : (isHovered ? imageHovered : imageNormal);
+            const ImU32 tint = isActive ? tintPressed : (isHovered ? tintHovered : tintNormal);
+            const ImTextureID textureID = GetTextureID(image);
+            if (!textureID)
+                return;
+
+            ImGui::GetWindowDrawList()->AddImage(textureID, rectMin, rectMax, ImVec2(0, 0), ImVec2(1, 1), tint);
         };
 
         static void DrawButtonImage(Handle<Texture2D> imageNormal, Handle<Texture2D> imageHovered, Handle<Texture2D> imagePressed,
@@ -197,13 +200,15 @@ namespace cerberus::ui
             ImU32 tintNormal, ImU32 tintHovered, ImU32 tintPressed,
             ImVec2 rectMin, ImVec2 rectMax)
         {
-            auto* drawList = ImGui::GetWindowDrawList();
-            if (ImGui::IsItemActive())
-                drawList->AddImage(GetTextureID(imagePressed), rectMin, rectMax, ImVec2(0, 0), ImVec2(1, 1), tintPressed);
-            else if (ImGui::IsItemHovered())
-                drawList->AddImage(GetTextureID(imageHovered), rectMin, rectMax, ImVec2(0, 0), ImVec2(1, 1), tintHovered);
-            else
-                drawList->AddImage(GetTextureID(imageNormal), rectMin, rectMax, ImVec2(0, 0), ImVec2(1, 1), tintNormal);
+            const bool isActive = ImGui::IsItemActive();
+            const bool isHovered = ImGui::IsItemHovered();
+            const Ref<Texture2D>& image = isActive ? imagePressed : (isHovered ? imageHovered : imageNormal);
+            const ImU32 tint = isActive ? tintPressed : (isHovered ? tintHovered : tintNormal);
+            const ImTextureID textureID = GetTextureID(image);
+            if (!textureID)
+                return;
+
+            ImGui::GetWindowDrawList()->AddImage(textureID, rectMin, rectMax, ImVec2(0, 0), ImVec2(1, 1), tint);
         };
 
         static void DrawButtonImage(const Ref<Texture2D>& imageNormal, const Ref<Texture2D>& imageHovered, const Ref<Texture2D>& imagePressed,

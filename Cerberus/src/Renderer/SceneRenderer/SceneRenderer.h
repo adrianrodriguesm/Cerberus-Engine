@@ -41,6 +41,8 @@ namespace cerberus
 		virtual bool RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) { return false; }
 		virtual bool UnregisterMesh(const Ref<Mesh>& mesh) { return false; }
 		virtual void UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform) {}
+		virtual bool UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable) { return false; }
+		virtual void OnMaterialAssetChanged(const Ref<MaterialAsset>& materialAsset) {}
 
 		virtual void Render(const SceneRendererCamera& sceneRendererCamera) = 0;
 		

@@ -43,6 +43,8 @@ namespace cerberus
 		bool RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform);
 		bool UnregisterMesh(const Ref<Mesh>& mesh);
 		void UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform);
+		bool UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable);
+		bool UpdateMaterialProxy(const Ref<MaterialAsset>& materialAsset);
 		bool IsRegistered(const Ref<Mesh>& mesh) const;
 
 		// Builds pending BLAS and builds/updates TLAS when dirty.

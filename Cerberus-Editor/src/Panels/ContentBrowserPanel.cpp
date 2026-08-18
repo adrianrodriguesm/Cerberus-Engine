@@ -5,6 +5,8 @@
 #include "Utils/StringUtils.h"
 #include "Core/Input.h"
 #include "Utils/FileDialogs.h"
+#include "Renderer/ResourceManager.h"
+#include "Renderer/TextureAsset.h"
 namespace cerberus
 {
 	ContentBrowserPanel* ContentBrowserPanel::s_Instance;
@@ -14,29 +16,32 @@ namespace cerberus
 	ContentBrowserPanel::ContentBrowserPanel()
 	{
 		s_Instance = this;
-#if OLD_RENDERER
-		TextureProperties texProp;
-		texProp.SamplerWrap = SamplerWrap::Clamp;
-		m_DirectoryIcon = CreateRef<Texture2D>("Resources/Editor/Folder.png", texProp);
-		m_FileIcon = CreateRef<Texture2D>("Resources/Editor/File.png", texProp);
-		m_BackButtonIcon = CreateRef<Texture2D>("Resources/Editor/Back.png", texProp);
-		m_RefreshButtonIcon = CreateRef<Texture2D>("Resources/Editor/Refresh.png", texProp);
+		m_DirectoryIcon = LoadIcon("Resources/Editor/Folder.png");
+		m_FileIcon = LoadIcon("Resources/Editor/File.png");
+		m_BackButtonIcon = LoadIcon("Resources/Editor/Back.png");
+		m_RefreshButtonIcon = LoadIcon("Resources/Editor/Refresh.png");
 
-		m_IconMap[".fbx"] =		  CreateRef<Texture2D>("Resources/Editor/FBX-Icon.png", texProp);
-		m_IconMap[".obj"] =		  CreateRef<Texture2D>("Resources/Editor/OBJ-Icon.png", texProp);
-		m_IconMap[".gltf"] =	  CreateRef<Texture2D>("Resources/Editor/GLTF-Icon.png", texProp);
-		m_IconMap[".png"] =		  CreateRef<Texture2D>("Resources/Editor/PNG-Icon.png", texProp);
-		m_IconMap[".jpg"] =		  CreateRef<Texture2D>("Resources/Editor/JPG-Icon.png", texProp);
-		m_IconMap[".jpeg"] =	  CreateRef<Texture2D>("Resources/Editor/JPEG-Icon.png", texProp);
-		m_IconMap[".hdr"] =		  CreateRef<Texture2D>("Resources/Editor/HDR-Icon.png", texProp);
-		m_IconMap[".cmaterial"] = CreateRef<Texture2D>("Resources/Editor/Material-Icon.png", texProp);
-		m_IconMap[".cscene"] =    CreateRef<Texture2D>("Resources/Editor/Scene-Icon.png", texProp);
-		m_IconMap[".cmesh"] =	  CreateRef<Texture2D>("Resources/Editor/Mesh-Icon.png", texProp);
+		m_IconMap[".fbx"] = LoadIcon("Resources/Editor/FBX-Icon.png");
+		m_IconMap[".obj"] = LoadIcon("Resources/Editor/OBJ-Icon.png");
+		m_IconMap[".gltf"] = LoadIcon("Resources/Editor/GLTF-Icon.png");
+		m_IconMap[".png"] = LoadIcon("Resources/Editor/PNG-Icon.png");
+		m_IconMap[".jpg"] = LoadIcon("Resources/Editor/JPG-Icon.png");
+		m_IconMap[".jpeg"] = LoadIcon("Resources/Editor/JPEG-Icon.png");
+		m_IconMap[".hdr"] = LoadIcon("Resources/Editor/HDR-Icon.png");
+		m_IconMap[".cmaterial"] = LoadIcon("Resources/Editor/Material-Icon.png");
+		m_IconMap[".cscene"] = LoadIcon("Resources/Editor/Scene-Icon.png");
+		m_IconMap[".cmesh"] = LoadIcon("Resources/Editor/Mesh-Icon.png");
 
 		AssetHandle baseDirectoryHandle = ProcessDirectory(s_AssetDirectory, nullptr);
-		m_BaseDirectory = m_Directories[baseDirectoryHandle];
+		auto baseDirectoryIt = m_Directories.find(baseDirectoryHandle);
+		if (baseDirectoryIt == m_Directories.end() || !baseDirectoryIt->second)
+		{
+			NV_CORE_ERROR("[ContentBrowserPanel] Failed to process asset directory '{0}'", s_AssetDirectory);
+			return;
+		}
+
+		m_BaseDirectory = baseDirectoryIt->second;
 		ChangeDirectory(m_BaseDirectory);
-#endif
 	}
 
 	ContentBrowserPanel::~ContentBrowserPanel()
@@ -46,19 +51,63 @@ namespace cerberus
 	void ContentBrowserPanel::Shutdown()
 	{
 		m_CurrentItemList.Clear();
+
+		auto destroyIcon = [](Handle<Texture2D>& icon)
+		{
+			if (icon.IsValid())
+				ResourceManager::DestroyTexture2D(icon);
+
+			icon = {};
+		};
+
+		for (auto& [extension, icon] : m_IconMap)
+			destroyIcon(icon);
+
 		m_IconMap.clear();
+		destroyIcon(m_DirectoryIcon);
+		destroyIcon(m_FileIcon);
+		destroyIcon(m_BackButtonIcon);
+		destroyIcon(m_RefreshButtonIcon);
+
+		m_CurrentDirectory = nullptr;
+		m_BaseDirectory = nullptr;
 		m_Directories.clear();
-#if OLD_RENDERER
-		m_DirectoryIcon->GetImage()->Release();
-		m_FileIcon->GetImage()->Release();
-		m_BackButtonIcon->GetImage()->Release();
-		m_RefreshButtonIcon->GetImage()->Release();
-#endif
+
+		if (s_Instance == this)
+			s_Instance = nullptr;
+	}
+
+	Handle<Texture2D> ContentBrowserPanel::LoadIcon(const std::filesystem::path& filepath)
+	{
+		Ref<TextureAsset> textureAsset = AssetManager::GetAsset<TextureAsset>(filepath);
+		if (!textureAsset || !textureAsset->Loaded())
+		{
+			NV_CORE_ERROR("[ContentBrowserPanel] Failed to load icon '{0}'", filepath);
+			return {};
+		}
+
+		Handle<Texture2D> texture = ResourceManager::CreateTexture2D(textureAsset, TextureColorSpace::SRGB);
+		if (!texture.IsValid())
+			NV_CORE_ERROR("[ContentBrowserPanel] Failed to create GPU texture for icon '{0}'", filepath);
+
+		return texture;
 	}
 
 	void ContentBrowserPanel::OnImGuiRender(bool& isOpen)
 	{
-		ImGui::Begin("Content Browser", &isOpen, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar);
+		if (!ImGui::Begin("Content Browser", &isOpen, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar))
+		{
+			ImGui::End();
+			return;
+		}
+
+		if (!m_CurrentDirectory)
+		{
+			ImGui::TextDisabled("The asset directory is unavailable.");
+			ImGui::End();
+			return;
+		}
+
 		{
 			ImGuiTableFlags tableFlags = ImGuiTableFlags_Resizable
 				| ImGuiTableFlags_SizingFixedFit
@@ -105,13 +154,24 @@ namespace cerberus
 	}
 	void ContentBrowserPanel::Refresh()
 	{
+		const std::filesystem::path currentDirectoryPath = m_CurrentDirectory
+			? m_CurrentDirectory->FilePath
+			: s_AssetDirectory;
+
 		m_CurrentItemList.Clear();
 		m_Directories.clear();
 
-		Ref<DirectoryInfo> currentDirectory = m_CurrentDirectory;
 		AssetHandle baseDirectoryHandle = ProcessDirectory(s_AssetDirectory, nullptr);
-		m_BaseDirectory = m_Directories[baseDirectoryHandle];
-		m_CurrentDirectory = GetDirectoryInfo(currentDirectory->FilePath);
+		auto baseDirectoryIt = m_Directories.find(baseDirectoryHandle);
+		if (baseDirectoryIt == m_Directories.end() || !baseDirectoryIt->second)
+		{
+			m_BaseDirectory = nullptr;
+			m_CurrentDirectory = nullptr;
+			return;
+		}
+
+		m_BaseDirectory = baseDirectoryIt->second;
+		m_CurrentDirectory = GetDirectoryInfo(currentDirectoryPath);
 		// Our directory was removed
 		if (!m_CurrentDirectory)
 			m_CurrentDirectory = m_BaseDirectory;
@@ -216,7 +276,7 @@ namespace cerberus
 			{
 				ui::ScopedStyle spacing(ImGuiStyleVar_ItemSpacing, ImVec2(2.0f, 0.0f));
 
-				auto contenBrowserButton = [height](const char* labelId, const Ref<Texture2D>& icon)
+				auto contenBrowserButton = [height](const char* labelId, Handle<Texture2D> icon)
 				{
 					const ImU32 buttonCol = colors::theme::backgroundDark;
 					const ImU32 buttonColP = ui::ColourWithMultipliedValue(colors::theme::backgroundDark, 0.8f);

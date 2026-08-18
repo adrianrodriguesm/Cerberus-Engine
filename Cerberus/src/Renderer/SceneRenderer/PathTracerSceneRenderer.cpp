@@ -8,6 +8,8 @@
 #include "Renderer/RenderQueueManager.h"
 #include "Renderer/RendererContext.h"
 #include "Renderer/VulkanExtensions.h"
+#include "ImGui/ImGuiUI.h"
+#include "Utils/StringUtils.h"
 // TODO: Remove these to (only for test)
 #include "Renderer/ShaderCompiler.h"
 
@@ -659,8 +661,36 @@ namespace cerberus
 		m_RenderScene->UpdateMeshTransform(mesh, transform);
 	}
 
+	bool PathTracerSceneRenderer::UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable)
+	{
+		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+		return m_RenderScene->UpdateMeshMaterials(mesh, materialTable);
+	}
+
+	void PathTracerSceneRenderer::OnMaterialAssetChanged(const Ref<MaterialAsset>& materialAsset)
+	{
+		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+		m_RenderScene->UpdateMaterialProxy(materialAsset);
+	}
+
 	void PathTracerSceneRenderer::OnImGuiRender()
 	{
+		ImGui::Begin("Renderer");
+		{
+			if (ui::PropertyGridHeader("Statistics", true))
+			{
+				ImGui::Separator();
+				ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+				GPUMemoryStats memoryStats = ResourceAllocator::GetStats();
+				std::string used = utils::BytesToString(memoryStats.Used);
+				std::string free = utils::BytesToString(memoryStats.Free);
+				ImGui::Text("Used VRAM: %s", used.c_str());
+				ImGui::Text("Free VRAM: %s", free.c_str());
+				ui::EndTreeNode();
+			}
+
+		}
+		ImGui::End();
 	}
 
 	Handle<ImageView> PathTracerSceneRenderer::GetFinalPassImage() const
