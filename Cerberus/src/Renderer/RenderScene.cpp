@@ -24,6 +24,27 @@ namespace cerberus
 		return &m_MeshRegister.MaterialProxies[materialProxyIndex];
 	}
 
+	void RenderScene::SetSkyLight(const Ref<EnvironmentMap>& environment, float intensity, uint32_t sampleLOD)
+	{
+		const Ref<EnvironmentMap> resolvedEnvironment = environment
+			? environment
+			: RendererResources::GetEmptyEnvironmentMap();
+
+		m_SkyLight.RadianceMap = resolvedEnvironment && resolvedEnvironment->RadianceMap.IsValid()
+			? resolvedEnvironment->RadianceMap
+			: RendererResources::GetBlackCubeTexture();
+		m_SkyLight.IrradianceMap = resolvedEnvironment && resolvedEnvironment->IrradianceMap.IsValid()
+			? resolvedEnvironment->IrradianceMap
+			: RendererResources::GetBlackCubeTexture();
+		m_SkyLight.Intensity = glm::max(intensity, 0.0f);
+
+		TextureCube* radianceMap = ResourceManager::GetTextureCube(m_SkyLight.RadianceMap);
+		const uint32_t maxLOD = radianceMap && radianceMap->GetMipLevelCount() > 0
+			? radianceMap->GetMipLevelCount() - 1
+			: 0;
+		m_SkyLight.SampleLOD = static_cast<float>(glm::min(sampleLOD, maxLOD));
+	}
+
 	Ref<MaterialAsset> RenderScene::ResolveMaterialAsset(
 		const Ref<MeshSource>& meshSource,
 		const Ref<MaterialTable>& materialTable,

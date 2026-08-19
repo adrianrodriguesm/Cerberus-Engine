@@ -12,6 +12,8 @@
 #include "Renderer/RendererRuntimeState.h"
 #include "Renderer/RendererResources.h"
 #include "Renderer/ImGuiRenderer.h"
+#include "Renderer/TextureAsset.h"
+#include "Renderer/ShaderCompiler.h"
 
 namespace cerberus
 {
@@ -23,6 +25,277 @@ namespace cerberus
 	};
 
 	static RendererData* s_Data;
+
+	namespace utils
+	{
+		uint32_t FindImageBinding(
+			const std::vector<BindGroupLayout::ImageBinding>& bindings,
+			const std::string& name)
+		{
+			for (const BindGroupLayout::ImageBinding& binding : bindings)
+			{
+				if (binding.Name == name)
+					return binding.BindingPoint;
+			}
+
+			CORE_ASSERT(false, "Environment compute shader binding was not reflected");
+			return 0;
+		}
+
+		Handle<ImageView> CreateEnvironmentCubeMipView(Handle<TextureCube> textureHandle, uint32_t mip)
+		{
+			TextureCube* texture = ResourceManager::GetTextureCube(textureHandle);
+			CORE_ASSERT(texture, "Invalid environment TextureCube");
+			CORE_ASSERT(mip < texture->GetMipLevelCount(), "Invalid environment cube mip");
+
+			ImageViewProperties viewProperties{};
+			viewProperties.Image = texture->GetImage();
+			viewProperties.BaseMip = mip;
+			viewProperties.MipCount = 1;
+			viewProperties.BaseLayer = 0;
+			viewProperties.LayerCount = 6;
+			viewProperties.ViewType = ImageViewType::ImageCube;
+			viewProperties.SamplerSpec.ShaderResource = false;
+
+			Handle<ImageView> imageView = ResourceManager::CreateImageView(viewProperties);
+			ImageView* resource = ResourceManager::GetImageView(imageView);
+			CORE_ASSERT(resource, "Failed to create environment cube mip view");
+			resource->Invalidate();
+			resource->UpdateDescriptor();
+			return imageView;
+		}
+
+		void InsertEnvironmentComputeReadBarrier(Handle<TextureCube> textureHandle)
+		{
+			TextureCube* texture = ResourceManager::GetTextureCube(textureHandle);
+			CORE_ASSERT(texture, "Invalid environment TextureCube");
+
+			Image* image = ResourceManager::GetImage(texture->GetImage());
+			CORE_ASSERT(image, "Environment TextureCube has an invalid image");
+
+			VkImageSubresourceRange range{};
+			range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			range.baseMipLevel = 0;
+			range.levelCount = texture->GetMipLevelCount();
+			range.baseArrayLayer = 0;
+			range.layerCount = 6;
+
+			TransientCommandBuffer commandBuffer = Renderer::BeginTransientCommandBuffer();
+			utils::InsertImageMemoryBarrier(
+				commandBuffer,
+				image->GetHandle(),
+				VK_ACCESS_SHADER_WRITE_BIT,
+				VK_ACCESS_SHADER_READ_BIT,
+				VK_IMAGE_LAYOUT_GENERAL,
+				VK_IMAGE_LAYOUT_GENERAL,
+				VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+				range);
+			commandBuffer.SubmitAndWait();
+		}
+
+		Ref<EnvironmentMap> CreateEnvironmentMapResource(const std::string& filepath)
+		{
+			const RendererConfig& config = Renderer::GetRendererConfig();
+
+			TextureMetadata sourceMetadata;
+			sourceMetadata.DebugName = utils::GetFilename(filepath);
+			sourceMetadata.FilePath = filepath;
+			sourceMetadata.TextureType = TextureType::Texture2D;
+			sourceMetadata.SamplerWrap = SamplerWrap::Clamp;
+			sourceMetadata.SamplerFilter = SamplerFilter::Linear;
+			sourceMetadata.GenerateMips = false;
+			sourceMetadata.SRGB = false;
+
+			Ref<TextureAsset> sourceAsset = CreateRef<TextureAsset>(sourceMetadata);
+			if (!sourceAsset->Loaded())
+			{
+				NV_CORE_ERROR("Failed to load environment map source: {0}", filepath);
+				return nullptr;
+			}
+
+			if (sourceAsset->GetFormat() != ImageFormat::RGBA32F)
+			{
+				NV_CORE_ERROR("Environment map must be an HDR texture: {0}", filepath);
+				return nullptr;
+			}
+
+			Handle<Texture2D> equirectangularTexture =
+				ResourceManager::CreateTexture2D(sourceAsset, TextureColorSpace::Linear);
+
+			TextureProperties cubeProperties;
+			cubeProperties.DebugName = "Environment Map Unfiltered";
+			cubeProperties.SamplerWrap = SamplerWrap::Clamp;
+			cubeProperties.SamplerFilter = SamplerFilter::Linear;
+			cubeProperties.GenerateMips = true;
+			cubeProperties.Storage = true;
+
+			Handle<TextureCube> unfilteredMap = ResourceManager::CreateTextureCube(
+				ImageFormat::RGBA32F,
+				config.EnvironmentMapResolution,
+				config.EnvironmentMapResolution,
+				cubeProperties);
+
+			// Equirectangular HDR -> unfiltered cubemap mip 0.
+			{
+				Ref<Shader> shader = RendererResources::GetShaderLibrary().Get("EquirectangularToCubeMap");
+				BindGroupLayout::BindGroupLayoutInfo layoutInfo = ShaderReflection::ReflectLayoutInfo(shader, 0);
+				const uint32_t outputBinding = FindImageBinding(layoutInfo.ImageStorages, "o_CubeMap");
+				const uint32_t inputBinding = FindImageBinding(layoutInfo.ImageSamplers, "u_EquirectangularTex");
+
+				Handle<BindGroupLayout> layout = ResourceManager::CreateBindGroupLayout(layoutInfo);
+				BindGroupSpecification bindGroupSpecification;
+				bindGroupSpecification.BindGroupLayout = layout;
+				bindGroupSpecification.Lifetime = DescriptorAllocationLifetime::Transient;
+				Handle<BindGroup> bindGroupHandle = ResourceManager::CreateBindGroup(bindGroupSpecification);
+
+				Handle<ImageView> outputMipView = CreateEnvironmentCubeMipView(unfilteredMap, 0);
+				Texture2D* inputTexture = ResourceManager::GetTexture2D(equirectangularTexture);
+				BindGroup* bindGroup = ResourceManager::GetBindGroup(bindGroupHandle);
+				CORE_ASSERT(inputTexture && bindGroup, "Failed to prepare environment conversion resources");
+
+				bindGroup->SetImageView(outputMipView, outputBinding);
+				bindGroup->SetImageView(inputTexture->GetImageView(), inputBinding);
+				bindGroup->Update(0);
+
+				Ref<ComputePipeline> pipeline = CreateRef<ComputePipeline>(shader);
+				RenderQueueManager::ExecuteRenderQueue();
+				pipeline->Begin();
+				const uint32_t groups = (config.EnvironmentMapResolution + 31u) / 32u;
+				pipeline->Dispatch(groups, groups, 6, bindGroup->GetHandle(0));
+				pipeline->End();
+
+				ResourceManager::DestroyBindGroup(bindGroupHandle);
+				ResourceManager::DestroyBindGroupLayout(layout);
+				ResourceManager::DestroyImageView(outputMipView);
+			}
+
+			TextureCube* unfilteredTexture = ResourceManager::GetTextureCube(unfilteredMap);
+			CORE_ASSERT(unfilteredTexture, "Failed to create unfiltered environment map");
+			unfilteredTexture->GenerateMips(false);
+
+			cubeProperties.DebugName = "Environment Map Filtered";
+			Handle<TextureCube> filteredMap = ResourceManager::CreateTextureCube(
+				ImageFormat::RGBA32F,
+				config.EnvironmentMapResolution,
+				config.EnvironmentMapResolution,
+				cubeProperties);
+
+			// GGX-filter every radiance mip.
+			{
+				Ref<Shader> shader = RendererResources::GetShaderLibrary().Get("EnvironmentMipFilter");
+				BindGroupLayout::BindGroupLayoutInfo layoutInfo = ShaderReflection::ReflectLayoutInfo(shader, 0);
+				const uint32_t outputBinding = FindImageBinding(layoutInfo.ImageStorages, "outputTexture");
+				const uint32_t inputBinding = FindImageBinding(layoutInfo.ImageSamplers, "inputTexture");
+
+				Handle<BindGroupLayout> layout = ResourceManager::CreateBindGroupLayout(layoutInfo);
+				Ref<ComputePipeline> pipeline = CreateRef<ComputePipeline>(shader);
+				RenderQueueManager::ExecuteRenderQueue();
+
+				TextureCube* filteredTexture = ResourceManager::GetTextureCube(filteredMap);
+				CORE_ASSERT(filteredTexture, "Failed to create filtered environment map");
+				const uint32_t mipCount = filteredTexture->GetMipLevelCount();
+				const float deltaRoughness = 1.0f / glm::max(static_cast<float>(mipCount) - 1.0f, 1.0f);
+
+				std::vector<Handle<BindGroup>> bindGroups;
+				std::vector<Handle<ImageView>> mipViews;
+				bindGroups.reserve(mipCount);
+				mipViews.reserve(mipCount);
+
+				for (uint32_t mip = 0; mip < mipCount; mip++)
+				{
+					BindGroupSpecification bindGroupSpecification;
+					bindGroupSpecification.BindGroupLayout = layout;
+					bindGroupSpecification.Lifetime = DescriptorAllocationLifetime::Transient;
+					Handle<BindGroup> bindGroupHandle = ResourceManager::CreateBindGroup(bindGroupSpecification);
+					Handle<ImageView> mipView = CreateEnvironmentCubeMipView(filteredMap, mip);
+
+					BindGroup* bindGroup = ResourceManager::GetBindGroup(bindGroupHandle);
+					CORE_ASSERT(bindGroup, "Failed to create environment filter bind group");
+					bindGroup->SetImageView(mipView, outputBinding);
+					bindGroup->SetImageView(unfilteredTexture->GetImageView(), inputBinding);
+					bindGroup->Update(0);
+
+					bindGroups.push_back(bindGroupHandle);
+					mipViews.push_back(mipView);
+				}
+
+				pipeline->Begin();
+				for (uint32_t mip = 0; mip < mipCount; mip++)
+				{
+					const uint32_t mipSize = glm::max(1u, config.EnvironmentMapResolution >> mip);
+					const uint32_t groups = glm::max(1u, (mipSize + 31u) / 32u);
+					const float roughness = glm::max(static_cast<float>(mip) * deltaRoughness, 0.05f);
+					pipeline->SetPushConstants(&roughness, sizeof(float));
+
+					BindGroup* bindGroup = ResourceManager::GetBindGroup(bindGroups[mip]);
+					pipeline->Dispatch(groups, groups, 6, bindGroup->GetHandle(0));
+				}
+				pipeline->End();
+
+				for (Handle<BindGroup> bindGroup : bindGroups)
+					ResourceManager::DestroyBindGroup(bindGroup);
+				for (Handle<ImageView> mipView : mipViews)
+					ResourceManager::DestroyImageView(mipView);
+				ResourceManager::DestroyBindGroupLayout(layout);
+			}
+
+			InsertEnvironmentComputeReadBarrier(filteredMap);
+
+			TextureProperties irradianceProperties = cubeProperties;
+			irradianceProperties.DebugName = "Environment Map Irradiance";
+			irradianceProperties.GenerateMips = false;
+			Handle<TextureCube> irradianceMap = ResourceManager::CreateTextureCube(
+				ImageFormat::RGBA32F,
+				config.IrradianceMapSize,
+				config.IrradianceMapSize,
+				irradianceProperties);
+
+			// Diffuse irradiance convolution.
+			{
+				Ref<Shader> shader = RendererResources::GetShaderLibrary().Get("EnvironmentIrradiance");
+				BindGroupLayout::BindGroupLayoutInfo layoutInfo = ShaderReflection::ReflectLayoutInfo(shader, 0);
+				const uint32_t outputBinding = FindImageBinding(layoutInfo.ImageStorages, "o_IrradianceMap");
+				const uint32_t inputBinding = FindImageBinding(layoutInfo.ImageSamplers, "u_RadianceMap");
+
+				Handle<BindGroupLayout> layout = ResourceManager::CreateBindGroupLayout(layoutInfo);
+				BindGroupSpecification bindGroupSpecification;
+				bindGroupSpecification.BindGroupLayout = layout;
+				bindGroupSpecification.Lifetime = DescriptorAllocationLifetime::Transient;
+				Handle<BindGroup> bindGroupHandle = ResourceManager::CreateBindGroup(bindGroupSpecification);
+
+				TextureCube* filteredTexture = ResourceManager::GetTextureCube(filteredMap);
+				TextureCube* irradianceTexture = ResourceManager::GetTextureCube(irradianceMap);
+				BindGroup* bindGroup = ResourceManager::GetBindGroup(bindGroupHandle);
+				CORE_ASSERT(filteredTexture && irradianceTexture && bindGroup, "Failed to prepare irradiance resources");
+
+				bindGroup->SetImageView(irradianceTexture->GetImageView(), outputBinding);
+				bindGroup->SetImageView(filteredTexture->GetImageView(), inputBinding);
+				bindGroup->Update(0);
+
+				Ref<ComputePipeline> pipeline = CreateRef<ComputePipeline>(shader);
+				RenderQueueManager::ExecuteRenderQueue();
+				pipeline->Begin();
+				pipeline->SetPushConstants(&config.IrradianceMapComputeSamples, sizeof(uint32_t));
+				const uint32_t groups = (config.IrradianceMapSize + 31u) / 32u;
+				pipeline->Dispatch(groups, groups, 6, bindGroup->GetHandle(0));
+				pipeline->End();
+
+				ResourceManager::DestroyBindGroup(bindGroupHandle);
+				ResourceManager::DestroyBindGroupLayout(layout);
+			}
+
+			InsertEnvironmentComputeReadBarrier(irradianceMap);
+			ResourceManager::DestroyTextureCube(unfilteredMap);
+
+			Ref<EnvironmentMap> environment = CreateRef<EnvironmentMap>(
+				equirectangularTexture,
+				filteredMap,
+				irradianceMap);
+			environment->DebugName = utils::GetFilename(filepath);
+			return environment;
+		}
+	}
 
 	void Renderer::Init()
 	{
@@ -489,222 +762,8 @@ namespace cerberus
 
 	Ref<EnvironmentMap> Renderer::CreateEnvironmentMap(const std::string& filepath)
 	{
-#if 0
-		// Tiering settings
-		const uint32_t environmentMapResolution = 1024;
-		const uint32_t irradianceMapComputeSamples = 1024;
-		const uint32_t irradianceMapSize = 32;
-		////////////////////////////////////////////
-		// Convert equirectangular to cubemap
-		////////////////////////////////////////////
-		TextureProperties envEquirectProperties;
-		Ref<Texture2D> envEquirect = CreateRef<Texture2D>(filepath, envEquirectProperties);
-		CORE_ASSERT(envEquirect->GetFormat() == ImageFormat::RGBA32F, "Texture is not HDR!");
-		TextureProperties properties;
-		properties.DebugName = "Environment Map Unfiltered";
-		Ref<TextureCube> envUnfiltered = CreateRef<TextureCube>(ImageFormat::RGBA32F, environmentMapResolution, environmentMapResolution, properties);
-		{
-			// Get compute shader and create pipeline
-			Ref<Shader> equirectangularConversionShader = Renderer::GetShaderLibrary().Get("EquirectangularToCubeMap");
-			Ref<ComputePipeline> equirectangularConversionPipeline = CreateRef<ComputePipeline>(equirectangularConversionShader);
-			Renderer::Submit([equirectangularConversionPipeline, envEquirect, envUnfiltered, environmentMapResolution]()
-			{
-				VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-				Ref<Shader> shader = equirectangularConversionPipeline->GetShader();
-				// Descriptors
-				std::array<VkWriteDescriptorSet, 2> writeDescriptors;
-				VkDescriptorSet descriptorSet = Renderer::AllocateDescriptorSet(shader->GetDescriptorSetLayout(0));
-				// Set descriptor for the Output Cubemap
-				writeDescriptors[0] = *shader->GetWriteDescriptorSet("o_CubeMap", 0);
-				writeDescriptors[0].dstSet = descriptorSet;
-				writeDescriptors[0].pImageInfo = &envUnfiltered->GetVulkanDescriptorInfo();
-				// Set descriptor for the Input Equirectangular texture2D
-				writeDescriptors[1] = *shader->GetWriteDescriptorSet("u_EquirectangularTex", 0);
-				writeDescriptors[1].dstSet = descriptorSet;
-				writeDescriptors[1].pImageInfo = &envEquirect->GetVulkanDescriptorInfo();
-				// Update descriptors
-				vkUpdateDescriptorSets(device, (uint32_t)writeDescriptors.size(), writeDescriptors.data(), 0, NULL);
-				// Execute Compute Shader
-				equirectangularConversionPipeline->Begin();
-				{
-					uint32_t wordGroupXY = environmentMapResolution / 32;
-					equirectangularConversionPipeline->Dispatch(wordGroupXY, wordGroupXY, 6, descriptorSet);
-				}
-				equirectangularConversionPipeline->End();
-				// Generate Mips
-				envUnfiltered->GenerateMips(true);
-			});
-		}
-		////////////////////////////////////////////
-		// Filter specular environment map
-		////////////////////////////////////////////
-		properties.DebugName = "Environment Map Filtered";
-		Ref<TextureCube> envFiltered = CreateRef<TextureCube>(ImageFormat::RGBA32F, environmentMapResolution, environmentMapResolution, properties);
-		{
-			// Get compute shader and create pipeline
-			Ref<Shader> environmentFilteringShader = Renderer::GetShaderLibrary().Get("EnvironmentMipFilter");
-			Ref<ComputePipeline> enviromentMipFilteringPipeline = CreateRef<ComputePipeline>(environmentFilteringShader);
-			Renderer::Submit([enviromentMipFilteringPipeline, envFiltered, envUnfiltered, environmentMapResolution]()
-			{
-				VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-				Ref<Shader> shader = enviromentMipFilteringPipeline->GetShader();
-				uint32_t mipCount = envFiltered->GetMipLevelCount();
-				// Images infos
-				VkDescriptorImageInfo filteredImageInfo = envFiltered->GetVulkanDescriptorInfo();
-				VkDescriptorImageInfo unfilteredImageInfo = envUnfiltered->GetVulkanDescriptorInfo();
-				
-				std::vector<VkWriteDescriptorSet> writeDescriptors(mipCount * 2);
-				std::vector<VkDescriptorImageInfo> mipImageInfos(mipCount);
-				std::vector<VkDescriptorSet> descriptorSets(mipCount);
-
-
-				for (uint32_t i = 0; i < mipCount; i++)
-				{
-					// Allocate descriptor
-					descriptorSets[i] = Renderer::AllocateDescriptorSet(shader->GetDescriptorSetLayout(0));
-
-					VkDescriptorImageInfo& mipImageInfo = mipImageInfos[i];
-					mipImageInfo = filteredImageInfo;
-					mipImageInfo.imageView = envFiltered->CreateImageViewSingleMip(i);
-					// Write decriptor related to mip of the texture to filter
-					writeDescriptors[i * 2 + 0] = *shader->GetWriteDescriptorSet("outputTexture", 0);
-					writeDescriptors[i * 2 + 0].dstSet = descriptorSets[i];
-					writeDescriptors[i * 2 + 0].pImageInfo = &mipImageInfo;
-					// Write decriptor of unfiltered texture
-					writeDescriptors[i * 2 + 1] = *shader->GetWriteDescriptorSet("inputTexture", 0);
-					writeDescriptors[i * 2 + 1].dstSet = descriptorSets[i];
-					writeDescriptors[i * 2 + 1].pImageInfo = &unfilteredImageInfo;
-				}
-				// Update descriptors
-				vkUpdateDescriptorSets(device, (uint32_t)writeDescriptors.size(), writeDescriptors.data(), 0, NULL);
-
-				// Compute Pass
-				enviromentMipFilteringPipeline->Begin();
-				{
-					// Pre-filter rest of the mip-chain
-					float deltaRoughness = 1.0f / glm::max((float)mipCount - 1.0f, 1.0f);
-					for (uint32_t i = 0, size = environmentMapResolution; i < mipCount; i++, size /= 2)
-					{
-						uint32_t numGroups = glm::max(1u, (uint32_t)(size / 32));
-						float roughness = i * deltaRoughness;
-						roughness = glm::max(roughness, 0.05f);
-						enviromentMipFilteringPipeline->SetPushConstants(&roughness, sizeof(float));
-						// Sent the descriptor set of each mip invidually in order to render into it
-						enviromentMipFilteringPipeline->Dispatch(numGroups, numGroups, 6, descriptorSets[i]);
-					}
-				}
-				enviromentMipFilteringPipeline->End();
-				// Image View Per Mip
-				for (auto& mip : mipImageInfos)
-					vkDestroyImageView(device, mip.imageView, nullptr);
-			});
-		}
-		////////////////////////////////////////////
-		// Diffuse irradiance environment map
-		////////////////////////////////////////////
-		properties.DebugName = "Environment Map Irradiance";
-		Ref<TextureCube> envIrradiance = CreateRef<TextureCube>(ImageFormat::RGBA32F, irradianceMapSize, irradianceMapSize, properties);
-		{
-			// Get compute shader and create pipeline
-			Ref<Shader> environmentIrradianceShader = Renderer::GetShaderLibrary().Get("EnvironmentIrradiance");
-			Ref<ComputePipeline> enviromentIrradiancePipeline = CreateRef<ComputePipeline>(environmentIrradianceShader);
-			Renderer::Submit([enviromentIrradiancePipeline, envIrradiance, envFiltered, irradianceMapSize, irradianceMapComputeSamples]()
-			{
-				VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-				Ref<Shader> shader = enviromentIrradiancePipeline->GetShader();
-
-				// Descriptors
-				std::array<VkWriteDescriptorSet, 2> writeDescriptors;
-				VkDescriptorSet descriptorSet = Renderer::AllocateDescriptorSet(shader->GetDescriptorSetLayout(0));
-				// Set descriptor for the Output Cubemap
-				writeDescriptors[0] = *shader->GetWriteDescriptorSet("o_IrradianceMap", 0);
-				writeDescriptors[0].dstSet = descriptorSet;
-				writeDescriptors[0].pImageInfo = &envIrradiance->GetVulkanDescriptorInfo();
-				// Set descriptor for the Input Equirectangular texture2D
-				writeDescriptors[1] = *shader->GetWriteDescriptorSet("u_RadianceMap", 0);
-				writeDescriptors[1].dstSet = descriptorSet;
-				writeDescriptors[1].pImageInfo = &envFiltered->GetVulkanDescriptorInfo();
-				// Update descriptors
-				vkUpdateDescriptorSets(device, (uint32_t)writeDescriptors.size(), writeDescriptors.data(), 0, NULL);
-				
-				// Compute Pass
-				enviromentIrradiancePipeline->Begin();
-				{
-					enviromentIrradiancePipeline->SetPushConstants(&irradianceMapComputeSamples, sizeof(uint32_t));
-					enviromentIrradiancePipeline->Dispatch(irradianceMapSize / 32, irradianceMapSize / 32, 6, descriptorSet);
-				}
-				enviromentIrradiancePipeline->End();
-				envIrradiance->GenerateMips(true);
-			});
-		}
-
-		Ref<EnvironmentMap> environment = CreateRef<EnvironmentMap>();
-		environment->EquirectangularTex = envEquirect;
-		environment->RadianceMap = envFiltered;
-		environment->IrradianceMap = envIrradiance;
-		environment->DebugName = utils::GetFilename(filepath);
-		return environment;
-#endif
-
-		return nullptr;
+		return utils::CreateEnvironmentMapResource(filepath);
 	}
-
-	void Renderer::SetSceneEnvironment(SceneRenderer* sceneRenderer, const Ref<EnvironmentMap>& environment, const Ref<Image>& shadowImage)
-	{
-#if OLD_RENDERER
-		Renderer::Submit([sceneRenderer, environment, shadowImage]()
-		{
-			Ref<Shader> pbrShader = Renderer::GetShaderLibrary().Get("PBR");
-			const uint32_t currentFrame = Renderer::GetCurrentFrameIndex();
-			// Change to a persistent pool
-			if (s_Data->Descriptors.RendererDescriptorSetCache.find(sceneRenderer) == s_Data->Descriptors.RendererDescriptorSetCache.end())
-			{
-				const uint32_t framesInFlight = Renderer::GetRendererConfig().FramesInFlight;
-				s_Data->Descriptors.RendererDescriptorSetCache[sceneRenderer].resize(framesInFlight);
-				for (uint32_t i = 0; i < framesInFlight; i++)
-				{
-					VkDescriptorSet descriptorSet = Renderer::AllocateDescriptorSet(pbrShader->GetDescriptorSetLayout(1), true);
-					s_Data->Descriptors.RendererDescriptorSetCache.at(sceneRenderer)[i].push_back(descriptorSet);
-				}
-					
-			}
-			VkDescriptorSet descriptorSet = s_Data->Descriptors.RendererDescriptorSetCache.at(sceneRenderer)[currentFrame][0];
-			// Dynamic pool allocation
-			// VkDescriptorSet descriptorSet = Renderer::AllocateDescriptorSet(pbrShader->GetDescriptorSetLayout(1));
-			s_Data->Descriptors.ActiveRendererDescriptorSet = descriptorSet;
-
-			std::array<VkWriteDescriptorSet, 4> writeDescriptors;
-
-			Ref<TextureCube> radianceMap = environment->RadianceMap;
-			Ref<TextureCube> irradianceMap = environment->IrradianceMap;
-			// Environment Radiance Texture
-			writeDescriptors[0] = *pbrShader->GetWriteDescriptorSet("u_EnvRadianceTex", 1);
-			writeDescriptors[0].dstSet = descriptorSet;
-			const auto& radianceMapImageInfo = radianceMap->GetVulkanDescriptorInfo();
-			writeDescriptors[0].pImageInfo = &radianceMapImageInfo;
-			// Environment Irradiance Texture
-			writeDescriptors[1] = *pbrShader->GetWriteDescriptorSet("u_EnvIrradianceTex", 1);
-			writeDescriptors[1].dstSet = descriptorSet;
-			const auto& irradianceMapImageInfo = irradianceMap->GetVulkanDescriptorInfo();
-			writeDescriptors[1].pImageInfo = &irradianceMapImageInfo;
-			// BRDF LUT Texture
-			writeDescriptors[2] = *pbrShader->GetWriteDescriptorSet("u_BRDFLUTTex", 1);
-			writeDescriptors[2].dstSet = descriptorSet;
-			const auto& BrdfLutImageInfo= RendererResources::GetBRDFLutTexture()->GetVulkanDescriptorInfo();
-			writeDescriptors[2].pImageInfo = &BrdfLutImageInfo;
-			// Shadow Map
-			// Environment Radiance Texture
-			writeDescriptors[3] = *pbrShader->GetWriteDescriptorSet("u_ShadowMapTex", 1);
-			writeDescriptors[3].dstSet = descriptorSet;
-			const auto& shadowImageInfo = shadowImage->GetVulkanDescriptorInfo();
-			writeDescriptors[3].pImageInfo = &shadowImageInfo;
-			// Update descriptor
-			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-			vkUpdateDescriptorSets(vulkanDevice, (uint32_t)writeDescriptors.size(), writeDescriptors.data(), 0, nullptr);
-		});
-#endif
-	}
-
 	uint32_t Renderer::GetCurrentFrameIndex()
 	{
 		return Window::GetCurrentSwapchain()->GetCurrentBufferIndex();

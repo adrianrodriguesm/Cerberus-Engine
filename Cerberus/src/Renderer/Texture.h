@@ -94,8 +94,9 @@ namespace cerberus
 		void Release();
 		
 		void GenerateMips(bool readonly);
-		// TODO: delete this
-		VkImageView CreateImageViewSingleMip(uint32_t mip);
+
+		Handle<Image> GetImage() const { return m_Image; }
+		Handle<ImageView> GetImageView() const { return m_ImageView; }
 
 		virtual ImageFormat GetFormat() const override { return m_Format; }
 

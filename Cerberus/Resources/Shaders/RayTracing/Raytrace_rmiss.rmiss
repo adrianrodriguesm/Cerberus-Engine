@@ -4,11 +4,16 @@
 #extension GL_EXT_nonuniform_qualifier : enable
 
 #include "Payload.glsl"
+#include "Environment.glsl"
 
 layout(location = 0) rayPayloadInEXT HitPayload Payload;
 
 void main()
 {
-    Payload.Emission = vec3(0.02, 0.04, 0.08);
+    vec3 direction = normalize(gl_WorldRayDirectionEXT);
+    Payload.Emission = textureLod(
+        EnvironmentRadiance,
+        direction,
+        SkyLight.Parameters.y).rgb * SkyLight.Parameters.x;
     Payload.Hit = 0u;
 }

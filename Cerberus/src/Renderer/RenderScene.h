@@ -10,6 +10,8 @@
 namespace cerberus
 {
 	class Texture2D;
+	class TextureCube;
+	struct EnvironmentMap;
 
 	static constexpr uint32_t MaxRayTracingTextureCount = 128;
 
@@ -30,6 +32,14 @@ namespace cerberus
 
 	static_assert(sizeof(RayTracingInstanceData) == 32, "RayTracingInstanceData must match the std430 shader layout");
 
+	struct SkyLightProxy
+	{
+		Handle<TextureCube> RadianceMap;
+		Handle<TextureCube> IrradianceMap;
+		float Intensity = 1.0f;
+		float SampleLOD = 0.0f;
+	};
+
 	// RenderScene is the renderer-side representation of the logical Scene.
 	// It owns render proxies, GPU-facing mesh registrations, and RT acceleration
 	// structure state. SceneRenderer implementations consume this data instead of
@@ -45,6 +55,7 @@ namespace cerberus
 		void UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform);
 		bool UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable);
 		bool UpdateMaterialProxy(const Ref<MaterialAsset>& materialAsset);
+		void SetSkyLight(const Ref<EnvironmentMap>& environment, float intensity, uint32_t sampleLOD);
 		bool IsRegistered(const Ref<Mesh>& mesh) const;
 
 		// Builds pending BLAS and builds/updates TLAS when dirty.
@@ -60,6 +71,7 @@ namespace cerberus
 		const MaterialProxy* GetMaterialProxy(uint32_t materialProxyIndex) const;
 		const std::vector<Handle<Texture2D>>& GetRayTracingTextures() const { return m_MeshRegister.GPUTextures; }
 		const std::vector<RayTracingInstanceData>& GetRayTracingInstances() const { return m_RayTracingInstances; }
+		const SkyLightProxy& GetSkyLight() const { return m_SkyLight; }
 
 		// Explicit shutdown is useful because the owning SceneRenderer can decide to
 		// wait for the GPU before releasing render-scene resources. Safe to call more
@@ -129,5 +141,6 @@ namespace cerberus
 
 		// Kept in exactly the same order as the instances submitted to the TLAS.
 		std::vector<RayTracingInstanceData> m_RayTracingInstances;
+		SkyLightProxy m_SkyLight;
 	};
 }

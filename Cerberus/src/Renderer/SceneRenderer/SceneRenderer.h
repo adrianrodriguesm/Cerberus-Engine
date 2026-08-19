@@ -43,6 +43,7 @@ namespace cerberus
 		virtual void UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform) {}
 		virtual bool UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable) { return false; }
 		virtual void OnMaterialAssetChanged(const Ref<MaterialAsset>& materialAsset) {}
+		virtual void SetSkyLight(const Ref<EnvironmentMap>& environment, float intensity, uint32_t sampleLOD) {}
 
 		virtual void Render(const SceneRendererCamera& sceneRendererCamera) = 0;
 		

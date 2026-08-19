@@ -71,6 +71,10 @@ namespace cerberus
 				}
 			}
 		}
+		sceneRenderer->SetSkyLight(
+			m_LightEnvironment.SkyLight.EnvironmentMap,
+			m_LightEnvironment.SkyLight.Multiplier,
+			m_LightEnvironment.SkyLight.SampleLOD);
 		sceneRenderer->BeginScene(sceneRendererCamera);
 		// Submit Meshes
 		{

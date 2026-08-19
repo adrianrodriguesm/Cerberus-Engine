@@ -43,8 +43,10 @@ namespace cerberus
 			delete layer;
 		}
 
-		Renderer::Shutdown();
+		// Loaded assets can own ResourceManager handles (for example generated
+		// environment maps), so release them while the renderer is still alive.
 		AssetManager::Shutdown();
+		Renderer::Shutdown();
 		m_Window->Shutdown();
 		
 	}

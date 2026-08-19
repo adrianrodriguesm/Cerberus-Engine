@@ -33,6 +33,7 @@ namespace cerberus
 		virtual void UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform) override;
 		virtual bool UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable) override;
 		virtual void OnMaterialAssetChanged(const Ref<MaterialAsset>& materialAsset) override;
+		virtual void SetSkyLight(const Ref<EnvironmentMap>& environment, float intensity, uint32_t sampleLOD) override;
 
 		virtual bool IsRegistered(const Ref<Mesh>& mesh) override;
 
@@ -45,6 +46,7 @@ namespace cerberus
 		void UpdateRTMaterialBuffer();
 		void UpdateRTInstanceBuffer();
 		void UpdateRTTextureTable();
+		void UpdateRTEnvironment();
 		void FlushRenderPasses();
 
 	private:
@@ -73,6 +75,13 @@ namespace cerberus
 			glm::vec4 Params;
 		};
 
+		struct SkyLightUB
+		{
+			// x = intensity, y = radiance mip LOD, z/w = unused.
+			glm::vec4 Parameters = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+		};
+		static_assert(sizeof(SkyLightUB) == 16, "SkyLightUB must match the std140 shader layout");
+
 	private:
 		SceneRendererSpecification m_Specification;
 
@@ -88,6 +97,7 @@ namespace cerberus
 
 		Ref<UniformBufferSet> m_UniformBufferSet;
 		Ref<UniformBufferSet> m_UniformBufferSetCamera;
+		Ref<UniformBufferSet> m_RT_SkyLightBufferSet;
 		Ref<StorageBufferSet> m_RT_MaterialBufferSet;
 		Ref<StorageBufferSet> m_RT_InstanceBufferSet;
 

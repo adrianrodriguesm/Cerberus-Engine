@@ -29,6 +29,8 @@ namespace cerberus
 	static constexpr uint32_t RT_MATERIALS_BINDING = 3;
 	static constexpr uint32_t RT_INSTANCES_BINDING = 4;
 	static constexpr uint32_t RT_TEXTURES_BINDING = 5;
+	static constexpr uint32_t RT_ENVIRONMENT_BINDING = 6;
+	static constexpr uint32_t RT_SKY_LIGHT_BINDING = 7;
 
 	static constexpr bool RT_RAYGEN_ONLY = false;
 
@@ -183,6 +185,25 @@ namespace cerberus
 			CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
 
 			rtBindGroup->SetUniformBuffer(m_UniformBufferSetCamera, RT_CAMERA_BINDING);
+		}
+
+		// SkyLight parameters and radiance cubemap. The black renderer resource is
+		// always bound first so the descriptor is valid before a Scene supplies an
+		// environment asset.
+		{
+			UniformBufferSetSpecification skyLightBufferSpecification;
+			skyLightBufferSpecification.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
+			skyLightBufferSpecification.Size = sizeof(SkyLightUB);
+			skyLightBufferSpecification.BindingPoint = RT_SKY_LIGHT_BINDING;
+
+			m_RT_SkyLightBufferSet = CreateRef<UniformBufferSet>(skyLightBufferSpecification);
+
+			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
+			TextureCube* fallbackEnvironment = ResourceManager::GetTextureCube(RendererResources::GetBlackCubeTexture());
+			CORE_ASSERT(rtBindGroup && fallbackEnvironment, "Failed to initialize RT SkyLight resources");
+
+			rtBindGroup->SetUniformBuffer(m_RT_SkyLightBufferSet, RT_SKY_LIGHT_BINDING);
+			rtBindGroup->SetImageView(fallbackEnvironment->GetImageView(), RT_ENVIRONMENT_BINDING);
 		}
 
 		// GPU material table for RT. The per-instance buffer maps each TLAS hit to
@@ -376,6 +397,22 @@ namespace cerberus
 		rtBindGroup->SetImageViewArray(textureImageViews, fallbackTexture->GetImageView(), RT_TEXTURES_BINDING);
 	}
 
+	void PathTracerSceneRenderer::UpdateRTEnvironment()
+	{
+		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+
+		const SkyLightProxy& skyLight = m_RenderScene->GetSkyLight();
+		const Handle<TextureCube> radianceMapHandle = skyLight.RadianceMap.IsValid()
+			? skyLight.RadianceMap
+			: RendererResources::GetBlackCubeTexture();
+
+		TextureCube* radianceMap = ResourceManager::GetTextureCube(radianceMapHandle);
+		BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
+		CORE_ASSERT(radianceMap && rtBindGroup, "Invalid RT environment resources");
+
+		rtBindGroup->SetImageView(radianceMap->GetImageView(), RT_ENVIRONMENT_BINDING);
+	}
+
 
 	void PathTracerSceneRenderer::UpdateUBOData()
 	{
@@ -416,6 +453,19 @@ namespace cerberus
 			CORE_ASSERT(ubo, "Invalid RT camera UBO");
 
 			ubo->SetData(&cameraUBO, sizeof(CameraUB), 0);
+		}
+
+		{
+			CORE_ASSERT(m_RenderScene && m_RT_SkyLightBufferSet, "RT SkyLight data is not initialized");
+			const SkyLightProxy& skyLight = m_RenderScene->GetSkyLight();
+
+			SkyLightUB skyLightUBO;
+			skyLightUBO.Parameters.x = skyLight.Intensity;
+			skyLightUBO.Parameters.y = skyLight.SampleLOD;
+
+			Ref<UniformBuffer> ubo = m_RT_SkyLightBufferSet->Get(frameIndex);
+			CORE_ASSERT(ubo, "Invalid RT SkyLight UBO");
+			ubo->SetData(&skyLightUBO, sizeof(SkyLightUB), 0);
 		}
 
 		if constexpr (ENABLE_RASTER_TEST_PATH)
@@ -630,6 +680,7 @@ namespace cerberus
 			UpdateRTMaterialBuffer();
 			UpdateRTInstanceBuffer();
 			UpdateRTTextureTable();
+			UpdateRTEnvironment();
 
 			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
 			CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
@@ -671,6 +722,12 @@ namespace cerberus
 	{
 		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
 		m_RenderScene->UpdateMaterialProxy(materialAsset);
+	}
+
+	void PathTracerSceneRenderer::SetSkyLight(const Ref<EnvironmentMap>& environment, float intensity, uint32_t sampleLOD)
+	{
+		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+		m_RenderScene->SetSkyLight(environment, intensity, sampleLOD);
 	}
 
 	void PathTracerSceneRenderer::OnImGuiRender()

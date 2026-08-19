@@ -1,53 +1,76 @@
 #pragma once
-#include "Core/UUID.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <limits>
+
 namespace cerberus
 {
 	class ResourceManager;
 
-	template<typename T>
+	template<typename T, std::size_t TargetPageBytes>
 	class Pool;
 
 	template<typename T>
 	class Handle
 	{
 	public:
-		Handle() : m_ID(0), m_Index(0){}
-		bool IsValid() const { return m_ID != 0; }
-		const UUID_16 GetUUID_16() const { return m_ID; }
+		using GenerationType = uint32_t;
+		using IndexType = uint32_t;
 
-		bool operator == (const Handle<T>& otherHandle) const 
+		static constexpr IndexType InvalidIndex = std::numeric_limits<IndexType>::max();
+
+		constexpr Handle() noexcept = default;
+
+		[[nodiscard]] constexpr bool IsValid() const noexcept
 		{
-			return otherHandle.m_ID == m_ID && otherHandle.m_Index == m_Index;;
+			return m_Generation != 0 && m_Index != InvalidIndex;
 		}
+
+		[[nodiscard]] constexpr GenerationType GetGeneration() const noexcept { return m_Generation; }
+		[[nodiscard]] constexpr IndexType GetIndex() const noexcept { return m_Index; }
+
+		// Kept as a source-compatible transition helper for old call sites.
+		// Resource generations are now 32-bit and deterministic, not random UUIDs.
+		[[nodiscard]] constexpr uint32_t GetUUID_16() const noexcept { return m_Generation; }
+
+		[[nodiscard]] constexpr uint64_t GetValue() const noexcept
+		{
+			return (static_cast<uint64_t>(m_Generation) << 32u) |
+				static_cast<uint64_t>(m_Index);
+		}
+
+		[[nodiscard]] constexpr bool operator==(const Handle&) const noexcept = default;
 
 	private:
-		Handle(uint16_t generationID, uint16_t index) : m_ID(generationID), m_Index(index) {}
-
-		void Invalidate() 
+		constexpr Handle(GenerationType generation, IndexType index) noexcept
+			: m_Generation(generation), m_Index(index)
 		{
-			m_ID = 0;
-			m_Index = 0;
 		}
 
-		// This 16+16 type is good enought for GPU side assets (resources)
-		UUID_16 m_ID = 0;
-		uint16_t m_Index = 0;
+		void Invalidate() noexcept
+		{
+			m_Generation = 0;
+			m_Index = InvalidIndex;
+		}
 
-		friend class Pool<T>;
+		GenerationType m_Generation = 0;
+		IndexType m_Index = InvalidIndex;
+
+		template<typename U, std::size_t PageBytes>
+		friend class Pool;
 	};
 }
 
-// Creation of a hash function for the UUID
-// In cerberus this is used to allow the use of the UUID as a key for an unordered_map (hashmap)
 namespace std
 {
-
 	template <typename T>
 	struct hash<cerberus::Handle<T>>
 	{
-		std::size_t operator()(const cerberus::Handle<T>& uuid) const
+		std::size_t operator()(const cerberus::Handle<T>& handle) const noexcept
 		{
-			return hash<uint16_t>()((uint16_t)uuid.GetUUID_16());
+			return hash<uint64_t>{}(handle.GetValue());
 		}
 	};
 }

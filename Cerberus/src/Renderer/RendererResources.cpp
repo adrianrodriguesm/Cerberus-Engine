@@ -28,9 +28,9 @@ namespace cerberus
 		s_ResourcesData->ShaderLibrary = CreateRef<ShaderLibrary>();
 		s_ResourcesData->ShaderLibrary->Load("Resources/Shaders/PBR.glsl", false);
 		s_ResourcesData->ShaderLibrary->Load("Resources/Shaders/SceneComposite.glsl", false);
-		s_ResourcesData->ShaderLibrary->Load("Resources/Shaders/EquirectangularToCubeMap.glsl", false);
-		s_ResourcesData->ShaderLibrary->Load("Resources/Shaders/EnvironmentMipFilter.glsl", false);
-		s_ResourcesData->ShaderLibrary->Load("Resources/Shaders/EnvironmentIrradiance.glsl", false);
+		s_ResourcesData->ShaderLibrary->Load("engine://Shaders/Environment/EquirectangularToCubeMap.glsl", false);
+		s_ResourcesData->ShaderLibrary->Load("engine://Shaders/Environment/EnvironmentMipFilter.glsl", false);
+		s_ResourcesData->ShaderLibrary->Load("engine://Shaders/Environment/EnvironmentIrradiance.glsl", false);
 		s_ResourcesData->ShaderLibrary->Load("Resources/Shaders/BRDF.glsl", false);
 		s_ResourcesData->ShaderLibrary->Load("Resources/Shaders/Skybox.glsl", false);
 		s_ResourcesData->ShaderLibrary->Load("Resources/Shaders/PreDepth.glsl", false);
@@ -46,14 +46,14 @@ namespace cerberus
 		s_ResourcesData->WhiteTexture = TextureFactory::CreateTexture2DWithColor({ 255, 255, 255, 255 });
 		s_ResourcesData->BrdfLutTexture = TextureFactory::CreateBRDF();
 
-		// EmptyEnvironment
-#if OLD_RENDERER
+		// EmptyEnvironment borrows renderer-owned fallback textures. It must never
+		// release them; RendererResources owns their lifetime.
 		s_ResourcesData->EmptyEnvironment = CreateRef<EnvironmentMap>();
 		s_ResourcesData->EmptyEnvironment->EquirectangularTex = s_ResourcesData->BlackTexture;
 		s_ResourcesData->EmptyEnvironment->IrradianceMap = s_ResourcesData->BlackCubeTexture;
 		s_ResourcesData->EmptyEnvironment->RadianceMap = s_ResourcesData->BlackCubeTexture;
 		s_ResourcesData->EmptyEnvironment->DebugName = "Empty Environment";
-#endif
+		s_ResourcesData->EmptyEnvironment->OwnsGPUResources = false;
 
 		s_ResourcesData->DefaultMaterial = CreateRef<MaterialAsset>();
 		s_ResourcesData->DefaultMaterial->SetAlbedoColor({ 1.f, 0, 1.f });

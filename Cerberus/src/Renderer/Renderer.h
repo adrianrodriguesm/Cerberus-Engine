@@ -67,9 +67,9 @@ namespace cerberus
 		static CommandBuffer* GetMainCommandBuffer(bool swapchain = false);
 
 		// -- Environment Map
-		// Return a pair with <FilteredMap, IrradianceMap>
+		// Builds the source equirectangular texture plus filtered radiance and
+		// irradiance cubemaps owned by the returned EnvironmentMap asset.
 		static Ref<EnvironmentMap> CreateEnvironmentMap(const std::string& filepath);
-		static void SetSceneEnvironment(SceneRenderer* sceneRenderer, const Ref<EnvironmentMap>& environment, const Ref<Image>& shadowImage);
 		// Getter's
 		static uint32_t GetCurrentFrameIndex();
 		static RendererConfig& GetRendererConfig();

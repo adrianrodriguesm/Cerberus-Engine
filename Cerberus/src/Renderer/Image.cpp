@@ -124,7 +124,11 @@ namespace cerberus
 		}
 		else if (m_Specification.Usage == ImageUsage::Storage)
 		{
-			usage |= VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+			// Storage images used by environment preprocessing are also copied/blitted
+			// while their mip chain is built.
+			usage |= VK_IMAGE_USAGE_STORAGE_BIT |
+				VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+				VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 		}
 
 		VkFormat vulkanFormat = utils::VulkanImageFormat(m_Specification.Format);

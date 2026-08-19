@@ -7,6 +7,7 @@
 #include "Utils/FileSystem.h"
 #include "Asset/AssetImporter.h"
 #include "Renderer/TextureAsset.h"
+#include "Renderer/Renderer.h"
 #include <fstream>
 namespace cerberus
 {
@@ -311,14 +312,14 @@ namespace cerberus
 				auto skyLightComponent = entity["SkyLightComponent"];
 				if (skyLightComponent)
 				{
-#if OLD_RENDERER
 					auto& slc = deserializedEntity.AddComponent<SkyLightComponent>();
-					
+
 					AssetHandle assetHandle = skyLightComponent["AssetHandle"].as<AssetHandle>();
-					slc.EnvironmentHandle = AssetManager::GetAsset<EnvironmentMap>(assetHandle)->Handle;
+					slc.EnvironmentHandle = AssetManager::IsAssetHandleValid(assetHandle)
+						? assetHandle
+						: AssetHandle(0);
 					slc.Intensity = skyLightComponent["Intensity"].as<float>();
 					slc.SampleLOD = skyLightComponent["SampleLOD"].as<uint32_t>();
-#endif
 				}
 
 				auto directionalLightComponent = entity["DirectionalLightComponent"];
@@ -340,18 +341,16 @@ namespace cerberus
 
 	bool EnvironmentMapSerializer::TryToLoadData(const AssetMetadata& metadata, Ref<Asset>& asset)
 	{
-#if OLD_RENDERER
-		auto& filepath = metadata.FilePath;
+		const auto& filepath = metadata.FilePath;
 
 		Ref<EnvironmentMap> environment = Renderer::CreateEnvironmentMap(filepath.string());
+		if (!environment)
+			return false;
+
 		environment->Handle = metadata.Handle;
 		asset = environment;
 
 		return true;
-#else
-		return false;
-
-#endif
 	}
 	void MaterialSerializer::Serialize(const AssetMetadata& metadata, const Ref<Asset>& asset)
 	{

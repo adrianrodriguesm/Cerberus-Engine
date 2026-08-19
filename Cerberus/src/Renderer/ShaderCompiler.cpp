@@ -91,9 +91,9 @@ namespace cerberus
 				continue;
 
 			auto& type = compiler.get_type(resource.type_id);
-			uint32_t arraySize = type.array[0];
-			if (arraySize == 0)
-				arraySize = 1;
+			const uint32_t arraySize = type.array.empty() || type.array[0] == 0
+				? 1u
+				: type.array[0];
 
 			BindGroupLayout::ImageBinding imgBinding;
 			imgBinding.Name = resource.name;
