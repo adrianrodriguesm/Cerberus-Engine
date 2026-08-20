@@ -3,6 +3,7 @@
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>
 #include "ImGui/ImGuiUI.h"
+#include "Renderer/ResourceManager.h"
 #include "Utils/FileDialogs.h"
 #include "Utils/FileSystem.h"
 namespace cerberus
@@ -312,6 +313,18 @@ namespace cerberus
 			ui::PropertyAssetReferenceTarget<EnvironmentMap>("Environment", component.EnvironmentHandle);
 			ui::EndPropertyGrid();
 			Ref<EnvironmentMap> envMap = AssetManager::GetAsset<EnvironmentMap>(component.EnvironmentHandle);
+
+			const uint32_t environmentResolution = ResourceManager::GetRendererConfig().EnvironmentMapResolution;
+			uint32_t maxSampleLOD = Image::CalculateMipCount(environmentResolution, environmentResolution) - 1;
+			if (envMap && envMap->RadianceMap.IsValid())
+			{
+				const TextureCube* radianceMap = ResourceManager::GetTextureCube(envMap->RadianceMap);
+				if (radianceMap && radianceMap->GetMipLevelCount() > 0)
+					maxSampleLOD = radianceMap->GetMipLevelCount() - 1;
+			}
+
+			component.SampleLOD = glm::min(component.SampleLOD, maxSampleLOD);
+			int sampleLOD = static_cast<int>(component.SampleLOD);
 			if (envMap)
 			{
 				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10, 10));
@@ -328,6 +341,8 @@ namespace cerberus
 			}
 			ui::BeginPropertyGrid();
 			ui::Property("Intensity", component.Intensity, 0.05f, 0.f, 100.f);
+			if (ui::PropertySlider("Sample LOD", sampleLOD, 0, static_cast<int>(maxSampleLOD)))
+				component.SampleLOD = static_cast<uint32_t>(sampleLOD);
 			ui::EndPropertyGrid();
 		});
 		

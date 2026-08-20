@@ -8,6 +8,7 @@
 #include "Renderer/ComputePipeline.h"
 #include "Renderer/Shadow.h"
 #include "Renderer/Image.h"
+#include <span>
 namespace cerberus
 {
 	struct SceneRendererSpecification
@@ -44,6 +45,7 @@ namespace cerberus
 		virtual bool UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable) { return false; }
 		virtual void OnMaterialAssetChanged(const Ref<MaterialAsset>& materialAsset) {}
 		virtual void SetSkyLight(const Ref<EnvironmentMap>& environment, float intensity, uint32_t sampleLOD) {}
+		virtual void SetDirectionalLights(std::span<const DirectionalLight> directionalLights) {}
 
 		virtual void Render(const SceneRendererCamera& sceneRendererCamera) = 0;
 		

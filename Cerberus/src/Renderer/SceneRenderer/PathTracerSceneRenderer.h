@@ -24,7 +24,7 @@ namespace cerberus
 		virtual void EndScene() override;
 		virtual void SubmitMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) override;
 		virtual void SetViewportSize(uint32_t width, uint32_t height) override;
-		virtual void SetSceneContext(const Ref<Scene>& scene) override { m_Scene = scene; }
+		virtual void SetSceneContext(const Ref<Scene>& scene) override;
 
 		virtual void Render(const SceneRendererCamera& sceneRendererCamera) override;
 
@@ -34,6 +34,7 @@ namespace cerberus
 		virtual bool UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable) override;
 		virtual void OnMaterialAssetChanged(const Ref<MaterialAsset>& materialAsset) override;
 		virtual void SetSkyLight(const Ref<EnvironmentMap>& environment, float intensity, uint32_t sampleLOD) override;
+		virtual void SetDirectionalLights(std::span<const DirectionalLight> directionalLights) override;
 
 		virtual bool IsRegistered(const Ref<Mesh>& mesh) override;
 
@@ -48,6 +49,10 @@ namespace cerberus
 		void UpdateRTTextureTable();
 		void UpdateRTEnvironment();
 		void FlushRenderPasses();
+		void ResetAccumulation();
+		void CreateRTImages();
+		void ReleaseRTImages();
+		bool HasCameraChanged(const SceneRendererCamera& sceneRendererCamera) const;
 
 	private:
 		struct SceneData
@@ -82,6 +87,34 @@ namespace cerberus
 		};
 		static_assert(sizeof(SkyLightUB) == 16, "SkyLightUB must match the std140 shader layout");
 
+		struct PathTracerUB
+		{
+			// x = samples accumulated before this dispatch
+			// y = maximum path bounce count
+			// z/w = unused
+			glm::uvec4 Parameters = glm::uvec4(0u, 4u, 0u, 0u);
+
+			// x = display exposure
+			// y/z/w = unused
+			glm::vec4 Presentation = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+		};
+		static_assert(sizeof(PathTracerUB) == 32, "PathTracerUB must match the std140 shader layout");
+
+		struct DirectionalLightGPU
+		{
+			// xyz = direction from the surface toward the light, w = intensity.
+			glm::vec4 DirectionAndIntensity = glm::vec4(0.0f);
+			glm::vec4 Radiance = glm::vec4(0.0f);
+		};
+
+		struct DirectionalLightUB
+		{
+			// x = active light count, y/z/w = unused.
+			glm::uvec4 Parameters = glm::uvec4(0u);
+			std::array<DirectionalLightGPU, MaxDirectionalLightCount> Lights{};
+		};
+		static_assert(sizeof(DirectionalLightUB) == 144, "DirectionalLightUB must match the std140 shader layout");
+
 	private:
 		SceneRendererSpecification m_Specification;
 
@@ -98,6 +131,8 @@ namespace cerberus
 		Ref<UniformBufferSet> m_UniformBufferSet;
 		Ref<UniformBufferSet> m_UniformBufferSetCamera;
 		Ref<UniformBufferSet> m_RT_SkyLightBufferSet;
+		Ref<UniformBufferSet> m_RT_PathTracerBufferSet;
+		Ref<UniformBufferSet> m_RT_DirectionalLightBufferSet;
 		Ref<StorageBufferSet> m_RT_MaterialBufferSet;
 		Ref<StorageBufferSet> m_RT_InstanceBufferSet;
 
@@ -117,15 +152,14 @@ namespace cerberus
 
 		Handle<Image> m_RT_OutputImage;
 		Handle<ImageView> m_RT_OutputImageView;
+		Handle<Image> m_RT_AccumulationImage;
+		Handle<ImageView> m_RT_AccumulationImageView;
+
+		uint32_t m_AccumulatedFrames = 0;
+		bool m_HasPreviousCamera = false;
+		glm::mat4 m_PreviousView = glm::mat4(1.0f);
+		glm::mat4 m_PreviousProjection = glm::mat4(1.0f);
 
 		Scope<ShaderBindingTable> m_ShaderBindingTable;
-
-		struct PushConstantRay
-		{
-			glm::vec4 ClearColor;
-			glm::vec3 LightPosition;
-			float LightIntensity;
-			int LightType;
-		} m_RT_PushConstant;
 	};
 }

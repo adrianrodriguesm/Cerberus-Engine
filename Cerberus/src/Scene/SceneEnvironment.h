@@ -1,7 +1,13 @@
 #pragma once
 #include "Scene/EnvironmentMap.h"
+
+#include <array>
+#include <cstdint>
+
 namespace cerberus
 {
+	inline constexpr uint32_t MaxDirectionalLightCount = 4;
+
 	struct DirectionalLight
 	{
 		glm::vec3 Direction = { 0.0f, 0.0f, 0.0f };
@@ -18,7 +24,7 @@ namespace cerberus
 
 	struct LightEnvironment
 	{
-		std::array<DirectionalLight, 4> DirectionalLights;
+		std::array<DirectionalLight, MaxDirectionalLightCount> DirectionalLights;
 		SkyLight SkyLight;
 	};
 

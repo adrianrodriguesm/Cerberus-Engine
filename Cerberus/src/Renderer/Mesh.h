@@ -36,7 +36,11 @@ namespace cerberus
 	struct MeshSourceProperties
 	{
 		std::filesystem::path Filepath;
-		// Optional imported/serialized material overrides keyed by submesh index.
+		// Version 2: imported/serialized materials keyed by Assimp material slot.
+		std::map<uint32_t, AssetHandle> MaterialSlots;
+
+		// Version 1 compatibility: old .meta files keyed materials by submesh.
+		// They are migrated to MaterialSlots the next time the MeshSource is loaded.
 		std::map<uint32_t, AssetHandle> SubmeshMaterials;
 	};
 

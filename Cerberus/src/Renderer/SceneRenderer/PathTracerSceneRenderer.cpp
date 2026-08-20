@@ -13,13 +13,14 @@
 // TODO: Remove these to (only for test)
 #include "Renderer/ShaderCompiler.h"
 
+#include <cmath>
+#include <limits>
+
 namespace cerberus
 {
-	// Temporary mode used to isolate the Vulkan RT smoke test.
-	// Keep the old raster/mesh/AS mechanisms in the file, but do not execute them
-	// while we validate the minimal RT path.
-	static constexpr bool RT_SMOKE_TEST = true;
-	static constexpr bool ENABLE_RASTER_TEST_PATH = !RT_SMOKE_TEST;
+	// Keep the legacy raster test path isolated while the RT path is built in
+	// independently testable phases.
+	static constexpr bool ENABLE_RASTER_TEST_PATH = false;
 
 	static constexpr bool ENABLE_ACCELERATION_STRUCTURES = true;
 
@@ -31,6 +32,10 @@ namespace cerberus
 	static constexpr uint32_t RT_TEXTURES_BINDING = 5;
 	static constexpr uint32_t RT_ENVIRONMENT_BINDING = 6;
 	static constexpr uint32_t RT_SKY_LIGHT_BINDING = 7;
+	static constexpr uint32_t RT_PATH_TRACER_BINDING = 8;
+	static constexpr uint32_t RT_DIRECTIONAL_LIGHTS_BINDING = 9;
+	static constexpr uint32_t RT_ACCUMULATION_BINDING = 17;
+	static constexpr uint32_t RT_MAX_BOUNCES = 4;
 
 	static constexpr bool RT_RAYGEN_ONLY = false;
 
@@ -59,12 +64,13 @@ namespace cerberus
 			"The selected GPU cannot expose the fixed RT texture table to one shader stage");
 
 		// ---------------------------------------------------------------------
-		// RT SMOKE TEST PATH
+		// RT PATH TRACING BOOTSTRAP
 		// ---------------------------------------------------------------------
-		// Goal: keep only the data required to validate that Vulkan RT can write
-		// to a storage image and expose that image as the final renderer output.
+		// Goal: keep the RT integrator and its scene data independent from the old
+		// raster test path while materials, environment lighting and accumulation
+		// are introduced incrementally.
 		//
-		// Intentionally disabled while RT_SMOKE_TEST is true:
+		// Intentionally disabled while ENABLE_RASTER_TEST_PATH is false:
 		// - raster test pass
 		// - Ronaldo texture test
 		// - camera/material UBOs for the raster path
@@ -106,10 +112,8 @@ namespace cerberus
 			m_RT_Pipeline = ResourceManager::CreateRayTracingPipeline(rtPipelineSpec);
 		}
 
-		// Shader Binding Table.
-		// For the smoke test the shader should only use raygen. Miss/hit groups can
-		// stay allocated by the existing SBT system, but FlushRenderPasses can pass
-		// empty miss/hit regions while RT_RAYGEN_ONLY is enabled.
+		// Shader Binding Table. Raygen owns the iterative path loop, while the miss
+		// and closest-hit shaders return environment or reconstructed surface data.
 		{
 			ShaderBindingTableSpecification sbtSpec;
 			sbtSpec.RayGenPrograms = { { 0, {} } };
@@ -119,58 +123,8 @@ namespace cerberus
 			m_ShaderBindingTable = CreateScope<ShaderBindingTable>(sbtSpec);
 		}
 
-		// RT output image.
-		{
-			ImageSpecification imgSpec;
-			imgSpec.DebugName = "RT Output";
-			imgSpec.Width = (uint32_t)m_ViewportResolution.x;
-			imgSpec.Height = (uint32_t)m_ViewportResolution.y;
-			imgSpec.Format = ImageFormat::RGBA32F;
-			imgSpec.Usage = ImageUsage::Storage;
-			imgSpec.Flags = SAMPLE_COMPATIBLE;
-			imgSpec.Mips = 1;
-			imgSpec.Layers = 1;
-
-			m_RT_OutputImage = ResourceManager::CreateImage(imgSpec);
-			Image* rtImg = ResourceManager::GetImage(m_RT_OutputImage);
-			CORE_ASSERT(rtImg, "Failed to create RT output image");
-
-			rtImg->Invalidate();
-			rtImg->SetLayout(
-				VK_IMAGE_LAYOUT_GENERAL,
-				VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-				VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
-
-			ImageViewProperties viewProp;
-			viewProp.Image = m_RT_OutputImage;
-			viewProp.BaseMip = 0;
-			viewProp.MipCount = 1;
-			viewProp.BaseLayer = 0;
-			viewProp.LayerCount = 1;
-			viewProp.ViewType = ImageViewType::Image2D;
-
-			SamplerSpecification samplerSpec;
-			samplerSpec.SamplerWrap = SamplerWrap::Clamp;
-			samplerSpec.SamplerFilter = SamplerFilter::Linear;
-			samplerSpec.Anisotropy = false;
-			samplerSpec.MinLOD = 0.0f;
-			samplerSpec.MaxLOD = 1.0f;
-			samplerSpec.ShaderResource = true;
-			viewProp.SamplerSpec = samplerSpec;
-
-			m_RT_OutputImageView = ResourceManager::CreateImageView(viewProp);
-			ImageView* rtImgView = ResourceManager::GetImageView(m_RT_OutputImageView);
-			CORE_ASSERT(rtImgView, "Failed to create RT output image view");
-
-			rtImgView->Invalidate();
-			rtImgView->UpdateDescriptor();
-
-			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
-			CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
-			rtBindGroup->SetImageView(m_RT_OutputImageView, RT_OUTPUT_BINDING);
-
-
-		}
+		// Display output plus a persistent linear-radiance accumulation image.
+		CreateRTImages();
 
 		// Camera UBO for RT path.
 		{
@@ -204,6 +158,36 @@ namespace cerberus
 
 			rtBindGroup->SetUniformBuffer(m_RT_SkyLightBufferSet, RT_SKY_LIGHT_BINDING);
 			rtBindGroup->SetImageView(fallbackEnvironment->GetImageView(), RT_ENVIRONMENT_BINDING);
+		}
+
+		// Per-dispatch path tracer state. Parameters.x is the number of samples
+		// already represented by the accumulation image.
+		{
+			UniformBufferSetSpecification pathTracerBufferSpecification;
+			pathTracerBufferSpecification.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
+			pathTracerBufferSpecification.Size = sizeof(PathTracerUB);
+			pathTracerBufferSpecification.BindingPoint = RT_PATH_TRACER_BINDING;
+
+			m_RT_PathTracerBufferSet = CreateRef<UniformBufferSet>(pathTracerBufferSpecification);
+
+			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
+			CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
+			rtBindGroup->SetUniformBuffer(m_RT_PathTracerBufferSet, RT_PATH_TRACER_BINDING);
+		}
+
+		// Directional lights are analytic delta lights. They use a compact UBO;
+		// raygen evaluates them explicitly and traces one visibility ray per light.
+		{
+			UniformBufferSetSpecification directionalLightBufferSpecification;
+			directionalLightBufferSpecification.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
+			directionalLightBufferSpecification.Size = sizeof(DirectionalLightUB);
+			directionalLightBufferSpecification.BindingPoint = RT_DIRECTIONAL_LIGHTS_BINDING;
+
+			m_RT_DirectionalLightBufferSet = CreateRef<UniformBufferSet>(directionalLightBufferSpecification);
+
+			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
+			CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
+			rtBindGroup->SetUniformBuffer(m_RT_DirectionalLightBufferSet, RT_DIRECTIONAL_LIGHTS_BINDING);
 		}
 
 		// GPU material table for RT. The per-instance buffer maps each TLAS hit to
@@ -304,11 +288,7 @@ namespace cerberus
 		if (m_RT_BindGroupLayout.IsValid())
 			ResourceManager::DestroyBindGroupLayout(m_RT_BindGroupLayout);
 
-		if (m_RT_OutputImageView.IsValid())
-			ResourceManager::DestroyImageView(m_RT_OutputImageView);
-
-		if (m_RT_OutputImage.IsValid())
-			ResourceManager::DestroyImage(m_RT_OutputImage);
+		ReleaseRTImages();
 	}
 
 	void PathTracerSceneRenderer::BeginScene(const SceneRendererCamera& sceneRendererCamera)
@@ -318,6 +298,125 @@ namespace cerberus
 	void PathTracerSceneRenderer::EndScene()
 	{
 
+	}
+
+	void PathTracerSceneRenderer::ResetAccumulation()
+	{
+		m_AccumulatedFrames = 0;
+	}
+
+	bool PathTracerSceneRenderer::HasCameraChanged(const SceneRendererCamera& sceneRendererCamera) const
+	{
+		if (!m_HasPreviousCamera)
+			return true;
+
+		const glm::mat4 projection = sceneRendererCamera.Camera.GetProjection();
+		constexpr float epsilon = 0.000001f;
+
+		for (uint32_t column = 0; column < 4; ++column)
+		{
+			for (uint32_t row = 0; row < 4; ++row)
+			{
+				if (std::abs(sceneRendererCamera.ViewMatrix[column][row] - m_PreviousView[column][row]) > epsilon ||
+					std::abs(projection[column][row] - m_PreviousProjection[column][row]) > epsilon)
+				{
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	void PathTracerSceneRenderer::CreateRTImages()
+	{
+		CORE_ASSERT(m_ViewportResolution.x > 0 && m_ViewportResolution.y > 0, "Invalid RT image resolution");
+
+		ImageSpecification outputSpecification;
+		outputSpecification.DebugName = "RT Output";
+		outputSpecification.Width = static_cast<uint32_t>(m_ViewportResolution.x);
+		outputSpecification.Height = static_cast<uint32_t>(m_ViewportResolution.y);
+		outputSpecification.Format = ImageFormat::RGBA32F;
+		outputSpecification.Usage = ImageUsage::Storage;
+		outputSpecification.Flags = SAMPLE_COMPATIBLE;
+		outputSpecification.Mips = 1;
+		outputSpecification.Layers = 1;
+
+		m_RT_OutputImage = ResourceManager::CreateImage(outputSpecification);
+		Image* outputImage = ResourceManager::GetImage(m_RT_OutputImage);
+		CORE_ASSERT(outputImage, "Failed to create RT output image");
+		outputImage->Invalidate();
+		outputImage->SetLayout(
+			VK_IMAGE_LAYOUT_GENERAL,
+			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
+
+		ImageViewProperties outputViewProperties;
+		outputViewProperties.Image = m_RT_OutputImage;
+		outputViewProperties.BaseMip = 0;
+		outputViewProperties.MipCount = 1;
+		outputViewProperties.BaseLayer = 0;
+		outputViewProperties.LayerCount = 1;
+		outputViewProperties.ViewType = ImageViewType::Image2D;
+		outputViewProperties.SamplerSpec.SamplerWrap = SamplerWrap::Clamp;
+		outputViewProperties.SamplerSpec.SamplerFilter = SamplerFilter::Linear;
+		outputViewProperties.SamplerSpec.Anisotropy = false;
+		outputViewProperties.SamplerSpec.MinLOD = 0.0f;
+		outputViewProperties.SamplerSpec.MaxLOD = 0.0f;
+		outputViewProperties.SamplerSpec.ShaderResource = true;
+
+		m_RT_OutputImageView = ResourceManager::CreateImageView(outputViewProperties);
+		ImageView* outputImageView = ResourceManager::GetImageView(m_RT_OutputImageView);
+		CORE_ASSERT(outputImageView, "Failed to create RT output image view");
+		outputImageView->Invalidate();
+		outputImageView->UpdateDescriptor();
+
+		ImageSpecification accumulationSpecification = outputSpecification;
+		accumulationSpecification.DebugName = "RT Accumulation";
+		accumulationSpecification.Flags = 0;
+
+		m_RT_AccumulationImage = ResourceManager::CreateImage(accumulationSpecification);
+		Image* accumulationImage = ResourceManager::GetImage(m_RT_AccumulationImage);
+		CORE_ASSERT(accumulationImage, "Failed to create RT accumulation image");
+		accumulationImage->Invalidate();
+		accumulationImage->SetLayout(
+			VK_IMAGE_LAYOUT_GENERAL,
+			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
+
+		ImageViewProperties accumulationViewProperties = outputViewProperties;
+		accumulationViewProperties.Image = m_RT_AccumulationImage;
+		accumulationViewProperties.SamplerSpec.ShaderResource = false;
+
+		m_RT_AccumulationImageView = ResourceManager::CreateImageView(accumulationViewProperties);
+		ImageView* accumulationImageView = ResourceManager::GetImageView(m_RT_AccumulationImageView);
+		CORE_ASSERT(accumulationImageView, "Failed to create RT accumulation image view");
+		accumulationImageView->Invalidate();
+		accumulationImageView->UpdateDescriptor();
+
+		BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
+		CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
+		rtBindGroup->SetImageView(m_RT_OutputImageView, RT_OUTPUT_BINDING);
+		rtBindGroup->SetImageView(m_RT_AccumulationImageView, RT_ACCUMULATION_BINDING);
+
+		ResetAccumulation();
+	}
+
+	void PathTracerSceneRenderer::ReleaseRTImages()
+	{
+		if (m_RT_OutputImageView.IsValid())
+			ResourceManager::DestroyImageView(m_RT_OutputImageView);
+		if (m_RT_AccumulationImageView.IsValid())
+			ResourceManager::DestroyImageView(m_RT_AccumulationImageView);
+		if (m_RT_OutputImage.IsValid())
+			ResourceManager::DestroyImage(m_RT_OutputImage);
+		if (m_RT_AccumulationImage.IsValid())
+			ResourceManager::DestroyImage(m_RT_AccumulationImage);
+
+		m_RT_OutputImageView = {};
+		m_RT_AccumulationImageView = {};
+		m_RT_OutputImage = {};
+		m_RT_AccumulationImage = {};
 	}
 
 
@@ -468,6 +567,37 @@ namespace cerberus
 			ubo->SetData(&skyLightUBO, sizeof(SkyLightUB), 0);
 		}
 
+		{
+			CORE_ASSERT(m_RT_PathTracerBufferSet, "RT path tracer data is not initialized");
+
+			PathTracerUB pathTracerUBO;
+			pathTracerUBO.Parameters.x = m_AccumulatedFrames;
+			pathTracerUBO.Parameters.y = RT_MAX_BOUNCES;
+			pathTracerUBO.Presentation.x = m_SceneData.SceneRendererCamera.Camera.GetExposure();
+
+			Ref<UniformBuffer> ubo = m_RT_PathTracerBufferSet->Get(frameIndex);
+			CORE_ASSERT(ubo, "Invalid RT path tracer UBO");
+			ubo->SetData(&pathTracerUBO, sizeof(PathTracerUB), 0);
+		}
+
+		{
+			CORE_ASSERT(m_RenderScene && m_RT_DirectionalLightBufferSet, "RT directional light data is not initialized");
+
+			DirectionalLightUB directionalLightUBO;
+			directionalLightUBO.Parameters.x = m_RenderScene->GetDirectionalLightCount();
+			const auto& directionalLights = m_RenderScene->GetDirectionalLights();
+			for (uint32_t lightIndex = 0; lightIndex < m_RenderScene->GetDirectionalLightCount(); ++lightIndex)
+			{
+				const DirectionalLightProxy& light = directionalLights[lightIndex];
+				directionalLightUBO.Lights[lightIndex].DirectionAndIntensity = glm::vec4(light.Direction, light.Intensity);
+				directionalLightUBO.Lights[lightIndex].Radiance = glm::vec4(light.Radiance, 0.0f);
+			}
+
+			Ref<UniformBuffer> ubo = m_RT_DirectionalLightBufferSet->Get(frameIndex);
+			CORE_ASSERT(ubo, "Invalid RT directional light UBO");
+			ubo->SetData(&directionalLightUBO, sizeof(DirectionalLightUB), 0);
+		}
+
 		if constexpr (ENABLE_RASTER_TEST_PATH)
 		{
 			BindGroup* bindGroup1 = ResourceManager::GetBindGroup(m_BindGroup1);
@@ -496,10 +626,10 @@ namespace cerberus
 
 		if constexpr (ENABLE_RASTER_TEST_PATH)
 		{
-			// Raster test path intentionally disabled while RT_SMOKE_TEST is true.
+			// Legacy raster test path intentionally disabled during RT development.
 		}
 
-		// Ray tracing dispatch: minimal raygen -> storage image smoke test.
+		// Ray tracing dispatch: iterative path integration -> storage image.
 		{
 			VkCommandBuffer cmd = commandBuffer->GetCommandBuffer(frameIndex);
 
@@ -568,6 +698,28 @@ namespace cerberus
 				0,
 				nullptr);
 
+			// Preserve storage-image writes from the previous dispatch before this
+			// dispatch reads and updates the running average. The layout intentionally
+			// remains GENERAL; this is a memory dependency, not a layout transition.
+			Image* accumulationImage = ResourceManager::GetImage(m_RT_AccumulationImage);
+			CORE_ASSERT(accumulationImage, "Invalid RT accumulation image");
+
+			VkImageSubresourceRange accumulationRange{};
+			accumulationRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			accumulationRange.baseMipLevel = 0;
+			accumulationRange.levelCount = 1;
+			accumulationRange.baseArrayLayer = 0;
+			accumulationRange.layerCount = 1;
+
+			accumulationImage->InsertImageMemoryBarrier(
+				cmd,
+				VK_ACCESS_SHADER_WRITE_BIT,
+				VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+				VK_IMAGE_LAYOUT_GENERAL,
+				VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+				VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+				accumulationRange);
+
 			ext::vkCmdTraceRaysKHR(
 				cmd,
 				&raygenRegion,
@@ -581,6 +733,10 @@ namespace cerberus
 
 		commandBuffer->EndRenderThread();
 		commandBuffer->SubmitRenderThread();
+
+		// Keep sampleIndex + 1 representable in the shader.
+		if (m_AccumulatedFrames < std::numeric_limits<uint32_t>::max() - 1u)
+			++m_AccumulatedFrames;
 	}
 
 	void PathTracerSceneRenderer::SubmitMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform)
@@ -589,6 +745,9 @@ namespace cerberus
 
 	void PathTracerSceneRenderer::SetViewportSize(uint32_t width, uint32_t height)
 	{
+		if (width == 0 || height == 0)
+			return;
+
 		if (m_ViewportResolution.x == width && m_ViewportResolution.y == height)
 			return;
 
@@ -604,68 +763,29 @@ namespace cerberus
 			}
 		}
 
-		if (m_RT_OutputImageView.IsValid())
-			ResourceManager::DestroyImageView(m_RT_OutputImageView);
-
-		if (m_RT_OutputImage.IsValid())
-			ResourceManager::DestroyImage(m_RT_OutputImage);
-
-		ImageSpecification imgSpec;
-		imgSpec.DebugName = "RT Output";
-		imgSpec.Width = (uint32_t)m_ViewportResolution.x;
-		imgSpec.Height = (uint32_t)m_ViewportResolution.y;
-		imgSpec.Format = ImageFormat::RGBA32F;
-		imgSpec.Usage = ImageUsage::Storage;
-		imgSpec.Flags = SAMPLE_COMPATIBLE;
-		imgSpec.Mips = 1;
-		imgSpec.Layers = 1;
-
-		m_RT_OutputImage = ResourceManager::CreateImage(imgSpec);
-		Image* rtImg = ResourceManager::GetImage(m_RT_OutputImage);
-		CORE_ASSERT(rtImg, "Failed to recreate RT output image");
-
-		rtImg->Invalidate();
-		rtImg->SetLayout(
-			VK_IMAGE_LAYOUT_GENERAL,
-			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
-
-		ImageViewProperties viewProp;
-		viewProp.Image = m_RT_OutputImage;
-		viewProp.BaseMip = 0;
-		viewProp.MipCount = 1;
-		viewProp.BaseLayer = 0;
-		viewProp.LayerCount = 1;
-		viewProp.ViewType = ImageViewType::Image2D;
-
-		SamplerSpecification samplerSpec;
-		samplerSpec.SamplerWrap = SamplerWrap::Clamp;
-		samplerSpec.SamplerFilter = SamplerFilter::Linear;
-		samplerSpec.Anisotropy = false;
-		samplerSpec.MinLOD = 0.0f;
-		samplerSpec.MaxLOD = 1.0f;
-		samplerSpec.ShaderResource = true;
-		viewProp.SamplerSpec = samplerSpec;
-
-		m_RT_OutputImageView = ResourceManager::CreateImageView(viewProp);
-		ImageView* rtImgView = ResourceManager::GetImageView(m_RT_OutputImageView);
-		CORE_ASSERT(rtImgView, "Failed to recreate RT output image view");
-		rtImgView->Invalidate();
-		rtImgView->UpdateDescriptor();
-
-		BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
-		CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
-		rtBindGroup->SetImageView(m_RT_OutputImageView, RT_OUTPUT_BINDING);
+		ReleaseRTImages();
+		CreateRTImages();
 	}
 
 	bool PathTracerSceneRenderer::RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform)
 	{
 		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
-		return m_RenderScene->RegisterMesh(mesh, materialTable, transform);
+		const bool registered = m_RenderScene->RegisterMesh(mesh, materialTable, transform);
+		if (registered)
+			ResetAccumulation();
+		return registered;
 	}
 
 	void PathTracerSceneRenderer::Render(const SceneRendererCamera& sceneRendererCamera)
 	{
+		if (HasCameraChanged(sceneRendererCamera))
+		{
+			ResetAccumulation();
+			m_PreviousView = sceneRendererCamera.ViewMatrix;
+			m_PreviousProjection = sceneRendererCamera.Camera.GetProjection();
+			m_HasPreviousCamera = true;
+		}
+
 		m_SceneData.SceneRendererCamera = sceneRendererCamera;
 
 		if constexpr (ENABLE_ACCELERATION_STRUCTURES)
@@ -703,31 +823,71 @@ namespace cerberus
 	bool PathTracerSceneRenderer::UnregisterMesh(const Ref<Mesh>& mesh)
 	{
 		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
-		return m_RenderScene->UnregisterMesh(mesh);
+		const bool unregistered = m_RenderScene->UnregisterMesh(mesh);
+		if (unregistered)
+			ResetAccumulation();
+		return unregistered;
 	}
 
 	void PathTracerSceneRenderer::UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform)
 	{
 		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+		if (!m_RenderScene->IsRegistered(mesh))
+			return;
+
 		m_RenderScene->UpdateMeshTransform(mesh, transform);
+		ResetAccumulation();
 	}
 
 	bool PathTracerSceneRenderer::UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable)
 	{
 		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
-		return m_RenderScene->UpdateMeshMaterials(mesh, materialTable);
+		const bool updated = m_RenderScene->UpdateMeshMaterials(mesh, materialTable);
+		if (updated)
+			ResetAccumulation();
+		return updated;
 	}
 
 	void PathTracerSceneRenderer::OnMaterialAssetChanged(const Ref<MaterialAsset>& materialAsset)
 	{
 		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
-		m_RenderScene->UpdateMaterialProxy(materialAsset);
+		if (m_RenderScene->UpdateMaterialProxy(materialAsset))
+			ResetAccumulation();
 	}
 
 	void PathTracerSceneRenderer::SetSkyLight(const Ref<EnvironmentMap>& environment, float intensity, uint32_t sampleLOD)
 	{
 		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+		const SkyLightProxy previousSkyLight = m_RenderScene->GetSkyLight();
 		m_RenderScene->SetSkyLight(environment, intensity, sampleLOD);
+		const SkyLightProxy& currentSkyLight = m_RenderScene->GetSkyLight();
+
+		constexpr float epsilon = 0.000001f;
+		const bool skyLightChanged =
+			previousSkyLight.RadianceMap != currentSkyLight.RadianceMap ||
+			previousSkyLight.IrradianceMap != currentSkyLight.IrradianceMap ||
+			std::abs(previousSkyLight.Intensity - currentSkyLight.Intensity) > epsilon ||
+			std::abs(previousSkyLight.SampleLOD - currentSkyLight.SampleLOD) > epsilon;
+
+		if (skyLightChanged)
+			ResetAccumulation();
+	}
+
+	void PathTracerSceneRenderer::SetDirectionalLights(std::span<const DirectionalLight> directionalLights)
+	{
+		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+		if (m_RenderScene->SetDirectionalLights(directionalLights))
+			ResetAccumulation();
+	}
+
+	void PathTracerSceneRenderer::SetSceneContext(const Ref<Scene>& scene)
+	{
+		if (m_Scene == scene)
+			return;
+
+		m_Scene = scene;
+		m_HasPreviousCamera = false;
+		ResetAccumulation();
 	}
 
 	void PathTracerSceneRenderer::OnImGuiRender()
@@ -737,6 +897,16 @@ namespace cerberus
 			if (ui::PropertyGridHeader("Statistics", true))
 			{
 				ImGui::Separator();
+				ImGui::Text("Path tracer samples: %u", m_AccumulatedFrames);
+				if (m_RenderScene)
+				{
+					const SkyLightProxy& skyLight = m_RenderScene->GetSkyLight();
+					ImGui::Text("SkyLight intensity: %.3f", skyLight.Intensity);
+					ImGui::Text("SkyLight radiance LOD: %.0f", skyLight.SampleLOD);
+					ImGui::Text("Directional lights: %u", m_RenderScene->GetDirectionalLightCount());
+					if (m_RenderScene->GetDirectionalLightCount() > 0)
+						ImGui::Text("Directional light 0 intensity: %.3f", m_RenderScene->GetDirectionalLights()[0].Intensity);
+				}
 				ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 				GPUMemoryStats memoryStats = ResourceAllocator::GetStats();
 				std::string used = utils::BytesToString(memoryStats.Used);

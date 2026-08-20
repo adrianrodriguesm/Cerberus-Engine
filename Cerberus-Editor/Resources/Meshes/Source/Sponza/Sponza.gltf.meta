@@ -1,51 +1,55 @@
 MeshSourceImporter:
-  - SubmeshIndex: 0
-    MaterialHandle: 6095182811893659649
-  - SubmeshIndex: 1
-    MaterialHandle: 14814623761911339453
-  - SubmeshIndex: 2
-    MaterialHandle: 14964495120313722613
-  - SubmeshIndex: 3
-    MaterialHandle: 3951918633091265104
-  - SubmeshIndex: 4
-    MaterialHandle: 16483142467537396126
-  - SubmeshIndex: 5
-    MaterialHandle: 6217798315756328094
-  - SubmeshIndex: 6
-    MaterialHandle: 4962962432620600835
-  - SubmeshIndex: 7
-    MaterialHandle: 12711499856641134446
-  - SubmeshIndex: 8
-    MaterialHandle: 16091410744734736875
-  - SubmeshIndex: 9
-    MaterialHandle: 3697437705587680008
-  - SubmeshIndex: 10
-    MaterialHandle: 9633083553130141348
-  - SubmeshIndex: 11
-    MaterialHandle: 6535594373649680471
-  - SubmeshIndex: 12
-    MaterialHandle: 9657477054415758569
-  - SubmeshIndex: 13
-    MaterialHandle: 17971182212518744347
-  - SubmeshIndex: 14
-    MaterialHandle: 12013585191200712927
-  - SubmeshIndex: 15
-    MaterialHandle: 9867738781935586688
-  - SubmeshIndex: 16
-    MaterialHandle: 16872354223213554039
-  - SubmeshIndex: 17
-    MaterialHandle: 8117248752684548504
-  - SubmeshIndex: 18
-    MaterialHandle: 2598083707992902848
-  - SubmeshIndex: 19
-    MaterialHandle: 15549171724285142261
-  - SubmeshIndex: 20
-    MaterialHandle: 1452939269463137129
-  - SubmeshIndex: 21
-    MaterialHandle: 4727905805536189608
-  - SubmeshIndex: 22
-    MaterialHandle: 13897044545161695494
-  - SubmeshIndex: 23
-    MaterialHandle: 11067479998843172431
-  - SubmeshIndex: 24
-    MaterialHandle: 13925800104104077011
+  Version: 2
+  Materials:
+    - MaterialSlot: 0
+      MaterialHandle: 6095182811893659649
+    - MaterialSlot: 1
+      MaterialHandle: 14814623761911339453
+    - MaterialSlot: 2
+      MaterialHandle: 14964495120313722613
+    - MaterialSlot: 3
+      MaterialHandle: 3951918633091265104
+    - MaterialSlot: 4
+      MaterialHandle: 16483142467537396126
+    - MaterialSlot: 5
+      MaterialHandle: 6217798315756328094
+    - MaterialSlot: 6
+      MaterialHandle: 4962962432620600835
+    - MaterialSlot: 7
+      MaterialHandle: 12711499856641134446
+    - MaterialSlot: 8
+      MaterialHandle: 3697437705587680008
+    - MaterialSlot: 9
+      MaterialHandle: 9657477054415758569
+    - MaterialSlot: 10
+      MaterialHandle: 15549171724285142261
+    - MaterialSlot: 11
+      MaterialHandle: 9867738781935586688
+    - MaterialSlot: 12
+      MaterialHandle: 13925800104104077011
+    - MaterialSlot: 13
+      MaterialHandle: 4727905805536189608
+    - MaterialSlot: 14
+      MaterialHandle: 12013585191200712927
+    - MaterialSlot: 15
+      MaterialHandle: 8117248752684548504
+    - MaterialSlot: 16
+      MaterialHandle: 9633083553130141348
+    - MaterialSlot: 17
+      MaterialHandle: 16872354223213554039
+    - MaterialSlot: 18
+      MaterialHandle: 2598083707992902848
+    - MaterialSlot: 19
+      MaterialHandle: 1452939269463137129
+    - MaterialSlot: 20
+      MaterialHandle: 6535594373649680471
+    - MaterialSlot: 21
+      MaterialHandle: 16091410744734736875
+    - MaterialSlot: 22
+      MaterialHandle: 11067479998843172431
+    - MaterialSlot: 23
+      MaterialHandle: 17971182212518744347
+    - MaterialSlot: 24
+      MaterialHandle: 13897044545161695494
+    - MaterialSlot: 25
+      MaterialHandle: 11255639914133364044

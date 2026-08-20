@@ -27,6 +27,7 @@ namespace cerberus
 			m_MeshToRemoved.clear();
 		}
 		m_LightEnvironment = {};
+		uint32_t directionalLightCount = 0;
 		// Environment
 		{
 			// Sky Light - Environment Map
@@ -52,17 +53,16 @@ namespace cerberus
 			// Directional Light
 			{
 				const auto& view = m_Registry.view<DirectionalLightComponent>();
-				uint32_t directionalLightIndex = 0;
 				for (auto& entity : view)
 				{
-					if (directionalLightIndex > m_LightEnvironment.DirectionalLights.size())
+					if (directionalLightCount >= m_LightEnvironment.DirectionalLights.size())
 						break;
 
 					Entity cerberusEnt{ entity, this };
 					auto& directionLight = cerberusEnt.GetComponent<DirectionalLightComponent>();
 					auto& transform = cerberusEnt.GetComponent<TransformComponent>();
 					glm::vec3 direction = -glm::normalize(glm::mat3(transform.GetTransform()) * -glm::vec3(1.f));
-					m_LightEnvironment.DirectionalLights[directionalLightIndex++] =
+					m_LightEnvironment.DirectionalLights[directionalLightCount++] =
 					{
 						direction,
 						directionLight.Radiance,
@@ -75,6 +75,9 @@ namespace cerberus
 			m_LightEnvironment.SkyLight.EnvironmentMap,
 			m_LightEnvironment.SkyLight.Multiplier,
 			m_LightEnvironment.SkyLight.SampleLOD);
+		sceneRenderer->SetDirectionalLights(std::span<const DirectionalLight>(
+			m_LightEnvironment.DirectionalLights.data(),
+			directionalLightCount));
 		sceneRenderer->BeginScene(sceneRendererCamera);
 		// Submit Meshes
 		{

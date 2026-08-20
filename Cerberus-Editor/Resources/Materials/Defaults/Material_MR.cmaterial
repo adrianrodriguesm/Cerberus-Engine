@@ -3,6 +3,7 @@ Material:
   UseNormalMap: true
   Metalness: 1
   Roughness: 1
+  Emission: 0
   AlbedoMapHandle: 15014066350684825392
   NormalMapHandle: 7918014648360710985
   MetalnessMapHandle: 10177355227681156331

@@ -9,6 +9,9 @@
 #include "Renderer/TextureAsset.h"
 #include "Asset/AssetManager.h"
 
+#include <algorithm>
+#include <cmath>
+
 namespace cerberus
 {
 	RenderScene::~RenderScene()
@@ -43,6 +46,43 @@ namespace cerberus
 			? radianceMap->GetMipLevelCount() - 1
 			: 0;
 		m_SkyLight.SampleLOD = static_cast<float>(glm::min(sampleLOD, maxLOD));
+	}
+
+	bool RenderScene::SetDirectionalLights(std::span<const DirectionalLight> directionalLights)
+	{
+		std::array<DirectionalLightProxy, MaxDirectionalLightCount> resolvedLights{};
+		const uint32_t resolvedLightCount = static_cast<uint32_t>(std::min(
+			directionalLights.size(),
+			static_cast<size_t>(MaxDirectionalLightCount)));
+
+		for (uint32_t lightIndex = 0; lightIndex < resolvedLightCount; ++lightIndex)
+		{
+			const DirectionalLight& sourceLight = directionalLights[lightIndex];
+			DirectionalLightProxy& resolvedLight = resolvedLights[lightIndex];
+
+			const float directionLengthSquared = glm::dot(sourceLight.Direction, sourceLight.Direction);
+			resolvedLight.Direction = directionLengthSquared > 0.000001f
+				? sourceLight.Direction * glm::inversesqrt(directionLengthSquared)
+				: glm::vec3(0.0f, 1.0f, 0.0f);
+			resolvedLight.Radiance = glm::max(sourceLight.Radiance, glm::vec3(0.0f));
+			resolvedLight.Intensity = glm::max(sourceLight.Multiplier, 0.0f);
+		}
+
+		bool changed = m_DirectionalLightCount != resolvedLightCount;
+		constexpr float epsilon = 0.000001f;
+		for (uint32_t lightIndex = 0; !changed && lightIndex < MaxDirectionalLightCount; ++lightIndex)
+		{
+			const DirectionalLightProxy& previousLight = m_DirectionalLights[lightIndex];
+			const DirectionalLightProxy& resolvedLight = resolvedLights[lightIndex];
+			changed =
+				glm::any(glm::greaterThan(glm::abs(previousLight.Direction - resolvedLight.Direction), glm::vec3(epsilon))) ||
+				glm::any(glm::greaterThan(glm::abs(previousLight.Radiance - resolvedLight.Radiance), glm::vec3(epsilon))) ||
+				std::abs(previousLight.Intensity - resolvedLight.Intensity) > epsilon;
+		}
+
+		m_DirectionalLights = resolvedLights;
+		m_DirectionalLightCount = resolvedLightCount;
+		return changed;
 	}
 
 	Ref<MaterialAsset> RenderScene::ResolveMaterialAsset(

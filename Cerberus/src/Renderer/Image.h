@@ -133,7 +133,7 @@ namespace cerberus
 		bool HasAnyFlags(ImageFlags flags) const { return (m_Specification.Flags & flags) != 0; }
 	private:
 		ImageSpecification m_Specification;
-		VkImage m_Image;
+		VkImage m_Image = VK_NULL_HANDLE;
 		VmaAllocation m_MemoryAlloc = nullptr;
 		VkImageLayout m_CurrentImgLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	};

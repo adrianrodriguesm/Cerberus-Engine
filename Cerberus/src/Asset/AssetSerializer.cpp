@@ -15,30 +15,26 @@ namespace cerberus
 	{
 		const auto& filepath = (metadata.FilePath.string() + ".meta");
 		YAML::Emitter out;
-		out << YAML::BeginMap; // MeshSourceImporter
-		out << YAML::Key << "MeshSourceImporter" << YAML::Value << YAML::BeginSeq;
-			
-				Ref<MeshSource> meshSource = std::dynamic_pointer_cast<MeshSource>(asset);
-				const auto& materialAssets = meshSource->GetMaterialsAsset();
-				const auto& submeshes = meshSource->GetSubmeshes();
-				for (size_t i = 0; i < submeshes.size(); i++)
-				{
-					const uint32_t materialIndex = submeshes[i].MaterialIndex;
-					if (materialIndex >= materialAssets.size() || !materialAssets[materialIndex])
-						continue;
+		out << YAML::BeginMap;
+		out << YAML::Key << "MeshSourceImporter" << YAML::Value << YAML::BeginMap;
+		out << YAML::Key << "Version" << YAML::Value << 2;
+		out << YAML::Key << "Materials" << YAML::Value << YAML::BeginSeq;
 
-					AssetHandle materialHandle = materialAssets[materialIndex]->Handle;
-					if (!materialHandle)
-						continue;
+		Ref<MeshSource> meshSource = std::dynamic_pointer_cast<MeshSource>(asset);
+		const auto& materialAssets = meshSource->GetMaterialsAsset();
+		for (uint32_t materialSlot = 0; materialSlot < materialAssets.size(); materialSlot++)
+		{
+			if (!materialAssets[materialSlot] || !materialAssets[materialSlot]->Handle)
+				continue;
 
-					out << YAML::BeginMap;
-					out << YAML::Key << "SubmeshIndex" << YAML::Value << i;
-					out << YAML::Key << "MaterialHandle" << YAML::Value << (uint64_t)materialHandle;
-					out << YAML::EndMap;
-				}
-			
-			out << YAML::EndSeq;
-		
+			out << YAML::BeginMap;
+			out << YAML::Key << "MaterialSlot" << YAML::Value << materialSlot;
+			out << YAML::Key << "MaterialHandle" << YAML::Value << (uint64_t)materialAssets[materialSlot]->Handle;
+			out << YAML::EndMap;
+		}
+
+		out << YAML::EndSeq;
+		out << YAML::EndMap;
 		out << YAML::EndMap;
 		std::ofstream fout(filepath);
 		fout << out.c_str();
@@ -60,22 +56,44 @@ namespace cerberus
 		if(!data["MeshSourceImporter"])
 			return MeshSourceProperties();
 
-		// Get the materials associated with each submesh
-		auto submeshMaterials = data["MeshSourceImporter"];
-
-		// Fill the MeshSourceProperties
+		const YAML::Node importerNode = data["MeshSourceImporter"];
 		MeshSourceProperties meshSourceProp;
-		for (auto submesh : submeshMaterials)
-		{
-			if (!submesh["SubmeshIndex"] || !submesh["MaterialHandle"])
-				continue;
 
-			uint32_t submeshIndex = submesh["SubmeshIndex"].as<uint32_t>();
-			AssetHandle materialHandle = 0;
-			materialHandle = submesh["MaterialHandle"].as<uint64_t>();
-			if (materialHandle)
-				meshSourceProp.SubmeshMaterials[submeshIndex] = materialHandle;
+		// Version 2 persists the complete Assimp material table. This includes
+		// material slots that are not currently referenced by a submesh.
+		if (importerNode.IsMap())
+		{
+			const YAML::Node materials = importerNode["Materials"];
+			if (materials && materials.IsSequence())
+			{
+				for (const auto& material : materials)
+				{
+					if (!material["MaterialSlot"] || !material["MaterialHandle"])
+						continue;
+
+					const uint32_t materialSlot = material["MaterialSlot"].as<uint32_t>();
+					const AssetHandle materialHandle = material["MaterialHandle"].as<uint64_t>();
+					if (materialHandle)
+						meshSourceProp.MaterialSlots[materialSlot] = materialHandle;
+				}
+			}
 		}
+		// Version 1 stored only submeshes. Keep reading it so existing projects
+		// migrate automatically when TryToLoadData serializes the MeshSource.
+		else if (importerNode.IsSequence())
+		{
+			for (const auto& submesh : importerNode)
+			{
+				if (!submesh["SubmeshIndex"] || !submesh["MaterialHandle"])
+					continue;
+
+				const uint32_t submeshIndex = submesh["SubmeshIndex"].as<uint32_t>();
+				const AssetHandle materialHandle = submesh["MaterialHandle"].as<uint64_t>();
+				if (materialHandle)
+					meshSourceProp.SubmeshMaterials[submeshIndex] = materialHandle;
+			}
+		}
+
 		return meshSourceProp;
 	}
 

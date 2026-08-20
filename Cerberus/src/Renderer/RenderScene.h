@@ -6,6 +6,10 @@
 #include "Renderer/Resources/MaterialProxy.h"
 #include "Renderer/Material.h"
 #include "Renderer/Mesh.h"
+#include "Scene/SceneEnvironment.h"
+
+#include <array>
+#include <span>
 
 namespace cerberus
 {
@@ -40,6 +44,16 @@ namespace cerberus
 		float SampleLOD = 0.0f;
 	};
 
+	struct DirectionalLightProxy
+	{
+		// Direction points from the shaded surface toward the light, matching the
+		// existing Scene/forward-renderer convention.
+		glm::vec3 Direction = glm::vec3(0.0f);
+		float Intensity = 0.0f;
+		glm::vec3 Radiance = glm::vec3(0.0f);
+		float Padding = 0.0f;
+	};
+
 	// RenderScene is the renderer-side representation of the logical Scene.
 	// It owns render proxies, GPU-facing mesh registrations, and RT acceleration
 	// structure state. SceneRenderer implementations consume this data instead of
@@ -56,6 +70,7 @@ namespace cerberus
 		bool UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable);
 		bool UpdateMaterialProxy(const Ref<MaterialAsset>& materialAsset);
 		void SetSkyLight(const Ref<EnvironmentMap>& environment, float intensity, uint32_t sampleLOD);
+		bool SetDirectionalLights(std::span<const DirectionalLight> directionalLights);
 		bool IsRegistered(const Ref<Mesh>& mesh) const;
 
 		// Builds pending BLAS and builds/updates TLAS when dirty.
@@ -72,6 +87,8 @@ namespace cerberus
 		const std::vector<Handle<Texture2D>>& GetRayTracingTextures() const { return m_MeshRegister.GPUTextures; }
 		const std::vector<RayTracingInstanceData>& GetRayTracingInstances() const { return m_RayTracingInstances; }
 		const SkyLightProxy& GetSkyLight() const { return m_SkyLight; }
+		const std::array<DirectionalLightProxy, MaxDirectionalLightCount>& GetDirectionalLights() const { return m_DirectionalLights; }
+		uint32_t GetDirectionalLightCount() const { return m_DirectionalLightCount; }
 
 		// Explicit shutdown is useful because the owning SceneRenderer can decide to
 		// wait for the GPU before releasing render-scene resources. Safe to call more
@@ -142,5 +159,7 @@ namespace cerberus
 		// Kept in exactly the same order as the instances submitted to the TLAS.
 		std::vector<RayTracingInstanceData> m_RayTracingInstances;
 		SkyLightProxy m_SkyLight;
+		std::array<DirectionalLightProxy, MaxDirectionalLightCount> m_DirectionalLights{};
+		uint32_t m_DirectionalLightCount = 0;
 	};
 }

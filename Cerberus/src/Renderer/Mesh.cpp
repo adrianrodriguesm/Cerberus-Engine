@@ -235,45 +235,79 @@ namespace cerberus
 			return changed;
 		};
 
-		auto createMaterialAsset = [this, &importSourceMaterialTextures](uint32_t materialIndex, aiMaterial* aiMaterial) -> Ref<MaterialAsset>
+		auto getMaterialAssetPath = [this](uint32_t materialIndex, aiMaterial* sourceMaterial) -> std::pair<std::string, std::filesystem::path>
 		{
 			const std::string meshSourceName = m_Properties.Filepath.stem().string();
 
-			std::string aiMaterialName = aiMaterial ? aiMaterial->GetName().C_Str() : "";
+			std::string aiMaterialName = sourceMaterial ? sourceMaterial->GetName().C_Str() : "";
 			aiMaterialName = aiMaterialName.empty() ? std::to_string(materialIndex) : aiMaterialName;
 
-			std::string materialName = meshSourceName + "_" + aiMaterialName;
-			std::string filename = materialName + ".cmaterial";
-			std::string materialDirectory = (AssetManager::GetAssetPath() / "Materials/Defaults" / meshSourceName).string();
+			const std::string materialName = meshSourceName + "_" + aiMaterialName;
+			const std::filesystem::path materialPath = AssetManager::GetAssetPath() / "Materials/Defaults" / meshSourceName / (materialName + ".cmaterial");
+			return { materialName, materialPath };
+		};
+
+		auto loadExistingMaterialAsset = [&getMaterialAssetPath, &importSourceMaterialTextures](uint32_t materialIndex, aiMaterial* sourceMaterial) -> Ref<MaterialAsset>
+		{
+			const std::filesystem::path materialPath = getMaterialAssetPath(materialIndex, sourceMaterial).second;
+			AssetHandle materialHandle = AssetManager::GetAssetHandleFromFilePath(materialPath);
+
+			// The deterministic material file may predate its registry entry. Import it
+			// instead of calling CreateNewAsset, which would generate "(01)", "(02)", ...
+			if (!materialHandle && std::filesystem::exists(materialPath))
+				materialHandle = AssetManager::ImportAsset(materialPath);
+
+			if (!materialHandle)
+				return nullptr;
+
+			Ref<MaterialAsset> materialAsset = AssetManager::GetAsset<MaterialAsset>(materialHandle);
+			if (!materialAsset)
+			{
+				NV_CORE_WARN("Failed to load existing material asset {0}; a replacement will be created", materialPath.string());
+				return nullptr;
+			}
+
+			if (importSourceMaterialTextures(materialAsset, sourceMaterial))
+				AssetImporter::Serialize(materialAsset);
+
+			NV_MESH_LOG("  Reused material asset {0} (Slot = {1})", materialPath.string(), materialIndex);
+			return materialAsset;
+		};
+
+		auto createMaterialAsset = [this, &getMaterialAssetPath, &importSourceMaterialTextures](uint32_t materialIndex, aiMaterial* sourceMaterial) -> Ref<MaterialAsset>
+		{
+			const auto [materialName, materialPath] = getMaterialAssetPath(materialIndex, sourceMaterial);
+			const std::string filename = materialPath.filename().string();
+			const std::string materialDirectory = materialPath.parent_path().string();
 
 			Ref<Material> material = CreateRef<Material>(m_MeshShader, materialName);
 			Ref<MaterialAsset> materialAsset = AssetManager::CreateNewAsset<MaterialAsset>(filename, materialDirectory, material);
 
 			glm::vec3 albedoColor(0.8f);
-			if (aiMaterial)
+			if (sourceMaterial)
 			{
 				aiColor3D aiColor;
-				if (aiMaterial->Get(AI_MATKEY_COLOR_DIFFUSE, aiColor) == AI_SUCCESS)
+				if (sourceMaterial->Get(AI_MATKEY_COLOR_DIFFUSE, aiColor) == AI_SUCCESS)
 					albedoColor = { aiColor.r, aiColor.g, aiColor.b };
 			}
 
 			float shininess = 80.0f;
-			if (aiMaterial)
-				aiMaterial->Get(AI_MATKEY_SHININESS, shininess);
+			if (sourceMaterial)
+				sourceMaterial->Get(AI_MATKEY_SHININESS, shininess);
 
 			float roughness = 1.0f - glm::sqrt(shininess / 100.0f);
 			roughness = glm::clamp(roughness, 0.0f, 1.0f);
 
 			float metalness = 0.0f;
-			if (aiMaterial)
-				aiMaterial->Get(AI_MATKEY_REFLECTIVITY, metalness);
+			if (sourceMaterial)
+				sourceMaterial->Get(AI_MATKEY_REFLECTIVITY, metalness);
 
 			materialAsset->SetAlbedoColor(albedoColor);
 			materialAsset->SetUseNormalMap(false);
 			materialAsset->SetMetalness(metalness);
 			materialAsset->SetRoughness(roughness);
 
-			importSourceMaterialTextures(materialAsset, aiMaterial);
+			importSourceMaterialTextures(materialAsset, sourceMaterial);
 
 			AssetImporter::Serialize(materialAsset);
 
@@ -284,6 +318,21 @@ namespace cerberus
 		const uint32_t materialSlotCount = getMaterialSlotCount();
 		m_MaterialsAsset.clear();
 		m_MaterialsAsset.resize(materialSlotCount);
+
+		for (const auto& [materialSlot, materialHandle] : m_Properties.MaterialSlots)
+		{
+			if (materialSlot >= m_MaterialsAsset.size())
+			{
+				NV_CORE_WARN("Mesh material table references invalid material slot {0}", materialSlot);
+				continue;
+			}
+
+			Ref<MaterialAsset> materialAsset = AssetManager::GetAsset<MaterialAsset>(materialHandle);
+			if (materialAsset)
+				m_MaterialsAsset[materialSlot] = materialAsset;
+			else
+				NV_CORE_WARN("Invalid material handle for material slot {0}; using imported/default material", materialSlot);
+		}
 
 		if (!m_Properties.SubmeshMaterials.empty())
 		{
@@ -298,6 +347,8 @@ namespace cerberus
 				const uint32_t materialIndex = m_Submeshes[submeshIndex].MaterialIndex;
 				if (materialIndex >= m_MaterialsAsset.size())
 					m_MaterialsAsset.resize(materialIndex + 1);
+				if (m_MaterialsAsset[materialIndex])
+					continue;
 
 				Ref<MaterialAsset> materialAsset = AssetManager::GetAsset<MaterialAsset>(materialHandle);
 				if (materialAsset)
@@ -320,7 +371,9 @@ namespace cerberus
 				continue;
 			}
 
-			m_MaterialsAsset[materialIndex] = createMaterialAsset(materialIndex, aiMaterial);
+			m_MaterialsAsset[materialIndex] = loadExistingMaterialAsset(materialIndex, aiMaterial);
+			if (!m_MaterialsAsset[materialIndex])
+				m_MaterialsAsset[materialIndex] = createMaterialAsset(materialIndex, aiMaterial);
 		}
 
 		for (Submesh& submesh : m_Submeshes)

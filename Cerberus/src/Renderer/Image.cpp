@@ -216,9 +216,9 @@ namespace cerberus
 		VkPipelineStageFlags dstStageMask,
 		VkImageSubresourceRange subresourceRange)
 	{
-		if (m_CurrentImgLayout == newImageLayout)
-			return;
-
+		// A memory dependency can be required even when the image remains in the
+		// same layout (for example, a storage-image write in one path-tracing
+		// dispatch followed by a read/write in the next dispatch).
 		utils::InsertImageMemoryBarrier(cmdbuffer, m_Image, srcAccessMask, dstAccessMask, m_CurrentImgLayout, newImageLayout, srcStageMask, dstStageMask, subresourceRange);
 		m_CurrentImgLayout = newImageLayout;
 	}

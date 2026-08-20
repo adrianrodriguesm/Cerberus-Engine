@@ -163,7 +163,7 @@ namespace cerberus
 	{
 		AssetHandle EnvironmentHandle;
 		float Intensity = 1.f;
-		uint32_t SampleLOD = 1;
+		uint32_t SampleLOD = 0;
 
 		SkyLightComponent() = default;
 		SkyLightComponent(const SkyLightComponent& other) = default;
