@@ -83,6 +83,21 @@ namespace cerberus
 		return allocator->Allocate(layout);
 	}
 
+	void DescriptorManager::FreeDescriptorSet(
+		VkDescriptorSet descriptorSet,
+		DescriptorAllocationLifetime lifetime)
+	{
+		if (!s_DescriptorManagerData || descriptorSet == VK_NULL_HANDLE ||
+			lifetime != DescriptorAllocationLifetime::Persistent)
+		{
+			return;
+		}
+
+		CORE_ASSERT(s_DescriptorManagerData->PersistentAllocator,
+			"Persistent descriptor allocator is not initialized");
+		s_DescriptorManagerData->PersistentAllocator->Free(descriptorSet);
+	}
+
 	VkDescriptorSetLayout DescriptorManager::CreateDescriptorSetLayout(VkDescriptorSetLayoutCreateInfo* info)
 	{
 		CORE_ASSERT(s_DescriptorManagerData, "DescriptorManager is not initialized");

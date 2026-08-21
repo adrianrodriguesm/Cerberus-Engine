@@ -96,7 +96,9 @@ namespace cerberus
 		// Upload Fonts
 		{
 			TransientCommandBuffer commandBuffer = Renderer::GetTransientCommandExecutor().BeginGraphics();
-			ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
+			// Dear ImGui is an external Vulkan backend and therefore remains an
+			// explicit native-handle boundary.
+			ImGui_ImplVulkan_CreateFontsTexture(commandBuffer.GetNative());
 			commandBuffer.SubmitAndWait();
 
 			VK_CHECK_RESULT(vkDeviceWaitIdle(device->GetVulkanDevice()));

@@ -25,6 +25,7 @@ namespace cerberus
 		static void ResetTransientFramePools();
 
 		static VkDescriptorSet AllocateDescriptorSet(VkDescriptorSetLayout layout, DescriptorAllocationLifetime lifetime);
+		static void FreeDescriptorSet(VkDescriptorSet descriptorSet, DescriptorAllocationLifetime lifetime);
 		static VkDescriptorSetLayout CreateDescriptorSetLayout(VkDescriptorSetLayoutCreateInfo* info);
 
 		static bool IsInitialized();

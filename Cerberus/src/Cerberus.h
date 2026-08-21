@@ -28,7 +28,9 @@
 //// Renderer
 /////////////////////////////////////////////
 #include "Renderer/Renderer.h"
+#include "Renderer/SceneRenderer/ForwardSceneRenderer.h"
 #include "Renderer/SceneRenderer/PathTracerSceneRenderer.h"
+#include "Renderer/SceneRenderer/SceneRendererType.h"
 /////////////////////////////////////////////
 //// Scene
 /////////////////////////////////////////////

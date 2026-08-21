@@ -35,6 +35,9 @@ namespace cerberus
 		// Prepare and end rendering
 		static void BeginFrame();
 		static void EndFrame();
+		// Rare lifecycle boundary used when replacing a complete SceneRenderer.
+		// This is intentionally blocking and must never be called once per frame.
+		static void WaitIdleAndDrain();
 
 		// Command infrastructure. Renderer owns the services; command lists record
 		// through borrowed native command buffers and never submit themselves.

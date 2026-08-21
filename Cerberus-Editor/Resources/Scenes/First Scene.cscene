@@ -1,44 +1,56 @@
 Scene: First Scene
 Entities:
-  - Entity: 4837348124439365352
+  - Entity: 2331242398901356657
     TagComponent:
-      Tag: Cube
+      Tag: Sphere Blue
     TransformComponent:
-      Translation: [9.00707245, 0.672205329, 0.627028465]
+      Translation: [6.00706673, 0.811627388, 0.659687638]
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     MeshComponent:
-      AssetHandle: 12564026686276911499
+      AssetHandle: 7118303737358808468
       MaterialTable:
-        0: 3441989012872340998
-  - Entity: 15322133620228630608
+        0: 8124064055642612827
+  - Entity: 6161878571366855362
     TagComponent:
-      Tag: Sky Light
+      Tag: Sphere Red
     TransformComponent:
-      Translation: [0, 0, 0]
+      Translation: [7.02342987, 0.737622976, 0.729131818]
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
-    SkyLightComponent:
-      AssetHandle: 12120527172450138203
-      Intensity: 2.20000005
-      SampleLOD: 1
-  - Entity: 13002030392834927472
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 12657854205992370360
     TagComponent:
-      Tag: Directional Light
+      Tag: Cerberus Gun
     TransformComponent:
-      Translation: [0, 0, 0]
-      Rotation: [141.479996, -12.6899996, 149.529999]
-      Scale: [1, 1, 1]
-    DirectionalLightComponent:
-      Radiance: [1, 1, 1]
-      Intensity: 3.42499995
+      Translation: [5.44921761e-07, 1.90992498, -0.857728899]
+      Rotation: [0, -90, 0]
+      Scale: [0.0305296779, 0.030530002, 0.0305296779]
+    MeshComponent:
+      AssetHandle: 11825681029947774227
+      MaterialTable:
+        0: 13778239963461093945
+  - Entity: 16363556732084180923
+    TagComponent:
+      Tag: Damaged Helmet
+    TransformComponent:
+      Translation: [4.10066414, 2.23583055, -0.649811387]
+      Rotation: [0, 0, 0]
+      Scale: [0.860000014, 0.860000014, 0.860000014]
+    MeshComponent:
+      AssetHandle: 14901800992554441365
+      MaterialTable:
+        0: 1225604024128046404
   - Entity: 11660497299307709605
     TagComponent:
       Tag: Sponza
     TransformComponent:
       Translation: [0, 0, 0]
       Rotation: [0, 0, 0]
-      Scale: [2, 2, 2]
+      Scale: [4.15999985, 4.15999985, 4.15999985]
     MeshComponent:
       AssetHandle: 1883853971118702195
       MaterialTable:
@@ -67,47 +79,35 @@ Entities:
         22: 3300666414885992116
         23: 5388152520102643491
         24: 16162982243639053922
-  - Entity: 16363556732084180923
+  - Entity: 13002030392834927472
     TagComponent:
-      Tag: Damaged Helmet
+      Tag: Directional Light
     TransformComponent:
-      Translation: [4.10066414, 2.23583055, -0.649811387]
+      Translation: [0, 0, 0]
+      Rotation: [141.479996, -12.6899996, 149.529999]
+      Scale: [1, 1, 1]
+    DirectionalLightComponent:
+      Radiance: [1, 1, 1]
+      Intensity: 3.42499995
+  - Entity: 15322133620228630608
+    TagComponent:
+      Tag: Sky Light
+    TransformComponent:
+      Translation: [0, 0, 0]
       Rotation: [0, 0, 0]
-      Scale: [0.860000014, 0.860000014, 0.860000014]
-    MeshComponent:
-      AssetHandle: 14901800992554441365
-      MaterialTable:
-        0: 1225604024128046404
-  - Entity: 12657854205992370360
+      Scale: [1, 1, 1]
+    SkyLightComponent:
+      AssetHandle: 12120527172450138203
+      Intensity: 2.20000005
+      SampleLOD: 1
+  - Entity: 4837348124439365352
     TagComponent:
-      Tag: Cerberus Gun
+      Tag: Cube
     TransformComponent:
-      Translation: [5.44921761e-07, 1.90992498, -0.857728899]
-      Rotation: [0, -90, 0]
-      Scale: [0.0305296779, 0.030530002, 0.0305296779]
-    MeshComponent:
-      AssetHandle: 11825681029947774227
-      MaterialTable:
-        0: 13778239963461093945
-  - Entity: 6161878571366855362
-    TagComponent:
-      Tag: Sphere Red
-    TransformComponent:
-      Translation: [7.02342987, 0.737622976, 0.729131818]
+      Translation: [9.00707245, 0.672205329, 0.627028465]
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     MeshComponent:
-      AssetHandle: 7118303737358808468
+      AssetHandle: 12564026686276911499
       MaterialTable:
-        0: 14247841347131106388
-  - Entity: 2331242398901356657
-    TagComponent:
-      Tag: Sphere Blue
-    TransformComponent:
-      Translation: [6.00706673, 0.811627388, 0.659687638]
-      Rotation: [0, 0, 0]
-      Scale: [1, 1, 1]
-    MeshComponent:
-      AssetHandle: 7118303737358808468
-      MaterialTable:
-        0: 8124064055642612827
+        0: 3441989012872340998

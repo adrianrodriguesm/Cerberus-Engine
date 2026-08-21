@@ -214,7 +214,14 @@ namespace cerberus
 
 	BindGroup::~BindGroup()
 	{
+		if (m_Lifetime != DescriptorAllocationLifetime::Persistent ||
+			!DescriptorManager::IsInitialized())
+		{
+			return;
+		}
 
+		for (VkDescriptorSet descriptorSet : m_Descriptors)
+			DescriptorManager::FreeDescriptorSet(descriptorSet, m_Lifetime);
 	}
 
 	void BindGroup::Update()

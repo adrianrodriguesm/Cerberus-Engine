@@ -6,6 +6,7 @@
 #include "Asset/Asset.h"
 #include "Components/Components.h"
 #include "Renderer/RenderObjectID.h"
+#include "Renderer/SceneRenderer/SceneRendererType.h"
 namespace cerberus
 {
 	struct SceneRendererCamera;
@@ -16,34 +17,14 @@ namespace cerberus
 	class SceneSerializer;
 	class EditorLayer;
 
-	class RegisterContext
-	{
-	public:
-		RegisterContext(Scene* scene)
-			: m_Scene(scene)
-		{}
-
-		void AddMesh(MeshComponent& PrimitiveComponent)
-		{
-			AddPrimitiveBatches.emplace_back(PrimitiveComponent);
-		}
-
-		void Process();
-
-	private:
-		Scene* m_Scene;
-		std::vector<MeshComponent> AddPrimitiveBatches;
-	};
-
 	class Scene : public Asset
 	{
 	public:
 		Scene(const std::string& name = "Untitled Scene");
 		~Scene();
 
-		void OnUpdate(Ref<SceneRenderer> sceneRenderer, const SceneRendererCamera& sceneRendererCamera, Timestep ts);
+		void OnUpdate(SceneRenderer& sceneRenderer, const SceneRendererCamera& sceneRendererCamera, Timestep ts);
 
-		//void OnViewportResize(uint32_t width, uint32_t height);
 		void SetViewport(uint32_t width, uint32_t height);
 
 		Entity CreateEntity(const std::string& tagName = "Entity");
@@ -51,6 +32,13 @@ namespace cerberus
 		void DestroyEntity(Entity entity);
 
 		void SetName(const std::string& name) { m_Name = name; }
+		void SetRendererType(SceneRendererType rendererType) { m_RendererType = rendererType; }
+		SceneRendererType GetRendererType() const { return m_RendererType; }
+
+		// Scene components currently cache whether their renderer-side proxy exists.
+		// A renderer replacement owns a fresh RenderScene, so every mesh must be
+		// registered again before the new renderer can draw it.
+		void ResetRendererState();
 
 		inline glm::vec2 GetViewportSize() const { return glm::vec2(m_Width, m_Heigth); }
 
@@ -60,10 +48,9 @@ namespace cerberus
 		entt::registry m_Registry;
 		uint32_t m_Width, m_Heigth;
 		std::string m_Name;
+		SceneRendererType m_RendererType = SceneRendererType::PathTracer;
 
 		LightEnvironment m_LightEnvironment;
-		std::vector<Entity> m_DirtyTransform;
-
 		std::vector<RenderObjectID> m_MeshToRemoved;
 
 		friend class Entity;

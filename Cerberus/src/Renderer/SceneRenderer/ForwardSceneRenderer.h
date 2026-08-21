@@ -1,133 +1,93 @@
 #pragma once
+
 #include "Renderer/SceneRenderer/SceneRenderer.h"
-// Currently there is a renderer refactoring
-// so this renderer will be deprecated
-#if 0
+#include "Renderer/Framebuffer.h"
+#include "Renderer/Pipeline.h"
+#include "Renderer/RenderScene.h"
+#include "Renderer/Resources/BindGroup.h"
+#include "Renderer/StorageBufferSet.h"
+#include "Renderer/UniformBufferSet.h"
+
 namespace cerberus
 {
+	// Modern raster reference renderer. It intentionally starts as one forward
+	// pass so GraphicsCommandList and RenderScene can be validated before the
+	// work is split into reusable passes and, later, scheduled by RenderGraph.
 	class ForwardSceneRenderer final : public SceneRenderer
 	{
 	public:
 		ForwardSceneRenderer(Ref<Scene> scene, const SceneRendererSpecification& spec = {});
-		virtual ~ForwardSceneRenderer();
+		~ForwardSceneRenderer() override;
 
-		virtual void BeginScene(const SceneRendererCamera& sceneRendererCamera) override;
-		virtual void EndScene() override;
-		virtual void SubmitMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) override;
-		virtual void SetViewportSize(uint32_t width, uint32_t height) override;
-		virtual void SetSceneContext(const Ref<Scene>& scene) override { m_Scene = scene; }
+		void SetViewportSize(uint32_t width, uint32_t height) override;
 
-		virtual void Render(const SceneRendererCamera& sceneRendererCamera) override {}
+		bool IsRegistered(RenderObjectID renderObjectID) override;
+		bool RegisterMesh(RenderObjectID renderObjectID, const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) override;
+		bool UnregisterMesh(RenderObjectID renderObjectID) override;
+		void UpdateMeshTransform(RenderObjectID renderObjectID, const glm::mat4& transform) override;
+		bool UpdateMeshMaterials(RenderObjectID renderObjectID, const Ref<MaterialTable>& materialTable) override;
+		void OnMaterialAssetChanged(const Ref<MaterialAsset>& materialAsset) override;
+		void SetSkyLight(const Ref<EnvironmentMap>& environment, float intensity, uint32_t sampleLOD) override;
+		void SetDirectionalLights(std::span<const DirectionalLight> directionalLights) override;
 
-		virtual void OnImGuiRender() override;
+		void Render(const SceneRendererCamera& sceneRendererCamera) override;
+		void OnImGuiRender() override;
+		Handle<ImageView> GetFinalPassImage() const override;
 
-		virtual Ref<Image2D> GetFinalPassImage() const override;
 	private:
-		void FlushAndReset();
-		void PreDepthPass();
-		void ShadowPass();
-		void GeometryPass();
-		void SceneCompositePass();
+		void CreateRasterResources();
+		void DestroyRasterResources();
+		void UpdateCameraBuffer();
+		void UpdateLightingBuffer();
+		void UpdateMaterialBuffer();
+		void UpdateTextureTable();
+		void UpdateEnvironmentBindings();
+
 	private:
 		struct CameraUB
 		{
-			glm::mat4 ViewProjection, View, Projection;
-			glm::mat4 InverseViewReverseProjection, InverseView, InverseProjection;
+			glm::mat4 ViewProjection = glm::mat4(1.0f);
+			glm::mat4 InverseViewProjection = glm::mat4(1.0f);
+			glm::vec4 CameraPosition = glm::vec4(0.0f);
+			// x = exposure, y/z/w = unused.
+			glm::vec4 Presentation = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
 		};
-		struct DirectionalLightUB
-		{
-			glm::vec4 Direction;
-			glm::vec4 Radience;
-			float Intensity = 1;
-			float Padding[3] = { 0,0,0 };
-		};
-		struct EnvironmentUB
-		{
-			std::array<DirectionalLightUB, 4> DirectionalLights;
-			glm::vec3 CameraPosition;
-			float Padding = 0.f;
-		};
-		struct ScreenDataUB
-		{
-			glm::ivec2 Resolution;
-		};
-		struct ShadowDataUB
-		{
-			std::array<glm::mat4, 4> LightViewProjectionMatrix;
-		};
-		struct RendererDataUB
-		{
-			glm::vec4 CascadeSplits;
-			bool ShowCascades = false;				// Bool are 4 byte in glsl
-			char Padding_0[3] = { 0,0,0 };
-			bool SoftShadows = true;
-			char Padding_1[3] = { 0,0,0 };
-			float LightSize = .17f;
-			float MaxShadowDistance = 500.f;
-			float ShadowFade = 1.f;
-			bool CascadeFading = true;
-			char Padding_2[3] = { 0,0,0 };
-			float CascadeTransitionFade = 1.f;
-		} m_RendererDataUB;
+		static_assert(sizeof(CameraUB) == 160, "CameraUB must match the Forward shaders");
 
-
-		struct RenderPassStatistics
+		struct DirectionalLightGPU
 		{
-			uint32_t QueryIndex;
-			float TimeStamp; // in Milliseconds
+			glm::vec4 DirectionAndIntensity = glm::vec4(0.0f);
+			glm::vec4 Radiance = glm::vec4(0.0f);
 		};
 
-		struct GPUStatistics
+		struct ForwardLightingUB
 		{
-			float GPUTimePerFrame = 0.f;
-			RenderPassStatistics DepthPrePass;
-			RenderPassStatistics GeometryPass;
-			RenderPassStatistics ShadowPass;
-			RenderPassStatistics SceneCompositePass;
-		} m_GPUStatistics;
+			// x = SkyLight intensity, y = display radiance LOD, z/w = unused.
+			glm::vec4 SkyLightParameters = glm::vec4(0.0f);
+			// x = active directional-light count, y/z/w = unused.
+			glm::uvec4 DirectionalLightParameters = glm::uvec4(0u);
+			std::array<DirectionalLightGPU, MaxDirectionalLightCount> DirectionalLights{};
+		};
+		static_assert(sizeof(ForwardLightingUB) == 160, "ForwardLightingUB must match the Forward shaders");
 
-	private:
-		Ref<Scene> m_Scene;
 		SceneRendererSpecification m_Specification;
-		Ref<CommandBuffer> m_CommandBuffer;
-		// Pipelines
-		Ref<Pipeline> m_PreDepthPipeline;
-		Ref<Pipeline> m_SkyboxPipeline;
-		Ref<Pipeline> m_GeometryPipeline;
-		Ref<Pipeline> m_SceneCompositePipeline;
-		Ref<Pipeline> m_ShadowMapPipelines[4];
+		glm::uvec2 m_ViewportResolution = glm::uvec2(1u);
+		Ref<Scene> m_Scene;
+		SceneRendererCamera m_SceneRendererCamera{};
+		Scope<RenderScene> m_RenderScene;
 
-		// Material
-		Ref<Material> m_PreDepthMaterial;
-		Ref<Material> m_SkyboxMaterial;
-		Ref<Material> m_SceneCompositeMaterial;
-		Ref<Material> m_ShadowMapMaterial;
+		Handle<RenderPass> m_RenderPass;
+		Handle<Framebuffer> m_Framebuffer;
+		Handle<GraphicsPipeline> m_SkyPipeline;
+		Handle<GraphicsPipeline> m_GeometryPipeline;
 
-		Ref<UniformBufferSet> m_UniformBufferSet;
+		Handle<BindGroupLayout> m_SkyBindGroupLayout;
+		Handle<BindGroup> m_SkyBindGroup;
+		Handle<BindGroupLayout> m_GeometryBindGroupLayout;
+		Handle<BindGroup> m_GeometryBindGroup;
 
-		// Viewport
-		uint32_t m_ViewportWidth, m_ViewportHeight;
-		bool m_NeedsResize = false;
-		bool m_EnableFXAA = true;
-
-		Shadow m_ShadowData;
-		int m_CascadeIndex = 0;
-		bool m_DebugShadowMap = false;
-
-		struct DrawableEntity
-		{
-			Ref<Mesh> Mesh;
-			Ref<MaterialTable> MaterialTable;
-			glm::mat4 Transform;
-		};
-
-		struct SceneData
-		{
-			SceneRendererCamera SceneRendererCamera;
-			std::vector<DrawableEntity> DrawList;
-			LightEnvironment LightEnvironment;
-		} m_SceneData;
-
+		Ref<UniformBufferSet> m_CameraBufferSet;
+		Ref<UniformBufferSet> m_LightingBufferSet;
+		Ref<StorageBufferSet> m_MaterialBufferSet;
 	};
 }
-#endif // 0

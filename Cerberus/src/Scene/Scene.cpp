@@ -15,12 +15,12 @@ namespace cerberus
 	{
 	}
 
-	void Scene::OnUpdate(Ref<SceneRenderer> sceneRenderer, const SceneRendererCamera& sceneRendererCamera, Timestep ts)
+	void Scene::OnUpdate(SceneRenderer& sceneRenderer, const SceneRendererCamera& sceneRendererCamera, Timestep ts)
 	{
 		if (m_MeshToRemoved.size() > 0)
 		{
 			for (RenderObjectID renderObjectID : m_MeshToRemoved)
-				sceneRenderer->UnregisterMesh(renderObjectID);
+				sceneRenderer.UnregisterMesh(renderObjectID);
 			m_MeshToRemoved.clear();
 		}
 		m_LightEnvironment = {};
@@ -68,14 +68,13 @@ namespace cerberus
 				}
 			}
 		}
-		sceneRenderer->SetSkyLight(
+		sceneRenderer.SetSkyLight(
 			m_LightEnvironment.SkyLight.EnvironmentMap,
 			m_LightEnvironment.SkyLight.Multiplier,
 			m_LightEnvironment.SkyLight.SampleLOD);
-		sceneRenderer->SetDirectionalLights(std::span<const DirectionalLight>(
+		sceneRenderer.SetDirectionalLights(std::span<const DirectionalLight>(
 			m_LightEnvironment.DirectionalLights.data(),
 			directionalLightCount));
-		sceneRenderer->BeginScene(sceneRendererCamera);
 		// Submit Meshes
 		{
 			const auto& group = m_Registry.group<TransformComponent>(entt::get<MeshComponent>);
@@ -85,29 +84,39 @@ namespace cerberus
 				const RenderObjectID renderObjectID{ m_Registry.get<IDComponent>(entity).ID };
 				if (!mesh.m_Registered)
 				{
-					bool registered = sceneRenderer->RegisterMesh(
+					bool registered = sceneRenderer.RegisterMesh(
 						renderObjectID,
 						AssetManager::GetAsset<Mesh>(mesh.MeshHandle),
 						mesh.MaterialTable,
 						transform.GetTransform());
 					mesh.m_Registered = registered;
 					transform.m_TransformStateDirty = false;
-					//sceneRenderer->SubmitMesh(AssetManager::GetAsset<Mesh>(mesh.MeshHandle), mesh.MaterialTable, transform.GetTransform());
-				}
+					}
 				else if (transform.IsTransformDirty())
 				{
-					sceneRenderer->UpdateMeshTransform(renderObjectID, transform.GetTransform());
+					sceneRenderer.UpdateMeshTransform(renderObjectID, transform.GetTransform());
 					transform.m_TransformStateDirty = false;
 				}
 
 					
 			}
 		}
-		sceneRenderer->EndScene();
-		RenderQueueManager::Submit([sceneRenderer, sceneRendererCamera]() mutable
+		// EditorLayer owns the only SceneRenderer and processes renderer changes at
+		// the post-present lifecycle boundary, after this queue has executed. Capturing
+		// a non-owning pointer avoids shared ownership while preserving that ordering.
+		SceneRenderer* renderer = &sceneRenderer;
+		RenderQueueManager::Submit([renderer, sceneRendererCamera]() mutable
 		{
-			sceneRenderer->Render(sceneRendererCamera);
+			renderer->Render(sceneRendererCamera);
 		});
+	}
+
+	void Scene::ResetRendererState()
+	{
+		m_MeshToRemoved.clear();
+		auto meshView = m_Registry.view<MeshComponent>();
+		for (const entt::entity entity : meshView)
+			meshView.get<MeshComponent>(entity).m_Registered = false;
 	}
 
 	Entity Scene::CreateEntity(const std::string& tagName)

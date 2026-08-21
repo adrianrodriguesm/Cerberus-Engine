@@ -28,7 +28,6 @@ namespace cerberus
 			CommandBufferView commandBuffer,
 			RendererFrameStatistics* statistics = nullptr);
 
-		VkCommandBuffer GetNative() const { return m_CommandBuffer.GetNative(); }
 		uint32_t GetFrameIndex() const { return m_CommandBuffer.GetFrameIndex(); }
 		bool IsValid() const { return m_CommandBuffer.IsValid(); }
 
@@ -47,6 +46,7 @@ namespace cerberus
 			uint32_t offset = 0) const;
 
 	protected:
+		VkCommandBuffer GetNative() const { return m_CommandBuffer.GetNative(); }
 		RendererFrameStatistics* GetStatistics() const { return m_Statistics; }
 
 		void BindDescriptorSetInternal(

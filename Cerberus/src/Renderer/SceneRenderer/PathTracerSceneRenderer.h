@@ -12,19 +12,13 @@
 
 namespace cerberus
 {
-	class TextureAsset;
-
 	class PathTracerSceneRenderer final : public SceneRenderer
 	{
 	public:
 		PathTracerSceneRenderer(Ref<Scene> scene, const SceneRendererSpecification& spec = {});
 		virtual ~PathTracerSceneRenderer();
 
-		virtual void BeginScene(const SceneRendererCamera& sceneRendererCamera) override;
-		virtual void EndScene() override;
-		virtual void SubmitMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) override;
 		virtual void SetViewportSize(uint32_t width, uint32_t height) override;
-		virtual void SetSceneContext(const Ref<Scene>& scene) override;
 
 		virtual void Render(const SceneRendererCamera& sceneRendererCamera) override;
 

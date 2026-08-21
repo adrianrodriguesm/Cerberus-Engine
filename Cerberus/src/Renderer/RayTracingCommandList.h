@@ -36,6 +36,17 @@ namespace cerberus
 			uint32_t height,
 			uint32_t depth = 1);
 
+		void BuildAccelerationStructure(
+			const VkAccelerationStructureBuildGeometryInfoKHR& buildInfo,
+			const VkAccelerationStructureBuildRangeInfoKHR& rangeInfo) const;
+		void CopyAccelerationStructure(
+			const VkCopyAccelerationStructureInfoKHR& copyInfo) const;
+		void WriteAccelerationStructureProperties(
+			VkAccelerationStructureKHR accelerationStructure,
+			VkQueryType queryType,
+			VkQueryPool queryPool,
+			uint32_t firstQuery) const;
+
 	private:
 		VkPipelineLayout m_BoundPipelineLayout = VK_NULL_HANDLE;
 	};

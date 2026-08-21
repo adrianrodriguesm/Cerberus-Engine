@@ -233,8 +233,7 @@ namespace cerberus
 
 		const AssetMetadata& metadata = AssetManager::GetMetadata(m_Material);
 		ImGui::Text("Material: %s", metadata.FilePath.stem().string().c_str());
-		if (m_Material->GetMaterial() && m_Material->GetMaterial()->GetShader())
-			ImGui::Text("Shader: %s", m_Material->GetMaterial()->GetShader()->GetName().c_str());
+		ImGui::TextUnformatted("Shading model: PBR");
 
 		bool materialChanged = false;
 		bool commitChanges = false;

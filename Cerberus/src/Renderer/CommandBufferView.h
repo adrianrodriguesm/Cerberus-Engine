@@ -5,6 +5,7 @@
 namespace cerberus
 {
 	class CommandBuffer;
+	class CommandListBase;
 	class TransientCommandBuffer;
 
 	// Non-owning view of one already-begun command buffer recording.
@@ -15,13 +16,15 @@ namespace cerberus
 	class CommandBufferView final
 	{
 	public:
-		VkCommandBuffer GetNative() const { return m_CommandBuffer; }
 		uint32_t GetFrameIndex() const { return m_FrameIndex; }
 		bool IsValid() const { return m_CommandBuffer != VK_NULL_HANDLE; }
 
 	private:
 		friend class CommandBuffer;
+		friend class CommandListBase;
 		friend class TransientCommandBuffer;
+
+		VkCommandBuffer GetNative() const { return m_CommandBuffer; }
 
 		CommandBufferView(VkCommandBuffer commandBuffer, uint32_t frameIndex)
 			: m_CommandBuffer(commandBuffer), m_FrameIndex(frameIndex)

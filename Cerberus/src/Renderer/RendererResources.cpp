@@ -26,15 +26,10 @@ namespace cerberus
 
 		// Shaders
 		s_ResourcesData->ShaderLibrary = CreateRef<ShaderLibrary>();
-		s_ResourcesData->ShaderLibrary->Load("Resources/Shaders/PBR.glsl", false);
-		s_ResourcesData->ShaderLibrary->Load("Resources/Shaders/SceneComposite.glsl", false);
 		s_ResourcesData->ShaderLibrary->Load("engine://Shaders/Environment/EquirectangularToCubeMap.glsl", false);
 		s_ResourcesData->ShaderLibrary->Load("engine://Shaders/Environment/EnvironmentMipFilter.glsl", false);
 		s_ResourcesData->ShaderLibrary->Load("engine://Shaders/Environment/EnvironmentIrradiance.glsl", false);
 		s_ResourcesData->ShaderLibrary->Load("Resources/Shaders/BRDF.glsl", false);
-		s_ResourcesData->ShaderLibrary->Load("Resources/Shaders/Skybox.glsl", false);
-		s_ResourcesData->ShaderLibrary->Load("Resources/Shaders/PreDepth.glsl", false);
-		s_ResourcesData->ShaderLibrary->Load("Resources/Shaders/ShadowMap.glsl", false);
 
 		// Texture factories such as the BRDF LUT reflect and execute compute shaders,
 		// so shader creation must finish before default GPU textures are built.
@@ -55,7 +50,7 @@ namespace cerberus
 		s_ResourcesData->EmptyEnvironment->DebugName = "Empty Environment";
 		s_ResourcesData->EmptyEnvironment->OwnsGPUResources = false;
 
-		s_ResourcesData->DefaultMaterial = CreateRef<MaterialAsset>();
+		s_ResourcesData->DefaultMaterial = CreateRef<MaterialAsset>("Default PBR");
 		s_ResourcesData->DefaultMaterial->SetAlbedoColor({ 1.f, 0, 1.f });
 	}
 
@@ -64,8 +59,9 @@ namespace cerberus
 		if (!s_ResourcesData)
 			return;
 
-		// Default materials can reference shader/default texture state; release them
-		// before freeing the underlying default GPU resources.
+		// Release high-level fallbacks before their renderer-owned GPU textures.
+		// MaterialAsset itself is renderer-agnostic, while EnvironmentMap borrows the
+		// fallback texture handles owned below.
 		s_ResourcesData->DefaultMaterial = nullptr;
 		s_ResourcesData->EmptyEnvironment = nullptr;
 

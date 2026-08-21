@@ -84,11 +84,20 @@ namespace cerberus
 		AssetEditorManager::Init();
 		auto resolution = Application::Get().GetWindow()->GetSize();
 		m_Scene = AssetManager::GetAsset<Scene>("Resources/Scenes/First Scene.cscene");
-		SceneRendererSpecification rendererSpec;
-		rendererSpec.SwapChainTarget = false;
-		rendererSpec.Resolution = { resolution.first, resolution.second };
-		m_SceneRenderer = CreateRef<PathTracerSceneRenderer>(m_Scene, rendererSpec);
-		m_Camera = FlyingCamera(45.f, resolution.first / resolution.second, 0.1f, 1000.f);
+		m_RendererViewportSize = {
+			std::max(resolution.first, 1u),
+			std::max(resolution.second, 1u)
+		};
+		m_PendingRendererType = m_Scene
+			? m_Scene->GetRendererType()
+			: SceneRendererType::PathTracer;
+		m_RendererRecreationRequested = true;
+		RecreateSceneRenderer();
+		m_Camera = FlyingCamera(
+			45.f,
+			static_cast<float>(resolution.first) / static_cast<float>(std::max(resolution.second, 1u)),
+			0.1f,
+			1000.f);
 		
 
 		Ref<ScenePropertiesPanel> scenePropertiesPanel = CreateRef<ScenePropertiesPanel>(m_Scene);
@@ -132,16 +141,31 @@ namespace cerberus
 	void EditorLayer::OnDetach()
 	{
 		AssetEditorManager::SetAssetModifiedCallback(nullptr);
+		if (m_SceneRenderer)
+		{
+			Renderer::WaitIdleAndDrain();
+			m_SceneRenderer.reset();
+			Renderer::WaitIdleAndDrain();
+		}
 		m_EditorPanelManager->Shutdown();
 		AssetEditorManager::Shutdown();
 	}
 	
 	void EditorLayer::OnImGuiRender()
 	{
-		UI_DockSpace();
-		UI_RenderTittleBar();
+		// Read the shortcut directly from ImGui so F11 remains global even when an
+		// editor widget currently owns keyboard capture.
+		if (ImGui::IsKeyPressed(Key::F11, false))
+			m_IsViewportMaximized = !m_IsViewportMaximized;
+
+		if (!m_IsViewportMaximized)
+			UI_DockSpace();
 		UI_Viewport();
-		m_SceneRenderer->OnImGuiRender();
+		if (m_IsViewportMaximized)
+			return;
+
+		if (m_SceneRenderer)
+			m_SceneRenderer->OnImGuiRender();
 		m_EditorPanelManager->OnImGuiRender();
 		AssetEditorManager::OnImGuiRender();
 	}
@@ -156,6 +180,11 @@ namespace cerberus
 
 	void EditorLayer::OnUpdate(Timestep ts)
 	{
+		// A scene change requested from the event path waits until the current frame
+		// has been presented. Keep showing the previous valid output in the meantime.
+		if (m_RendererRecreationRequested || !m_Scene || !m_SceneRenderer)
+			return;
+
 		m_Camera.OnUpdate(ts);
 
 		SceneRendererCamera sceneRendererCamera;
@@ -165,7 +194,61 @@ namespace cerberus
 		sceneRendererCamera.Target = m_Camera.GetTarget();
 		sceneRendererCamera.Near = m_Camera.GetNearPlane();
 		sceneRendererCamera.Far = m_Camera.GetFarPlane();
-		m_Scene->OnUpdate(m_SceneRenderer, sceneRendererCamera, ts);
+		m_Scene->OnUpdate(*m_SceneRenderer, sceneRendererCamera, ts);
+	}
+
+	void EditorLayer::OnFrameEnd()
+	{
+		RecreateSceneRenderer();
+	}
+
+	void EditorLayer::RequestSceneRenderer(SceneRendererType rendererType)
+	{
+		if (!m_Scene)
+			return;
+
+		m_Scene->SetRendererType(rendererType);
+		m_PendingRendererType = rendererType;
+		m_RendererRecreationRequested = !m_SceneRenderer || rendererType != m_ActiveRendererType;
+	}
+
+	void EditorLayer::RecreateSceneRenderer()
+	{
+		if (!m_RendererRecreationRequested || !m_Scene)
+			return;
+
+		// This runs after Present, never inside a queued render command. First wait
+		// for all native references to the old renderer. Then release and flush it
+		// before constructing the replacement, so inactive resources consume no VRAM.
+		if (m_SceneRenderer)
+		{
+			Renderer::WaitIdleAndDrain();
+			m_SceneRenderer.reset();
+			Renderer::WaitIdleAndDrain();
+		}
+
+		m_Scene->ResetRendererState();
+
+		SceneRendererSpecification specification;
+		specification.SwapChainTarget = false;
+		specification.Resolution = {
+			static_cast<int32_t>(glm::max(m_RendererViewportSize.x, 1u)),
+			static_cast<int32_t>(glm::max(m_RendererViewportSize.y, 1u))
+		};
+
+		switch (m_PendingRendererType)
+		{
+		case SceneRendererType::Forward:
+			m_SceneRenderer = CreateScope<ForwardSceneRenderer>(m_Scene, specification);
+			break;
+		case SceneRendererType::PathTracer:
+			m_SceneRenderer = CreateScope<PathTracerSceneRenderer>(m_Scene, specification);
+			break;
+		}
+
+		m_ActiveRendererType = m_PendingRendererType;
+		m_RendererRecreationRequested = false;
+		NV_CORE_INFO("Active SceneRenderer: {0}", std::string(SceneRendererTypeToString(m_ActiveRendererType)));
 	}
 
 	void EditorLayer::SelectEntity(const Entity& entity)
@@ -469,7 +552,8 @@ namespace cerberus
 	void EditorLayer::NewScene()
 	{
 		m_Scene = CreateRef<Scene>("New Scene");
-		m_SceneRenderer->SetSceneContext(m_Scene);
+		m_PendingRendererType = m_Scene->GetRendererType();
+		m_RendererRecreationRequested = true;
 		SelectEntity({});
 		m_EditorPanelManager->SetSceneContext(m_Scene);
 	}
@@ -481,8 +565,14 @@ namespace cerberus
 		{
 			std::filesystem::path relativePath = FileSystem::GetRelativePathFromAbsolute(filepath);
 			m_Scene = AssetManager::GetAsset<Scene>(relativePath);
+			if (!m_Scene)
+			{
+				NV_CORE_ERROR("Failed to open scene: {0}", relativePath.string());
+				return;
+			}
 			m_Scene->SetName(relativePath.stem().string());
-			m_SceneRenderer->SetSceneContext(m_Scene);
+			m_PendingRendererType = m_Scene->GetRendererType();
+			m_RendererRecreationRequested = true;
 			SelectEntity({});
 			m_EditorPanelManager->SetSceneContext(m_Scene);
 
@@ -491,8 +581,12 @@ namespace cerberus
 
 	void EditorLayer::OpenScene(const Ref<Scene>& scene)
 	{
+		if (!scene)
+			return;
+
 		m_Scene = scene;
-		m_SceneRenderer->SetSceneContext(m_Scene);
+		m_PendingRendererType = m_Scene->GetRendererType();
+		m_RendererRecreationRequested = true;
 		SelectEntity({});
 		m_EditorPanelManager->SetSceneContext(m_Scene);
 	}
@@ -601,6 +695,10 @@ namespace cerberus
 
 			if (ImGui::BeginMenu("Window"))
 			{
+				if (ImGui::MenuItem("Maximize Viewport", "F11"))
+					m_IsViewportMaximized = true;
+				ImGui::Separator();
+
 				auto& panels = m_EditorPanelManager->GetPanels();
 				auto panelToggle = [&panels](const char* label, const char* panelID)
 				{
@@ -615,6 +713,18 @@ namespace cerberus
 
 				ImGui::EndMenu();
 			}
+
+			if (ImGui::BeginMenu("Renderer"))
+			{
+				const SceneRendererType selectedRenderer = m_RendererRecreationRequested
+					? m_PendingRendererType
+					: m_ActiveRendererType;
+				if (ImGui::MenuItem("Forward", nullptr, selectedRenderer == SceneRendererType::Forward))
+					RequestSceneRenderer(SceneRendererType::Forward);
+				if (ImGui::MenuItem("Path Tracer", nullptr, selectedRenderer == SceneRendererType::PathTracer))
+					RequestSceneRenderer(SceneRendererType::PathTracer);
+				ImGui::EndMenu();
+			}
 			ImGui::EndMenuBar();
 		}
 	}
@@ -623,21 +733,47 @@ namespace cerberus
 		////////////////////////////////////////////////
 		//// Viewport
 		////////////////////////////////////////////////
+		ImGuiWindowFlags viewportWindowFlags = ImGuiWindowFlags_None;
+		if (m_IsViewportMaximized)
+		{
+			const ImGuiViewport* mainViewport = ImGui::GetMainViewport();
+			ImGui::SetNextWindowPos(mainViewport->Pos);
+			ImGui::SetNextWindowSize(mainViewport->Size);
+			ImGui::SetNextWindowViewport(mainViewport->ID);
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+
+			viewportWindowFlags |= ImGuiWindowFlags_NoDocking |
+				ImGuiWindowFlags_NoTitleBar |
+				ImGuiWindowFlags_NoCollapse |
+				ImGuiWindowFlags_NoResize |
+				ImGuiWindowFlags_NoMove |
+				ImGuiWindowFlags_NoSavedSettings |
+				ImGuiWindowFlags_NoNavFocus;
+		}
+
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-		ImGui::Begin("Viewport");
+		ImGui::Begin(m_IsViewportMaximized ? "Viewport##Maximized" : "Viewport", nullptr, viewportWindowFlags);
 		{
 			m_ViewportPanelMouseOver = ImGui::IsWindowHovered();
+			m_ViewportPanelFocused = ImGui::IsWindowFocused();
 
 			Application::Get().BlockEvents(!(m_ViewportPanelMouseOver));
 
 			ImVec2 viewportSize = ImGui::GetContentRegionAvail();
 			const ImVec2 viewportPosition = ImGui::GetCursorScreenPos();
-			m_SceneRenderer->SetViewportSize((uint32_t)viewportSize.x, (uint32_t)viewportSize.y);
+			m_RendererViewportSize = {
+				static_cast<uint32_t>(glm::max(viewportSize.x, 1.0f)),
+				static_cast<uint32_t>(glm::max(viewportSize.y, 1.0f))
+			};
+			if (m_SceneRenderer)
+				m_SceneRenderer->SetViewportSize(m_RendererViewportSize.x, m_RendererViewportSize.y);
 
 			m_Camera.SetViewportSize((uint32_t)viewportSize.x, (uint32_t)viewportSize.y);
 
 			// Render viewport image
-			ui::Image(m_SceneRenderer->GetFinalPassImage(), viewportSize, { 0, 1 }, { 1, 0 });
+			if (m_SceneRenderer)
+				ui::Image(m_SceneRenderer->GetFinalPassImage(), viewportSize, { 0, 1 }, { 1, 0 });
 			const bool viewportImageHovered = ImGui::IsItemHovered();
 			const bool viewportSelectionRequested = viewportImageHovered &&
 				ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::GetDragDropPayload() == nullptr;
@@ -737,7 +873,9 @@ namespace cerberus
 
 		ImGui::End();
 		ImGui::PopStyleVar();
-		ImGui::End();
+
+		if (m_IsViewportMaximized)
+			ImGui::PopStyleVar(2);
 	}
 	void EditorLayer::UI_DockSpace()
 	{
@@ -783,6 +921,8 @@ namespace cerberus
 		if (opt_fullscreen)
 			ImGui::PopStyleVar(2);
 
+		UI_RenderTittleBar();
+
 		//ImGui::SetCursorPosY(titlebarHeight + ImGui::GetCurrentWindow()->WindowPadding.y);
 
 		// Dockspace
@@ -795,5 +935,6 @@ namespace cerberus
 		}
 
 		style.WindowMinSize.x = minWinSizeX;
+		ImGui::End();
 	}
 }

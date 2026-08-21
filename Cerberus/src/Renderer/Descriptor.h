@@ -37,6 +37,7 @@ namespace cerberus
 
 		void ResetPool();
 		VkDescriptorSet Allocate(VkDescriptorSetLayout& layout);
+		void Free(VkDescriptorSet descriptorSet);
 
 		const uint32_t GetAllocationCount(uint32_t index) const { return m_AllocationCount[index]; }
 
@@ -44,6 +45,12 @@ namespace cerberus
 		DescriptorAllocatorSpecification m_Specification;
 		std::vector<VkDescriptorPool> m_DescriptorPools;
 		std::vector<uint32_t> m_AllocationCount;
+		struct PersistentAllocation
+		{
+			VkDescriptorPool Pool = VK_NULL_HANDLE;
+			uint32_t PoolIndex = 0;
+		};
+		std::unordered_map<VkDescriptorSet, PersistentAllocation> m_PersistentAllocations;
 	};
 	///////////////////////////////////////////////////////////////////////
 	//////// DescriptorLayout

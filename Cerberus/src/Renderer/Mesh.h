@@ -92,10 +92,7 @@ namespace cerberus
 		std::vector<Submesh> m_Submeshes;
 
 		// Imported material slots. Submesh::MaterialIndex indexes this array.
-		Ref<Shader> m_MeshShader;
 		std::vector<Ref<MaterialAsset>> m_MaterialsAsset;
-
-		bool m_IsRenderStateCreated = false;
 
 		// Assimp
 		const aiScene* m_Scene;

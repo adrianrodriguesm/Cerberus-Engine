@@ -2,6 +2,7 @@
 #include "VertexBuffer.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/ResourceManager.h"
+#include "Renderer/TransferCommandList.h"
 
 namespace cerberus
 {
@@ -58,14 +59,8 @@ namespace cerberus
 		// Get a copy command buffer to tranfer the data 
 		// from the staging buffer to the vertex buffer
 		TransientCommandBuffer copyCmd = Renderer::GetTransientCommandExecutor().BeginGraphics();
-
-		// Region of data to copy from and to
-		VkBufferCopy copyRegion = {};
-		copyRegion.srcOffset = 0;			// Copy from the begining of the fisrt buffer
-		copyRegion.dstOffset = 0;			// Copy from the begining of the destination buffer
-		copyRegion.size = m_LocalData.Size;
-		// Record copy operation to the command buffer
-		vkCmdCopyBuffer(copyCmd, stagingBuffer->Buffer, vertexBuffer->Buffer, 1, &copyRegion);
+		TransferCommandList transfer(copyCmd.GetRecordingView());
+		transfer.CopyBuffer(stagingBuffer->Buffer, vertexBuffer->Buffer, m_LocalData.Size);
 		// Flush command bufer (sumit to execution and detroy)
 		copyCmd.SubmitAndWait();
 		

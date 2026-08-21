@@ -174,12 +174,12 @@ namespace cerberus
 			return InvalidMaterialTextureIndex;
 		}
 
-		CORE_ASSERT(m_MeshRegister.GPUTextures.size() < MaxRayTracingTextureCount, "RT texture table capacity exceeded");
+		CORE_ASSERT(m_MeshRegister.GPUTextures.size() < MaxMaterialTextureCount, "Material texture table capacity exceeded");
 
 		Handle<Texture2D> gpuTexture = ResourceManager::CreateTexture2D(
 			textureAsset,
 			srgb ? TextureColorSpace::SRGB : TextureColorSpace::Linear);
-		CORE_ASSERT(gpuTexture.IsValid(), "Failed to create GPU texture for RT material table");
+		CORE_ASSERT(gpuTexture.IsValid(), "Failed to create GPU texture for the material table");
 
 		const uint32_t textureIndex = static_cast<uint32_t>(m_MeshRegister.GPUTextures.size());
 		m_MeshRegister.GPUTextures.push_back(gpuTexture);
@@ -341,6 +341,7 @@ namespace cerberus
 
 			registeredInstance.SubmeshInstances.push_back(meshInstanceHandle);
 			m_MeshRegister.MeshInstanceMap[meshProxyHandle][submeshIndex].push_back(meshInstanceHandle);
+			m_MeshRegister.RasterMeshInstances.push_back(meshInstanceHandle);
 			m_MeshRegister.MeshInstanceCount++;
 		}
 
@@ -413,6 +414,13 @@ namespace cerberus
 
 		for (Handle<MeshInstanceProxy> meshInstanceHandle : registeredInstance.SubmeshInstances)
 		{
+			const auto rasterInstanceIt = std::find(
+				m_MeshRegister.RasterMeshInstances.begin(),
+				m_MeshRegister.RasterMeshInstances.end(),
+				meshInstanceHandle);
+			if (rasterInstanceIt != m_MeshRegister.RasterMeshInstances.end())
+				m_MeshRegister.RasterMeshInstances.erase(rasterInstanceIt);
+
 			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
 			if (meshInstance)
 			{
@@ -696,6 +704,7 @@ namespace cerberus
 		ClearMaterialProxies();
 		m_RayTracingInstances.clear();
 		m_MeshRegister.MeshInstanceMap.clear();
+		m_MeshRegister.RasterMeshInstances.clear();
 		m_MeshRegister.MeshInstanceCount = 0;
 	}
 

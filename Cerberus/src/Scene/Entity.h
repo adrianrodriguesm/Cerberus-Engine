@@ -23,7 +23,6 @@ namespace cerberus
 		{
 			CORE_ASSERT(!HasComponent<T>(), "Entity already has component!");
 			T& component = m_Scene->m_Registry.emplace<T>(m_EntityHandle, std::forward<Args>(args)...);
-			//m_Scene->OnComponentAdded<T>(*this, component);
 			return component;
 		}
 
@@ -41,11 +40,6 @@ namespace cerberus
 			CORE_ASSERT(HasComponent<T>(), "Entity do not have component");
 			return m_Scene->m_Registry.get<T>(m_EntityHandle);
 		}
-
-
-		//glm::mat4& Transform() { return m_Scene->m_Registry.get<TransformComponent>(m_EntityHandle).GetTransform(); }
-		const glm::mat4& Transform() const { return m_Scene->m_Registry.get<TransformComponent>(m_EntityHandle).GetTransform(); }
-
 
 		operator uint32_t () const { return (uint32_t)m_EntityHandle; }
 		operator entt::entity() { return m_EntityHandle; }

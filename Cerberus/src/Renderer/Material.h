@@ -1,5 +1,12 @@
 #pragma once
-#include "Renderer/Shader.h"
+#include <cstdint>
+#include <map>
+#include <string>
+#include <utility>
+
+#include <glm/glm.hpp>
+
+#include "Core/Base.h"
 #include "Asset/Asset.h"
 
 namespace cerberus
@@ -20,8 +27,8 @@ namespace cerberus
 		bool HasRoughnessMap() const { return RoughnessMap != 0; }
 	};
 
-	// CPU/high-level material data. This is renderer-agnostic and can be serialized.
-	// RenderScene will later translate it into MaterialProxy / GPUMaterial data.
+	// CPU/high-level material data. This is renderer-agnostic and serializable.
+	// RenderScene translates it into MaterialProxy / GPUMaterialData.
 	struct MaterialData
 	{
 		glm::vec3 AlbedoColor = glm::vec3(0.8f);
@@ -43,79 +50,17 @@ namespace cerberus
 		glm::uvec4 TextureIndices = glm::uvec4(InvalidMaterialTextureIndex);
 	};
 
-	class Material
-	{
-	public:
-		Material(const Ref<Shader>& shader, const std::string& name = "None");
-		~Material();
-
-		Ref<Shader> GetShader()  { return m_Shader; }
-		const std::string& GetName() const  { return m_Name; }
-		Buffer GetUniformBufferStorage() { return m_UniformBufferStorage; }
-		void Set(const std::string& name, float value);
-		void Set(const std::string& name, int value);
-		void Set(const std::string& name, uint32_t value);
-		void Set(const std::string& name, bool value);
-		void Set(const std::string& name, const glm::ivec2& value);
-		void Set(const std::string& name, const glm::ivec3& value);
-		void Set(const std::string& name, const glm::ivec4& value);
-		void Set(const std::string& name, const glm::vec2& value);
-		void Set(const std::string& name, const glm::vec3& value);
-		void Set(const std::string& name, const glm::vec4& value);
-		void Set(const std::string& name, const glm::mat3& value);
-		void Set(const std::string& name, const glm::mat4& value);
-
-		template <typename T>
-		void Set(const std::string& name, const T& value)
-		{
-			auto decl = FindUniformDeclaration(name);
-			CORE_ASSERT(decl, "Could not find uniform!");
-			if (!decl)
-				return;
-
-			auto& buffer = m_UniformBufferStorage;
-			buffer.Write((byte*)&value, decl->GetSize(), decl->GetOffset());
-		}
-
-		float& GetFloat(const std::string& name);
-		int32_t& GetInt(const std::string& name);
-		uint32_t& GetUInt(const std::string& name);
-		bool& GetBool(const std::string& name);
-		glm::vec2& GetVector2(const std::string& name);
-		glm::vec3& GetVector3(const std::string& name);
-		glm::vec4& GetVector4(const std::string& name);
-		glm::mat3& GetMatrix3(const std::string& name);
-		glm::mat4& GetMatrix4(const std::string& name);
-
-		template<typename T>
-		T& Get(const std::string& name)
-		{
-			auto decl = FindUniformDeclaration(name);
-			CORE_ASSERT(decl, "Could not find uniform with name 'x'");
-			auto& buffer = m_UniformBufferStorage;
-			return buffer.Read<T>(decl->GetOffset());
-		}
-
-	private:
-		void AllocateStorage();
-		const ShaderUniform* FindUniformDeclaration(const std::string& name);
-	private:
-		Ref<Shader> m_Shader;
-		std::string m_Name;
-		// TODO: Change name
-		Buffer m_UniformBufferStorage;
-	};
-
 	// High-level material asset. Stores CPU-side scalar data and texture asset handles.
+	// It intentionally has no Shader/BindGroup state: RenderScene translates it to
+	// GPUMaterialData and each concrete SceneRenderer owns its shader implementation.
 	class MaterialAsset : public Asset
 	{
 	public:
-		MaterialAsset();
-		MaterialAsset(Ref<Material> material);
+		explicit MaterialAsset(std::string name = "Material");
 		~MaterialAsset();
 
-
-		const std::string& GetName() const;
+		const std::string& GetName() const { return m_Name; }
+		void SetName(std::string name) { m_Name = std::move(name); }
 
 		const MaterialData& GetMaterialData() const { return m_Data; }
 		GPUMaterialData BuildGPUMaterialData(
@@ -162,13 +107,9 @@ namespace cerberus
 		static AssetType GetStaticType() { return AssetType::Material; }
 		virtual AssetType GetAssetType() const override { return GetStaticType(); }
 
-		Ref<Material> GetMaterial() const { return m_Material; }
 	private:
-		void ApplyDataToMaterial();
-	private:
+		std::string m_Name;
 		MaterialData m_Data;
-		Ref<Material> m_Material;
-
 	};
 	class MaterialTable
 	{

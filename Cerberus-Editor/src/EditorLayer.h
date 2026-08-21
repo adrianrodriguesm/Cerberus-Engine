@@ -36,6 +36,7 @@ namespace cerberus
 		virtual void OnAttach() override;
 		virtual void OnDetach() override;
 		virtual void OnImGuiRender() override;
+		virtual void OnFrameEnd() override;
 		virtual void OnEvent(Event& event) override;
 		virtual void OnUpdate(Timestep ts) override;
 
@@ -63,16 +64,25 @@ namespace cerberus
 		AssetHandle ResolveDroppedMesh(AssetHandle assetHandle);
 		Entity CreateMeshEntityFromDrop(AssetHandle meshHandle, const ViewportRay& ray, const ViewportHit* surfaceHit);
 		bool ApplyMaterialFromDrop(AssetHandle materialHandle, const ViewportHit& hit);
+		void RequestSceneRenderer(SceneRendererType rendererType);
+		void RecreateSceneRenderer();
 
 		Ref<Scene> m_Scene;
 		Entity m_SelectedEntity;
 
 		int m_GizmoType = -1;
 		bool m_ViewportPanelMouseOver = false, m_ViewportPanelFocused = false;
+		bool m_IsViewportMaximized = false;
 
 		std::function<void(Entity)> m_SelectionChangedCallback = [&](const Entity& entity) { SelectEntity(entity); };
 
-		Ref<SceneRenderer> m_SceneRenderer;
+		// The editor owns exactly one concrete renderer. Scope prevents inactive
+		// renderers from remaining alive through shared references.
+		Scope<SceneRenderer> m_SceneRenderer;
+		SceneRendererType m_ActiveRendererType = SceneRendererType::PathTracer;
+		SceneRendererType m_PendingRendererType = SceneRendererType::PathTracer;
+		bool m_RendererRecreationRequested = false;
+		glm::uvec2 m_RendererViewportSize = glm::uvec2(1u);
 		Ref<EditorPanelManager> m_EditorPanelManager;
 		FlyingCamera m_Camera;
 		std::vector<Entity> m_Entities;

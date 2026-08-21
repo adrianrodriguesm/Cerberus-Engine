@@ -4,14 +4,14 @@ Last updated: 2026-08-21
 
 This document defines the current renderer ownership model, the target command-recording architecture, and the migration plan that must be completed before introducing a RenderGraph.
 
-The immediate priority is stability: the path tracer, editor, scene data, materials, environment lighting, and GPU object lifetime must remain reliable while the remaining legacy renderer is removed.
+The immediate priority is stability: the path tracer, modern forward renderer, editor, scene data, materials, environment lighting, and GPU object lifetime must remain reliable while pass boundaries are made explicit.
 
 ## Architectural constraints
 
 1. `Renderer` remains a small global facade and frame-lifecycle coordinator.
 2. Scene data, render passes, resource ownership, command recording, and command submission must have separate owners.
 3. No two wrappers may believe they own the same `VkCommandBuffer` or native resource.
-4. `GraphicsCommandList`, `ComputeCommandList`, and `RayTracingCommandList` are typed, non-owning recording views. They do not allocate, submit, or destroy command buffers.
+4. `GraphicsCommandList`, `ComputeCommandList`, `TransferCommandList`, and `RayTracingCommandList` are typed, non-owning recording views. They do not allocate, submit, or destroy command buffers.
 5. Pipeline objects own pipeline state only. They must not own active command-buffer state or perform submission.
 6. The current path tracer and editor must remain operational throughout the migration.
 7. `DrawStreamBuilder` is retained as the compact raster draw encoding path.
@@ -61,7 +61,7 @@ Higher-level systems may query these services but must not duplicate their owner
 
 `RendererResources` owns process-wide default renderer resources:
 
-- white, black, and default-normal textures;
+- white and black fallback textures;
 - fallback cubemaps/environment;
 - default PBR material;
 - BRDF LUT;
@@ -86,6 +86,12 @@ When a wrapper owns Vulkan/VMA resources, destruction extracts the native handle
 - transient descriptor pools;
 - descriptor-set layout caching;
 - descriptor allocation lifetime policy.
+
+Persistent pools are created with `VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT`.
+`BindGroup` returns its persistent sets through `DescriptorManager`; the actual
+`vkFreeDescriptorSets` call follows the deferred-deletion frame policy. This makes
+repeated scene-renderer switching bounded instead of leaking descriptor capacity.
+Transient sets are never freed individually and are reclaimed by their frame-pool reset.
 
 `ResourceManager`, bind-group wrappers, and shader reflection request descriptor services through it without duplicating allocator ownership.
 
@@ -119,7 +125,42 @@ pool, not the persistent allocator. The frame pool is reset only after its fence
 has completed. Allocating these per-frame IDs as persistent resources causes an
 unbounded descriptor leak and eventually `VK_ERROR_OUT_OF_POOL_MEMORY`.
 
+### Editor viewport integration
+
+Editor layout and viewport presentation state remain owned by `EditorLayer`, not
+the renderer. The F11 maximize mode renders the existing scene output through a
+temporary borderless ImGui viewport window and temporarily skips the dockspace
+panels. The original docked `Viewport` window is never undocked or mutated, so
+returning from maximize mode restores the previous editor layout automatically.
+
+The renderer only receives the resulting viewport dimensions through the
+existing `SceneRenderer::SetViewportSize` API. It has no editor-fullscreen or
+docking state.
+
 `Renderer` only coordinates its lifetime.
+
+### Active scene-renderer ownership and switching
+
+`EditorLayer` owns exactly one `SceneRenderer` through `Scope<SceneRenderer>`.
+The active implementation is selected per `Scene` and serialized as `Forward` or
+`PathTracer`. Shared ownership is intentionally forbidden here: the inactive
+renderer must not remain alive through an editor callback or another subsystem.
+
+Renderer changes requested by ImGui are deferred to `Layer::OnFrameEnd`, after
+the frame's swapchain command buffer has been submitted and presented. This avoids
+destroying an image view or descriptor already recorded by ImGui. At that lifecycle
+boundary the editor:
+
+1. drains queued CPU render work and waits for the device;
+2. destroys the active `SceneRenderer` and its `RenderScene`;
+3. flushes deferred native deletion;
+4. resets renderer-specific mesh registration flags in `Scene`;
+5. constructs only the selected renderer at the current viewport size.
+
+The blocking wait is an intentional one-time editor switch cost. It is never part
+of normal per-frame rendering. This guarantees that the inactive renderer retains
+no output images, pipelines, bind groups, acceleration structures, scene proxies,
+or renderer-specific shader modules.
 
 ## Scene and material boundaries
 
@@ -143,7 +184,8 @@ It bridges logical scene data and render passes without performing asset seriali
 
 ### Material ownership and render proxies
 
-- `MaterialAsset` owns serializable CPU values and texture asset handles.
+- `MaterialAsset` owns only serializable CPU values, a display name, and texture asset handles. It is renderer-agnostic and retains no shader, uniform buffer, or bind group.
+- `RenderScene` translates a `MaterialAsset` into `GPUMaterialData`; each concrete renderer owns the shader and descriptor implementation that evaluates it.
 - `MeshSource` owns imported material slots; `Submesh::MaterialIndex` indexes those slots.
 - A mesh instance's `MaterialTable` may override any source material slot.
 - `RenderScene` resolves the effective material per registered submesh and creates a scene-local `MaterialProxy`.
@@ -152,7 +194,7 @@ It bridges logical scene data and render passes without performing asset seriali
 - Multiple actors may reference the same `MeshSource`; actor identity and transform belong to separate mesh-instance proxies.
 - The TLAS custom instance index maps a hit to `RayTracingInstanceData`, which maps to the correct mesh instance, geometry, and GPU material index.
 - Closest-hit reconstructs surface data; path integration and BSDF sampling remain in raygen.
-- Material texture indices address the scene-local RT texture table, which is populated with valid fallback descriptors.
+- Material texture indices address one scene-local material texture table shared by raster and RT consumers. Every unused entry receives a valid fallback descriptor.
 
 ### Texture and environment ownership
 
@@ -175,14 +217,26 @@ It bridges logical scene data and render passes without performing asset seriali
 - request acceleration-structure preparation from `RenderScene`;
 - invoke `PathTracePass` and later composition/post-processing passes.
 
-The same pass separation applies to the forward renderer. The old disabled `ForwardSceneRenderer` must not be ported line by line. It will be rebuilt around the new data model with passes such as:
+The same pass separation applies to the forward renderer. The old disabled
+implementation was deleted rather than ported line by line. Its modern replacement
+now validates the new architecture as a deliberately compact renderer:
+
+- owns a dedicated HDR color/depth output;
+- consumes `RenderScene` mesh instances and material proxies;
+- uploads the shared GPU material table and fixed material texture table;
+- evaluates normal, albedo, roughness, metalness, emission, analytic directional lights, and environment lighting;
+- renders the radiance cubemap as the background and uses irradiance/radiance for IBL;
+- records exclusively through `GraphicsCommandList`;
+- owns and unloads only its two renderer-specific shaders.
+
+It is still one orchestration class for validation. Its next extraction produces:
 
 - `ForwardGeometryPass`;
 - `SkyboxPass`;
 - optional depth/shadow passes;
 - `CompositePass` where required.
 
-The inactive raster-test path that previously lived inside `PathTracerSceneRenderer` has been removed. It is not the future forward renderer.
+The inactive raster-test path that previously lived inside `PathTracerSceneRenderer` has been removed. It is not the modern forward renderer.
 
 ## Current command architecture
 
@@ -191,16 +245,18 @@ The Phase 2C.4A command foundation is now implemented:
 - `CommandPool` owns a Vulkan command pool for a graphics or compute queue.
 - `CommandBuffer` owns persistent per-frame command buffers, fences, timestamps, and pipeline-statistics queries.
 - `CommandBufferView` is the single non-owning view of one active recording, regardless of whether its owner is frame-persistent or transient.
-- `CommandListBase`, `GraphicsCommandList`, `ComputeCommandList`, and `RayTracingCommandList` record exclusively through `CommandBufferView`.
+- `CommandListBase`, `GraphicsCommandList`, `ComputeCommandList`, `TransferCommandList`, and `RayTracingCommandList` record exclusively through `CommandBufferView`.
 - `TransientCommandBuffer` is a move-only lease returned by `TransientCommandExecutor`.
 - `TransientCommandExecutor` reuses one synchronous fence and recycles native command buffers instead of allocating/freeing them for every operation.
 - Until explicit queue-family ownership tracking exists, synchronous graphics and compute setup work uses one graphics+compute queue family.
 - `ComputePipeline` is passive and owns pipeline state only; `ResourceManager` owns it in a stable-address generational pool.
 - queued compute-pipeline initialization captures `Handle<ComputePipeline>`, never a raw `this` pointer, and validates the generation before creating native state.
 - `DrawStreamBuilder` is retained; graphics execution belongs to `GraphicsCommandList`.
-- uploads, image transitions, acceleration-structure builds, ImGui setup, BRDF generation, and environment baking use the centralized transient executor.
+- uploads, copies, blits, and image transitions record through `TransferCommandList`; acceleration-structure operations record through `RayTracingCommandList`.
+- all of those immediate workloads, plus ImGui setup, BRDF generation, and environment baking, use the centralized transient executor for submission.
 - `ShaderBindingTable` owns its aligned ray-generation, miss, hit, and callable regions; callers do not rebuild SBT offsets during dispatch.
-- `PathTracerSceneRenderer` records bind and trace operations through `RayTracingCommandList`. Its remaining native image-barrier call is an explicit bridge until image transitions are expressed through the shared command layer.
+- `PathTracerSceneRenderer` records bind, image-barrier, and trace operations through `RayTracingCommandList` and the shared command base.
+- `TransientCommandBuffer` has no implicit conversion to `VkCommandBuffer`; the Dear ImGui font-upload backend is the sole explicit native transient-handle boundary.
 
 The swapchain already separates `m_CurrentCmdBufferIndex` (frame-in-flight slot) from `m_CurrentImageIndex` (acquired presentation image). A future `FrameContext` should aggregate the former with per-frame services; it must not collapse these two indices or recreate state that already exists.
 
@@ -214,7 +270,8 @@ Ownership/lifetime       Recording                         Submission
 CommandPool              CommandListBase                  frame lifecycle
 CommandBuffer            GraphicsCommandList              persistent queue submit
 Transient lease          ComputeCommandList               TransientCommandExecutor
-CommandBufferView        RayTracingCommandList
+CommandBufferView        TransferCommandList
+                         RayTracingCommandList
 ```
 
 ### CommandPool
@@ -241,11 +298,10 @@ It does not implement high-level graphics or compute operations.
 
 Common functionality belongs here:
 
-- barriers and resource transitions;
-- buffer/image copies;
+- generic pipeline barriers;
 - debug labels;
 - common push-constant plumbing;
-- native-handle access as an explicit backend escape hatch.
+- protected native-handle access for typed command-list implementations.
 
 It does not allocate, end, submit, wait for, or destroy the command buffer.
 
@@ -290,6 +346,18 @@ It increments CPU-side draw statistics at the point where a draw command is actu
 
 It does not own the pipeline, command buffer, queue, or fence. It records into either a frame command buffer or a transient command-buffer lease supplied by another owner.
 
+### TransferCommandList
+
+`TransferCommandList` records transfer-domain operations:
+
+- buffer copies;
+- buffer-to-image copies;
+- image blits;
+- inferred image-layout transitions;
+- explicit image barriers for subresource-aware mip generation.
+
+Texture uploads, staging-buffer copies, mip generation, and acceleration-structure instance uploads use this API. Image layout tracking remains owned by `Image`; the command list only records the Vulkan operation.
+
 ### RayTracingCommandList
 
 `RayTracingCommandList` is the typed view for:
@@ -298,6 +366,8 @@ It does not own the pipeline, command buffer, queue, or fence. It records into e
 - bind ray-tracing descriptors;
 - push constants;
 - trace rays using regions owned by `ShaderBindingTable`.
+- build and compact acceleration structures;
+- write acceleration-structure compaction queries.
 
 It shares the same `CommandBufferView`, descriptor binding convention, statistics, and base barrier utilities as graphics and compute recording.
 
@@ -404,7 +474,8 @@ Examples:
 
 ```cpp
 void ExecuteDrawStream(std::span<const uint32_t> words);
-void RenderMeshInstances(std::span<const Handle<MeshInstanceProxy>> instances);
+void RenderMeshInstances(std::span<const Handle<MeshInstanceProxy>> instances,
+                         std::span<const MaterialProxy> materials);
 void BindDescriptorSets(std::span<const VkDescriptorSet> descriptorSets,
                         uint32_t firstSet = 0);
 void PushConstants(std::span<const std::byte> data);
@@ -422,7 +493,7 @@ void PushConstants(std::span<const std::byte> data);
 - dead global material-update and compute-dispatch facade APIs with no active callers;
 - obsolete includes exposed only by deleted APIs;
 - render-thread aliases such as `RT_Begin`, `RT_End`, and `RT_Submit` after all callers use the explicit API;
-- `TransientCommandBuffer::Release` if the final caller audit confirms that no raw ownership transfer remains;
+- implicit transient-command-buffer conversion to `VkCommandBuffer` after all engine callers use typed command lists;
 - renderer-owned dead `#if 0` implementations that have a working replacement.
 
 ### Adapt or substitute
@@ -435,14 +506,15 @@ void PushConstants(std::span<const std::byte> data);
 | `Renderer::RenderMeshInstances` Vulkan calls | `GraphicsCommandList` |
 | `ComputePipeline::Begin/Dispatch/End` | passive `ComputePipeline` + `ComputeCommandList` |
 | `Renderer::BeginTransientCommandBuffer` | `TransientCommandExecutor::Begin` |
+| buffer/image copies, blits, and layout transitions | `TransferCommandList` |
 | environment compute submission | `EnvironmentMapBaker` + transient compute list |
 | path-tracer orchestration | `RayTracingCommandList`, then `PathTracePass` |
 
 ### Treat as explicit future work
 
 - Disabled TLAS update/refit code is not a safe active implementation. Keep the stable rebuild path and record TLAS refit as a dedicated future optimization.
-- The disabled legacy `ForwardSceneRenderer` is removed rather than adapted line by line. A new forward renderer is rebuilt after the command-list layer is stable.
-- The inactive raster test embedded in `PathTracerSceneRenderer` has been removed; the new forward path will be built independently.
+- The disabled legacy `ForwardSceneRenderer` was removed rather than adapted line by line. The active replacement shares no legacy material, pipeline, or submission code.
+- The inactive raster test embedded in `PathTracerSceneRenderer` was removed; the new forward path was built independently.
 - Third-party preprocessor guards are not modified by this phase.
 
 ## Migration sequence
@@ -453,7 +525,7 @@ void PushConstants(std::span<const std::byte> data);
 - 2C.4A.2 command recording split: implemented.
 - 2C.4A.3 transient execution migration: implemented with recycled fences and command buffers.
 - 2C.4A.4 renderer facade reduction: implemented in source; Windows build and validation-layer runtime verification remain required before the submit is considered fully validated.
-- The disabled legacy `ForwardSceneRenderer` implementation, declarations, project entries, and `Scene` friendship were removed completely. The future forward renderer will be introduced as a new API after the command-list layer is validated.
+- The disabled legacy `ForwardSceneRenderer` implementation was removed completely. A new implementation now exists against `RenderScene`, resource handles, persistent bind groups, and `GraphicsCommandList`.
 - The unused standalone `Fence` wrapper and legacy `Shadow` helper were removed; persistent and transient synchronization remain owned by the command infrastructure.
 - Synchronous compute now shares the graphics+compute immediate queue; the dedicated compute queue remains inactive until ownership transfers are modeled.
 - Deferred command-buffer destruction captures the native `VkCommandPool`, never a `CommandPool*` wrapper.
@@ -463,8 +535,14 @@ void PushConstants(std::span<const std::byte> data);
 - `EnvironmentMapBaker` is implemented and owns all environment compute orchestration outside `Renderer.cpp`.
 - compute-pipeline resources are registered in `ResourceManager`; BRDF and environment baking bind them through `ComputeCommandList` handles.
 - `CommandBufferView` removes duplicated persistent/transient constructors from all typed command lists.
-- `RayTracingCommandList` owns RT pipeline/descriptor binding and trace recording, while `ShaderBindingTable` owns dispatch regions.
-- `PathTracePass` and the new forward renderer remain later work.
+- `TransferCommandList` owns buffer/image copies, blits, and layout-transition recording; the obsolete `VulkanUtility` facade was removed.
+- `RayTracingCommandList` owns RT pipeline/descriptor binding, tracing, AS build/compaction, and AS query recording, while `ShaderBindingTable` owns dispatch regions.
+- `Image::Invalidate` resets tracked layout state when recreating its Vulkan image.
+- `PathTracePass` and forward pass extraction remain later work.
+- Renderer selection is persisted per scene, while `EditorLayer` keeps exclusive ownership and performs a full GPU-safe teardown before constructing the replacement.
+- Renderer-retained bind groups use persistent descriptor allocation. Transient allocation remains limited to work rebuilt inside a frame or a synchronous transient operation.
+- The path tracer unloads its SBT/pipeline-specific `Raytrace` shader state during renderer replacement; Forward does the same for `ForwardPBR` and `ForwardSky`.
+- The legacy shader-backed `Material` mirror and `MeshSource::m_MeshShader` were removed. Global resources no longer load the unused `PBR`, `SceneComposite`, `Skybox`, `PreDepth`, or `ShadowMap` shaders.
 
 ### 2C.4A.1 - Mechanical legacy cleanup
 
@@ -478,7 +556,7 @@ void PushConstants(std::span<const std::byte> data);
 ### 2C.4A.2 - Command recording split
 
 - introduce `CommandBufferView` and `CommandListBase`;
-- introduce `GraphicsCommandList`, `ComputeCommandList`, and `RayTracingCommandList` as non-owning typed views;
+- introduce `GraphicsCommandList`, `ComputeCommandList`, `TransferCommandList`, and `RayTracingCommandList` as non-owning typed views;
 - make `ComputePipeline` passive;
 - preserve native-handle escape hatches for incremental migration;
 - move DrawStream execution out of `Renderer`.
@@ -499,17 +577,20 @@ void PushConstants(std::span<const std::byte> data);
 
 ### 2C.4B - Rebuild raster rendering
 
-- implement a new `ForwardSceneRenderer` against `RenderScene` and material proxies;
-- use typed command lists and explicit passes;
-- do not restore legacy `Material`, `Pipeline`, or global descriptor paths;
-- validate DrawStream and direct mesh-instance submission against the same graphics recording layer.
+- **Implemented baseline:** new `ForwardSceneRenderer` against `RenderScene` and material proxies;
+- **Implemented baseline:** modern resource handles, persistent bind groups, HDR/depth output, environment/direct lighting, material texture sampling, and typed graphics recording;
+- **Implemented baseline:** exclusive editor switching with per-scene serialization and complete inactive-renderer teardown;
+- **Pending validation:** Windows/MSVC build, shader compilation, Vulkan validation layers, and visual comparison against the path tracer;
+- **Next:** extract explicit `ForwardGeometryPass` and `SkyboxPass` without changing output;
+- **Next:** validate `DrawStreamBuilder` batching against the same direct mesh-instance output.
 
 ### Later phases
 
-1. Extract `PathTracePass` from `PathTracerSceneRenderer`.
-2. Separate forward-renderer passes.
-3. Introduce the RenderGraph skeleton only after ownership and pass boundaries are stable.
-4. Add resource dependency tracking, barriers, transient resources, and optional async-compute scheduling incrementally.
+1. Validate renderer switching, material parity, lighting, resource destruction, and descriptor lifetime on Windows/Vulkan.
+2. Extract `ForwardGeometryPass`, `SkyboxPass`, and `PathTracePass` without changing renderer ownership.
+3. Build the deferred-hybrid renderer from explicit GBuffer, lighting, RT effect, and composite passes while keeping the full path tracer as a reference renderer.
+4. Introduce the RenderGraph skeleton only when multiple real passes can declare reads/writes and demonstrate barrier/transient-resource value.
+5. Add dependency tracking, automatic barriers, transient aliasing, and optional async-compute scheduling incrementally.
 
 ## Phase 2C.4A definition of done
 
@@ -538,3 +619,19 @@ RenderGraph remains frozen until all of the following are true:
 - statistics and frame indices are reliable.
 
 Only then should the graph add pass ordering, declared resource reads/writes, barriers, transient-resource allocation, and optional cross-queue scheduling.
+
+## Windows/Vulkan validation checklist for Phase 2C.4B
+
+Before submitting the Forward baseline:
+
+1. Clean and rebuild `Debug|x64` so both Forward shader pairs are compiled from source.
+2. Start with Vulkan validation layers enabled and open the existing material/environment test scene.
+3. Select `Renderer > Forward`; verify meshes, per-submesh materials, normal maps, environment background/IBL, exposure, and directional-light intensity.
+4. Save, close, and reopen the scene; verify the selected renderer is restored from the `Renderer` scene field.
+5. Switch Forward -> Path Tracer -> Forward at least twenty times. Verify no `VK_ERROR_OUT_OF_POOL_MEMORY`, null descriptor, use-after-free, or increasing inactive-renderer VRAM trend.
+6. In Path Tracer, verify accumulation, TLAS instances, duplicate mesh actors, material edits, and light/environment edits still work after a switch.
+7. Resize and maximize/restore the viewport in both renderers; verify the displayed image view remains valid.
+
+Expected limitation of this baseline: Forward has no shadow pass yet and uses an
+approximate split-sum-free specular IBL term. Those are renderer features, not
+reasons to retain any legacy implementation.

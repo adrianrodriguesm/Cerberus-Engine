@@ -15,8 +15,11 @@ namespace cerberus
 
 		VkDescriptorPoolCreateInfo pool_info = {};
 		pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		if(!m_Specification.IsPersistent)
-			pool_info.flags = m_Specification.Flags;
+		// Persistent sets are individually released by BindGroup. Transient sets
+		// are reclaimed in bulk when their frame pool is reset.
+		pool_info.flags = m_Specification.IsPersistent
+			? m_Specification.Flags
+			: 0;
 
 		pool_info.maxSets = m_Specification.MaxSets;
 		pool_info.poolSizeCount = (uint32_t)sizes.size();
@@ -51,6 +54,7 @@ namespace cerberus
 		});
 
 		m_DescriptorPools.clear();
+		m_PersistentAllocations.clear();
 	}
 
 	void DescriptorAllocator::ResetPool()
@@ -82,8 +86,32 @@ namespace cerberus
 		}
 
 		++m_AllocationCount[bufferIndex];
+		if (m_Specification.IsPersistent)
+			m_PersistentAllocations[descriptorSet] = { m_DescriptorPools[bufferIndex], bufferIndex };
 
 		return descriptorSet;
+	}
+
+	void DescriptorAllocator::Free(VkDescriptorSet descriptorSet)
+	{
+		if (descriptorSet == VK_NULL_HANDLE || !m_Specification.IsPersistent)
+			return;
+
+		auto allocation = m_PersistentAllocations.find(descriptorSet);
+		if (allocation == m_PersistentAllocations.end())
+			return;
+
+		const VkDescriptorPool pool = allocation->second.Pool;
+		const uint32_t poolIndex = allocation->second.PoolIndex;
+		m_PersistentAllocations.erase(allocation);
+		if (poolIndex < m_AllocationCount.size() && m_AllocationCount[poolIndex] > 0)
+			--m_AllocationCount[poolIndex];
+
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([pool, descriptorSet]()
+		{
+			VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
+			VK_CHECK_RESULT(vkFreeDescriptorSets(device, pool, 1, &descriptorSet));
+		});
 	}
 
 	DescriptorLayoutCache::DescriptorLayoutCache()

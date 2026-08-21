@@ -1,167 +1,14 @@
 #include "pch.h"
 #include "Material.h"
-#include "Renderer/RendererResources.h"
 namespace cerberus
 {
-	static const std::string s_AlbedoColorUniform = "u_MaterialUniforms.AlbedoColor";
-	static const std::string s_UseNormalMapUniform = "u_MaterialUniforms.UseNormalMap";
-	static const std::string s_MetalnessUniform = "u_MaterialUniforms.Metalness";
-	static const std::string s_RoughnessUniform = "u_MaterialUniforms.Roughness";
-	static const std::string s_EmissionUniform = "u_MaterialUniforms.Emission";
-
-	Material::Material(const Ref<Shader>& shader, const std::string& name)
-		: m_Shader(shader), m_Name(name)
+	MaterialAsset::MaterialAsset(std::string name)
+		: m_Name(std::move(name))
 	{
-		AllocateStorage();
-	}
-	Material::~Material()
-	{
-		m_UniformBufferStorage.Release();
-	}
-
-	void Material::Set(const std::string& name, float value)
-	{
-		Set<float>(name, value);
-	}
-	void Material::Set(const std::string& name, int value)
-	{
-		Set<int>(name, value);
-	}
-	void Material::Set(const std::string& name, uint32_t value)
-	{
-		Set<uint32_t>(name, value);
-	}
-	void Material::Set(const std::string& name, bool value)
-	{
-		Set<int>(name, value);
-	}
-	void Material::Set(const std::string& name, const glm::ivec2& value)
-	{
-		Set<glm::ivec2>(name, value);
-	}
-	void Material::Set(const std::string& name, const glm::ivec3& value)
-	{
-		Set<glm::ivec3>(name, value);
-	}
-	void Material::Set(const std::string& name, const glm::ivec4& value)
-	{
-		Set<glm::ivec4>(name, value);
-	}
-	void Material::Set(const std::string& name, const glm::vec2& value)
-	{
-		Set<glm::vec2>(name, value);
-	}
-	void Material::Set(const std::string& name, const glm::vec3& value)
-	{
-		Set<glm::vec3>(name, value);
-	}
-	void Material::Set(const std::string& name, const glm::vec4& value)
-	{
-		Set<glm::vec4>(name, value);
-	}
-	void Material::Set(const std::string& name, const glm::mat3& value)
-	{
-		Set<glm::mat3>(name, value);
-	}
-	void Material::Set(const std::string& name, const glm::mat4& value)
-	{
-		Set<glm::mat4>(name, value);
-	}
-
-	void Material::AllocateStorage()
-	{
-		const auto& shaderBuffers = m_Shader->GetShaderBuffers();
-
-		if (shaderBuffers.size() > 0)
-		{
-			uint32_t size = 0;
-			for (auto [name, shaderBuffer] : shaderBuffers)
-				size += shaderBuffer.Size;
-
-			m_UniformBufferStorage.Allocate(size);
-			m_UniformBufferStorage.ZeroInitialize();
-		}
-	}
-
-	const ShaderUniform* Material::FindUniformDeclaration(const std::string& name)
-	{
-		const auto& shaderBuffers = m_Shader->GetShaderBuffers();
-
-		CORE_ASSERT(shaderBuffers.size() <= 1, "We currently only support ONE material buffer!");
-
-		if (shaderBuffers.size() > 0)
-		{
-			const ShaderBuffer& buffer = (*shaderBuffers.begin()).second;
-			if (buffer.Uniforms.find(name) == buffer.Uniforms.end())
-				return nullptr;
-
-			return &buffer.Uniforms.at(name);
-		}
-		return nullptr;
-	}
-	float& Material::GetFloat(const std::string& name)
-	{
-		return Get<float>(name);
-	}
-	int32_t& Material::GetInt(const std::string& name)
-	{
-		return Get<int>(name);
-	}
-	uint32_t& Material::GetUInt(const std::string& name)
-	{
-		return Get<uint32_t>(name);
-	}
-	bool& Material::GetBool(const std::string& name)
-	{
-		return Get<bool>(name);
-	}
-	glm::vec2& Material::GetVector2(const std::string& name)
-	{
-		return Get<glm::vec2>(name);
-	}
-	glm::vec3& Material::GetVector3(const std::string& name)
-	{
-		return Get<glm::vec3>(name);
-	}
-	glm::vec4& Material::GetVector4(const std::string& name)
-	{
-		return Get<glm::vec4>(name);
-	}
-	glm::mat3& Material::GetMatrix3(const std::string& name)
-	{
-		return Get<glm::mat3>(name);
-	}
-	glm::mat4& Material::GetMatrix4(const std::string& name)
-	{
-		return Get<glm::mat4>(name);
-	}
-
-	MaterialAsset::MaterialAsset()
-	{
-		m_Material = CreateRef<Material>(RendererResources::GetShaderLibrary().Get("PBR"));
-		ApplyDataToMaterial();
-	}
-
-	MaterialAsset::MaterialAsset(Ref<Material> material)
-		: m_Material(material)
-	{
-		ApplyDataToMaterial();
 	}
 
 	MaterialAsset::~MaterialAsset()
 	{
-	}
-
-	void MaterialAsset::ApplyDataToMaterial()
-	{
-		if (!m_Material)
-			return;
-
-		m_Material->Set(s_AlbedoColorUniform, m_Data.AlbedoColor);
-		m_Material->Set(s_UseNormalMapUniform, m_Data.UseNormalMap);
-		m_Material->Set(s_MetalnessUniform, m_Data.Metalness);
-		m_Material->Set(s_RoughnessUniform, m_Data.Roughness);
-		m_Material->Set(s_EmissionUniform, m_Data.Emission);
 	}
 
 	GPUMaterialData MaterialAsset::BuildGPUMaterialData(
@@ -185,11 +32,6 @@ namespace cerberus
 		return data;
 	}
 
-	const std::string& MaterialAsset::GetName() const
-	{
-		return m_Material->GetName();
-	}
-
 	glm::vec3& MaterialAsset::GetAlbedoColor()
 	{
 		return m_Data.AlbedoColor;
@@ -198,8 +40,6 @@ namespace cerberus
 	void MaterialAsset::SetAlbedoColor(const glm::vec3& color)
 	{
 		m_Data.AlbedoColor = color;
-		if (m_Material)
-			m_Material->Set(s_AlbedoColorUniform, color);
 	}
 
 	float& MaterialAsset::GetMetalness()
@@ -210,8 +50,6 @@ namespace cerberus
 	void MaterialAsset::SetMetalness(float value)
 	{
 		m_Data.Metalness = value;
-		if (m_Material)
-			m_Material->Set(s_MetalnessUniform, value);
 	}
 
 	float& MaterialAsset::GetRoughness()
@@ -222,8 +60,6 @@ namespace cerberus
 	void MaterialAsset::SetRoughness(float value)
 	{
 		m_Data.Roughness = value;
-		if (m_Material)
-			m_Material->Set(s_RoughnessUniform, value);
 	}
 
 	float& MaterialAsset::GetEmission()
@@ -234,8 +70,6 @@ namespace cerberus
 	void MaterialAsset::SetEmission(float value)
 	{
 		m_Data.Emission = value;
-		if (m_Material)
-			m_Material->Set(s_EmissionUniform, value);
 	}
 
 	AssetHandle MaterialAsset::GetAlbedoMapHandle() const
@@ -267,8 +101,6 @@ namespace cerberus
 	{
 		m_Data.Textures.NormalMap = textureAsset;
 		m_Data.UseNormalMap = textureAsset != 0;
-		if (m_Material)
-			m_Material->Set(s_UseNormalMapUniform, m_Data.UseNormalMap);
 	}
 
 	bool MaterialAsset::IsUsingNormalMap() const
@@ -279,8 +111,6 @@ namespace cerberus
 	void MaterialAsset::SetUseNormalMap(bool value)
 	{
 		m_Data.UseNormalMap = value;
-		if (m_Material)
-			m_Material->Set(s_UseNormalMapUniform, value);
 	}
 
 	void MaterialAsset::ClearNormalMap()

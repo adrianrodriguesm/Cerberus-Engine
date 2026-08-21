@@ -2,6 +2,7 @@
 #include "Texture.h"
 #include "Renderer/Renderer.h"
 #include "Renderer/ComputeCommandList.h"
+#include "Renderer/TransferCommandList.h"
 #include "Renderer/ResourceManager.h"
 #include "Renderer/TextureAsset.h"
 #include "Renderer/RendererResources.h"
@@ -250,12 +251,13 @@ namespace cerberus
 		{
 			CORE_ASSERT(m_Properties.Storage, "Texture2D without source data must be a storage texture");
 			TransientCommandBuffer layoutCommandBuffer = Renderer::GetTransientCommandExecutor().BeginGraphics();
+			TransferCommandList transfer(layoutCommandBuffer.GetRecordingView());
 			VkImageSubresourceRange subresourceRange{};
 			subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			subresourceRange.levelCount = imageSpec.Mips;
 			subresourceRange.layerCount = 1;
 			image->InsertImageMemoryBarrier(
-				layoutCommandBuffer,
+				transfer,
 				0,
 				VK_ACCESS_SHADER_WRITE_BIT,
 				VK_IMAGE_LAYOUT_GENERAL,
@@ -291,12 +293,13 @@ namespace cerberus
 
 		// Get Copy/Transfer Command Buffer
 		TransientCommandBuffer copyCommandBuffer = Renderer::GetTransientCommandExecutor().BeginGraphics();
+		TransferCommandList transfer(copyCommandBuffer.GetRecordingView());
 
 		// Transition the texture image layout to transfer target, so we can safely copy our buffer data to it.
 		// Insert a memory dependency at the proper pipeline stages that will execute the image layout transition 
 		// Source pipeline stage is host write/read exection (VK_PIPELINE_STAGE_HOST_BIT)
 		// Destination pipeline stage is copy command exection (VK_PIPELINE_STAGE_TRANSFER_BIT)
-		image->SetLayout(copyCommandBuffer,
+		image->SetLayout(transfer,
 						VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
 							VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
@@ -311,7 +314,11 @@ namespace cerberus
 		bufferCopyRegion.imageExtent = { width, height, 1 };						// Size of region to copy as (x, y, z) values
 
 		// Copy buffer to given image
-		vkCmdCopyBufferToImage(copyCommandBuffer, stagingBuffer, vkImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferCopyRegion);
+		transfer.CopyBufferToImage(
+			stagingBuffer,
+			vkImage,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			std::span<const VkBufferImageCopy>(&bufferCopyRegion, 1));
 		
 		VkImageLayout dstLayout;
 		VkPipelineStageFlags dstPipelineStgFlags;
@@ -327,7 +334,7 @@ namespace cerberus
 		}
 
 		// Once the data has been uploaded we transfer to the texture image to the shader read layout, so it can be sampled from
-		image->SetLayout(copyCommandBuffer,dstLayout,
+		image->SetLayout(transfer, dstLayout,
 			VK_PIPELINE_STAGE_TRANSFER_BIT, dstPipelineStgFlags);
 
 
@@ -365,6 +372,7 @@ namespace cerberus
 		uint32_t height = image->GetHeight();
 		// Get a command buffer to blit the image between the mip levels
 		TransientCommandBuffer blitCmd = Renderer::GetTransientCommandExecutor().BeginGraphics();
+		TransferCommandList transfer(blitCmd.GetRecordingView());
 
 		for (uint32_t i = 1; i < mipLevels; i++)
 		{
@@ -397,7 +405,7 @@ namespace cerberus
 			mipSubRange.layerCount = 1;
 
 			// Prepare current mip level as image blit destination
-			utils::InsertImageMemoryBarrier(blitCmd, vkImage,
+			transfer.ImageBarrier(vkImage,
 				0, VK_ACCESS_TRANSFER_WRITE_BIT,
 				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -413,18 +421,16 @@ namespace cerberus
 			
 			// Blit from previous level. Note that info.Image is used for both the srcImage and dstImage  
 			// parameter. This is because we're blitting between different levels of the same image.
-			vkCmdBlitImage(
-				blitCmd,
+			transfer.BlitImage(
 				vkImage,
 				VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 				vkImage,
 				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				1,
-				&imageBlit,
+				std::span<const VkImageBlit>(&imageBlit, 1),
 				VK_FILTER_LINEAR); //  We use the VK_FILTER_LINEAR to enable interpolation
 
 			// Prepare current mip level as image blit source for next level
-			utils::InsertImageMemoryBarrier(blitCmd, vkImage,
+			transfer.ImageBarrier(vkImage,
 				VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
 				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -437,9 +443,10 @@ namespace cerberus
 		subresourceRange.layerCount = 1;
 		subresourceRange.levelCount = mipLevels;
 
-		utils::InsertImageMemoryBarrier(blitCmd, vkImage,
-			VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT, 
-			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		image->InsertImageMemoryBarrier(transfer,
+			VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
 			subresourceRange);
 
@@ -529,6 +536,7 @@ namespace cerberus
 	void TextureCube::GenerateMips(bool readonly)
 	{
 		TransientCommandBuffer blitCmd = Renderer::GetTransientCommandExecutor().BeginGraphics();
+		TransferCommandList transfer(blitCmd.GetRecordingView());
 		uint32_t mipLevels = GetMipLevelCount();
 		Image* image = ResourceManager::GetImage(m_Image);
 		CORE_ASSERT(image, "TextureCube has an invalid image");
@@ -543,8 +551,7 @@ namespace cerberus
 		baseMipRange.baseArrayLayer = 0;
 		baseMipRange.layerCount = 6;
 
-		utils::InsertImageMemoryBarrier(
-			blitCmd,
+		transfer.ImageBarrier(
 			image->GetHandle(),
 			VK_ACCESS_SHADER_WRITE_BIT,
 			VK_ACCESS_TRANSFER_READ_BIT,
@@ -564,8 +571,7 @@ namespace cerberus
 			mipSubRange.levelCount = 1;
 			mipSubRange.layerCount = 6;
 
-			utils::InsertImageMemoryBarrier(
-				blitCmd,
+			transfer.ImageBarrier(
 				image->GetHandle(),
 				0,
 				VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -609,20 +615,17 @@ namespace cerberus
 
 				// Blit from previous level. Note that info.Image is used for both the srcImage and dstImage  
 				// parameter. This is because we're blitting between different levels of the same image.
-				vkCmdBlitImage(
-					blitCmd,
+				transfer.BlitImage(
 					image->GetHandle(),
 					VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 					image->GetHandle(),
 					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-					1,
-					&imageBlit,
+					std::span<const VkImageBlit>(&imageBlit, 1),
 					VK_FILTER_LINEAR); //  We use the VK_FILTER_LINEAR to enable interpolation
 
 			}
 
-			utils::InsertImageMemoryBarrier(
-				blitCmd,
+			transfer.ImageBarrier(
 				image->GetHandle(),
 				VK_ACCESS_TRANSFER_WRITE_BIT,
 				VK_ACCESS_TRANSFER_READ_BIT,
@@ -640,9 +643,8 @@ namespace cerberus
 		subresourceRange.layerCount = 6;
 		subresourceRange.levelCount = mipLevels;
 
-		utils::InsertImageMemoryBarrier(
-			blitCmd,
-			image->GetHandle(),
+		image->InsertImageMemoryBarrier(
+			transfer,
 			VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
 			VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 			readonly ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL,
@@ -702,19 +704,21 @@ namespace cerberus
 
 			// Get Copy/Transfer Command Buffer
 			TransientCommandBuffer copyCommandBuffer = Renderer::GetTransientCommandExecutor().BeginGraphics();
+			TransferCommandList transfer(copyCommandBuffer.GetRecordingView());
 			// Transition the texture image layout to transfer target, so we can safely copy our buffer data to it.
 			// Insert a memory dependency at the proper pipeline stages that will execute the image layout transition 
-			utils::ImageLayoutSpecification layoutSpec;
-			layoutSpec.CommandBuffer = copyCommandBuffer;
-			layoutSpec.Image = image->GetHandle();
-			layoutSpec.AspectMask = VK_IMAGE_ASPECT_COLOR_BIT;					// Image only contains color data
-			layoutSpec.OldImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			layoutSpec.NewImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-			layoutSpec.SrcStageMask = VK_PIPELINE_STAGE_HOST_BIT;				// Source pipeline stage is host write/read exection (VK_PIPELINE_STAGE_HOST_BIT)
-			layoutSpec.DstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;			// Destination pipeline stage is copy command exection (VK_PIPELINE_STAGE_TRANSFER_BIT)
-			layoutSpec.LayerCount = 6;
-			// Changed image layout
-			utils::SetImageLayout(layoutSpec);
+			VkImageSubresourceRange uploadRange{};
+			uploadRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			uploadRange.baseMipLevel = 0;
+			uploadRange.levelCount = 1;
+			uploadRange.baseArrayLayer = 0;
+			uploadRange.layerCount = 6;
+			image->SetLayout(
+				transfer,
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				VK_PIPELINE_STAGE_HOST_BIT,
+				VK_PIPELINE_STAGE_TRANSFER_BIT,
+				uploadRange);
 
 			// Define Region of the Image to Copy 
 			VkBufferImageCopy bufferCopyRegion = {};
@@ -727,24 +731,24 @@ namespace cerberus
 			bufferCopyRegion.imageExtent = { m_Width, m_Height, 1 };					// Size of region to copy as (x, y, z) values
 
 			// Copy buffer to given image
-			vkCmdCopyBufferToImage(copyCommandBuffer, stagingBuffer, image->GetHandle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferCopyRegion);
+			transfer.CopyBufferToImage(
+				stagingBuffer,
+				image->GetHandle(),
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				std::span<const VkBufferImageCopy>(&bufferCopyRegion, 1));
 
 			// Transition to the layout advertised by the ImageView descriptor.
 			const VkImageLayout finalLayout = m_Properties.Storage
 				? VK_IMAGE_LAYOUT_GENERAL
 				: VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			layoutSpec.CommandBuffer = copyCommandBuffer;
-			layoutSpec.Image = image->GetHandle();
-			layoutSpec.AspectMask = VK_IMAGE_ASPECT_COLOR_BIT;					// Image only contains color data
-			layoutSpec.OldImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-			layoutSpec.NewImageLayout = finalLayout;
-			layoutSpec.SrcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT;			// Source pipeline stage is host write/read exection (VK_PIPELINE_STAGE_HOST_BIT)
-			layoutSpec.DstStageMask = m_Properties.Storage
+			image->SetLayout(
+				transfer,
+				finalLayout,
+				VK_PIPELINE_STAGE_TRANSFER_BIT,
+				m_Properties.Storage
 				? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
-				: VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-			layoutSpec.LayerCount = 6;
-
-			image->SetImageLayout(layoutSpec);
+				: VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+				uploadRange);
 
 			copyCommandBuffer.SubmitAndWait();
 			allocator.DestroyBuffer(stagingBuffer, stagingBufferAllocation);
@@ -753,24 +757,24 @@ namespace cerberus
 		{
 			// Get Copy/Transfer Command Buffer
 			TransientCommandBuffer copyCommandBuffer = Renderer::GetTransientCommandExecutor().BeginGraphics();
+			TransferCommandList transfer(copyCommandBuffer.GetRecordingView());
 			const VkImageLayout finalLayout = m_Properties.Storage
 				? VK_IMAGE_LAYOUT_GENERAL
 				: VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			utils::ImageLayoutSpecification layoutSpec;
-			layoutSpec.CommandBuffer = copyCommandBuffer;
-			layoutSpec.Image = image->GetHandle();
-			layoutSpec.AspectMask = VK_IMAGE_ASPECT_COLOR_BIT;					// Image only contains color data
-			layoutSpec.OldImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			layoutSpec.NewImageLayout = finalLayout;
-			layoutSpec.SrcStageMask = VK_PIPELINE_STAGE_HOST_BIT;				// Source pipeline stage is host write/read exection (VK_PIPELINE_STAGE_HOST_BIT)
-			layoutSpec.DstStageMask = m_Properties.Storage
+			VkImageSubresourceRange fullRange{};
+			fullRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			fullRange.baseMipLevel = 0;
+			fullRange.levelCount = m_MipsLevels;
+			fullRange.baseArrayLayer = 0;
+			fullRange.layerCount = 6;
+			image->SetLayout(
+				transfer,
+				finalLayout,
+				VK_PIPELINE_STAGE_HOST_BIT,
+				m_Properties.Storage
 				? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
-				: VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-			layoutSpec.LayerCount = 6;
-			layoutSpec.LevelCount = m_MipsLevels;
-			layoutSpec.BaseMipLevel = 0;
-
-			image->SetImageLayout(layoutSpec);
+				: VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+				fullRange);
 			copyCommandBuffer.SubmitAndWait();
 		}
 

@@ -88,4 +88,42 @@ namespace cerberus
 		if (RendererFrameStatistics* statistics = GetStatistics())
 			++statistics->RayTracingDispatchCount;
 	}
+
+	void RayTracingCommandList::BuildAccelerationStructure(
+		const VkAccelerationStructureBuildGeometryInfoKHR& buildInfo,
+		const VkAccelerationStructureBuildRangeInfoKHR& rangeInfo) const
+	{
+		const VkAccelerationStructureBuildRangeInfoKHR* rangeInfoPointer = &rangeInfo;
+		ext::vkCmdBuildAccelerationStructuresKHR(
+			GetNative(),
+			1,
+			&buildInfo,
+			&rangeInfoPointer);
+	}
+
+	void RayTracingCommandList::CopyAccelerationStructure(
+		const VkCopyAccelerationStructureInfoKHR& copyInfo) const
+	{
+		ext::vkCmdCopyAccelerationStructureKHR(GetNative(), &copyInfo);
+	}
+
+	void RayTracingCommandList::WriteAccelerationStructureProperties(
+		VkAccelerationStructureKHR accelerationStructure,
+		VkQueryType queryType,
+		VkQueryPool queryPool,
+		uint32_t firstQuery) const
+	{
+		CORE_ASSERT(accelerationStructure != VK_NULL_HANDLE,
+			"WriteAccelerationStructureProperties requires a valid acceleration structure");
+		CORE_ASSERT(queryPool != VK_NULL_HANDLE,
+			"WriteAccelerationStructureProperties requires a valid query pool");
+
+		ext::vkCmdWriteAccelerationStructuresPropertiesKHR(
+			GetNative(),
+			1,
+			&accelerationStructure,
+			queryType,
+			queryPool,
+			firstQuery);
+	}
 }

@@ -92,7 +92,7 @@ namespace cerberus
 		bool IsTransformDirty() { return m_TransformStateDirty; }
 	private:
 		/** Is this component in need of its whole state being sent to the renderer? */
-		uint8_t m_TransformStateDirty: 1;
+		uint8_t m_TransformStateDirty : 1 = true;
 		/** The actual transform data */
 		glm::vec3 m_Translation = { 0.0f, 0.0f, 0.0f };
 		glm::vec3 m_Rotation = { 0.0f, 0.0f, 0.0f };
@@ -111,7 +111,7 @@ namespace cerberus
 
 		MeshComponent()
 			: MaterialTable(CreateRef<cerberus::MaterialTable>()),
-			  m_Registered(false), m_RenderStateCreated(false), m_RenderStateDirty(true)
+			  m_Registered(false)
 		{
 		}
 
@@ -120,7 +120,7 @@ namespace cerberus
 			  MaterialTable(other.MaterialTable
 				  ? CreateRef<cerberus::MaterialTable>(other.MaterialTable)
 				  : CreateRef<cerberus::MaterialTable>()),
-			  m_Registered(false), m_RenderStateCreated(false), m_RenderStateDirty(true)
+			  m_Registered(false)
 		{
 		}
 
@@ -139,13 +139,11 @@ namespace cerberus
 				? CreateRef<cerberus::MaterialTable>(other.MaterialTable)
 				: CreateRef<cerberus::MaterialTable>();
 			m_Registered = false;
-			m_RenderStateCreated = false;
-			m_RenderStateDirty = true;
 			return *this;
 		}
 
 		MeshComponent(const AssetHandle& meshHandle)
-			: MeshHandle(meshHandle), m_Registered(false), m_RenderStateCreated(false), m_RenderStateDirty(true)
+			: MeshHandle(meshHandle), m_Registered(false)
 		{
 			Ref<Mesh> mesh = AssetManager::GetAsset<Mesh>(MeshHandle);
 			if (mesh)
@@ -154,23 +152,9 @@ namespace cerberus
 				MaterialTable = CreateRef<cerberus::MaterialTable>();
 		}
 
-		/** Register this component, creating any rendering/physics state. */
-		void RegisterComponent(class RegisterContext& registerContext) { m_Registered = false; }
-		/** Unregister this component, destroying any rendering/physics state. */
-		void UnregisterComponent(class RegisterContext& registerContext) { m_Registered = false; }
-
-		void MarkRenderStateAsDirty() { if (m_RenderStateCreated) { m_RenderStateDirty = true; } }
-		bool IsRenderStateDirty() { return m_RenderStateDirty; }
-
 	protected:
-		/** Indicates if this Component is currently registered with a scene. */
+		/** Indicates whether this logical object has a proxy in the active RenderScene. */
 		uint8_t m_Registered : 1;
-
-		/** If the render state is currently created for this component */
-		uint8_t m_RenderStateCreated : 1;
-
-		/** Is this component in need of its whole state being sent to the renderer? */
-		uint8_t m_RenderStateDirty : 1;
 
 		friend class Scene;
 	};

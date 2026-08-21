@@ -9,7 +9,7 @@
 #include "Renderer/ShaderCompiler.h"
 #include "Renderer/TextureAsset.h"
 #include "Renderer/TransientCommandExecutor.h"
-#include "Renderer/VulkanUtility.h"
+#include "Renderer/TransferCommandList.h"
 #include "Scene/EnvironmentMap.h"
 #include "Utils/StringUtils.h"
 
@@ -74,12 +74,11 @@ namespace cerberus
 			range.layerCount = 6;
 
 			TransientCommandBuffer commandBuffer = commandExecutor.BeginGraphics();
-			utils::InsertImageMemoryBarrier(
-				commandBuffer,
-				image->GetHandle(),
+			TransferCommandList transfer(commandBuffer.GetRecordingView());
+			image->InsertImageMemoryBarrier(
+				transfer,
 				VK_ACCESS_SHADER_WRITE_BIT,
 				VK_ACCESS_SHADER_READ_BIT,
-				VK_IMAGE_LAYOUT_GENERAL,
 				VK_IMAGE_LAYOUT_GENERAL,
 				VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
 				VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,

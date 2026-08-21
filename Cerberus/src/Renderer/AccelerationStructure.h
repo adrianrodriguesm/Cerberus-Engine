@@ -1,12 +1,13 @@
 #pragma once
 #include "Renderer/Resources/MeshProxy.h"
-#include "Renderer/CommandBuffer.h"
 #include "Renderer/GPUBuffer.h"
 #include "Core/Handle.h"
 
 #include <span>
 namespace cerberus
 {
+	class RayTracingCommandList;
+
 	enum class AccelerationStructureType
 	{
 		None = 0,
@@ -96,20 +97,20 @@ namespace cerberus
 		void DestroyNonCompacted(std::span<const uint32_t> indices, std::span<BuildAccelerationStructure> buildAs);
 		//--------------------------------------------------------------------------------------------------
 		// Create and replace a new acceleration structure and buffer based on the size retrieved by the Query.
-		void CompactBlas(VkCommandBuffer cmdBuf, std::span<const uint32_t> indices, std::span<BuildAccelerationStructure> buildAs, VkQueryPool queryPool);
+		void CompactBlas(const RayTracingCommandList& commandList, std::span<const uint32_t> indices, std::span<BuildAccelerationStructure> buildAs, VkQueryPool queryPool);
 		//--------------------------------------------------------------------------------------------------
 		// Creating the bottom level acceleration structure for all indices of `buildAs` vector.
 		// The array of BuildAccelerationStructure was created in buildBlas and the vector of
 		// indices limits the number of BLAS to create at once. This limits the amount of
 		// memory needed when compacting the BLAS.
-		void CreateBlas(VkCommandBuffer              cmdBuf,
+		void CreateBlas(const RayTracingCommandList& commandList,
 			std::span<const uint32_t>                 indices,
 			std::span<BuildAccelerationStructure>     buildAs,
 			VkDeviceAddress                          scratchAddress,
 			VkQueryPool                              queryPool);
 		//--------------------------------------------------------------------------------------------------
 		// Creating the TLAS, called by buildTlas
-		VmaAllocation CreateTlas(VkCommandBuffer                      cmdBuf,			// Command buffer
+		VmaAllocation CreateTlas(const RayTracingCommandList& commandList,
 			uint32_t                             countInstance,					// number of instances
 			VkDeviceAddress                      instBufferAddr,				// Buffer address of instances
 			VkBuildAccelerationStructureFlagsKHR flags,							// Build creation flag

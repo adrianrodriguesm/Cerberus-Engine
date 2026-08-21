@@ -4,6 +4,8 @@
 #include "Renderer/Renderer.h"
 #include "Renderer/VulkanExtensions.h"
 #include "Renderer/ResourceManager.h"
+#include "Renderer/RayTracingCommandList.h"
+#include "Renderer/TransferCommandList.h"
 namespace cerberus
 {
 #define AS_LOG_INFO(...) NV_CORE_INFO(__VA_ARGS__)
@@ -107,6 +109,7 @@ namespace cerberus
 		CORE_ASSERT(countInstance > 0, "Trying to build a TLAS with 0 instances");
 
 		TransientCommandBuffer cmdBuf = Renderer::GetTransientCommandExecutor().BeginGraphics();
+		RayTracingCommandList rayTracing(cmdBuf.GetRecordingView());
 
 		ResourceAllocator allocator("Top Level Acceleration Structure");
 
@@ -120,23 +123,16 @@ namespace cerberus
 		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 		barrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
 
-		vkCmdPipelineBarrier(
-			cmdBuf,
+		rayTracing.PipelineBarrier(
 			VK_PIPELINE_STAGE_TRANSFER_BIT,
 			VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
 			0,
-			1,
-			&barrier,
-			0,
-			nullptr,
-			0,
-			nullptr
-		);
+			std::span<const VkMemoryBarrier>(&barrier, 1));
 
 		VkBuffer scratchBuffer;
 		VmaAllocation scratchBufferAllocation =
 			CreateTlas(
-				cmdBuf,
+				rayTracing,
 				countInstance,
 				instBufferAddr,
 				m_Flags,
@@ -299,14 +295,16 @@ namespace cerberus
 			if (batchSize >= batchLimit || idx == nbBlas - 1)
 			{
 				TransientCommandBuffer cmdBuf = Renderer::GetTransientCommandExecutor().BeginGraphics();
-				CreateBlas(cmdBuf, indices, buildAs, scratchBufferAddress, queryPool);
+				RayTracingCommandList rayTracing(cmdBuf.GetRecordingView());
+				CreateBlas(rayTracing, indices, buildAs, scratchBufferAddress, queryPool);
 				cmdBuf.SubmitAndWait();
 				if (queryPool)
 				{
 					// After creation, the real space can be smaller, and it is possible to copy the acceleration structure 
 					// to one that is using exactly what is needed. This could save over 50% of the device memory usage
 					TransientCommandBuffer cmdBuf = Renderer::GetTransientCommandExecutor().BeginGraphics();
-					CompactBlas(cmdBuf, indices, buildAs, queryPool);
+					RayTracingCommandList rayTracing(cmdBuf.GetRecordingView());
+					CompactBlas(rayTracing, indices, buildAs, queryPool);
 					cmdBuf.SubmitAndWait();
 					// Destroy the non-compacted version
 					DestroyNonCompacted(indices, buildAs);
@@ -371,14 +369,8 @@ namespace cerberus
 		// Get a copy command buffer to tranfer the data 
 		// from the staging buffer to the vertex buffer
 		TransientCommandBuffer copyCmd = Renderer::GetTransientCommandExecutor().BeginGraphics();
-
-		// Region of data to copy from and to
-		VkBufferCopy copyRegion = {};
-		copyRegion.srcOffset = 0;			// Copy from the begining of the fisrt buffer
-		copyRegion.dstOffset = 0;			// Copy from the begining of the destination buffer
-		copyRegion.size = bufferSize;
-		// Record copy operation to the command buffer
-		vkCmdCopyBuffer(copyCmd, stagingBuffer, outIntanceBuffer, 1, &copyRegion);
+		TransferCommandList transfer(copyCmd.GetRecordingView());
+		transfer.CopyBuffer(stagingBuffer, outIntanceBuffer, bufferSize);
 		// Flush command bufer (sumit to execution and detroy)
 		copyCmd.SubmitAndWait();
 
@@ -395,7 +387,7 @@ namespace cerberus
 		}
 	}
 
-	void AccelerationStructureBuilder::CompactBlas(VkCommandBuffer cmdBuf, std::span<const uint32_t> indices, std::span<BuildAccelerationStructure> buildAs, VkQueryPool queryPool)
+	void AccelerationStructureBuilder::CompactBlas(const RayTracingCommandList& commandList, std::span<const uint32_t> indices, std::span<BuildAccelerationStructure> buildAs, VkQueryPool queryPool)
 	{
 		VkDevice device = RendererContext::GetCurrentVulkanDevice();
 		uint32_t queryCtn{ 0 };
@@ -423,11 +415,11 @@ namespace cerberus
 			copyInfo.src = buildAs[idx].BuildInfo.dstAccelerationStructure;
 			copyInfo.dst = compactBlas->GetVulkanAStructure();
 			copyInfo.mode = VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_KHR;
-			ext::vkCmdCopyAccelerationStructureKHR(cmdBuf, &copyInfo);
+			commandList.CopyAccelerationStructure(copyInfo);
 		}
 	}
 
-	void AccelerationStructureBuilder::CreateBlas(VkCommandBuffer cmdBuf, std::span<const uint32_t> indices, std::span<BuildAccelerationStructure> buildAs, VkDeviceAddress scratchAddress, VkQueryPool queryPool)
+	void AccelerationStructureBuilder::CreateBlas(const RayTracingCommandList& commandList, std::span<const uint32_t> indices, std::span<BuildAccelerationStructure> buildAs, VkDeviceAddress scratchAddress, VkQueryPool queryPool)
 	{
 		VkDevice device = RendererContext::GetCurrentVulkanDevice();
 		// For querying the compaction size
@@ -453,21 +445,27 @@ namespace cerberus
 			buildAs[idx].BuildInfo.scratchData.deviceAddress = scratchAddress; 
 
 			// Building the bottom-level-acceleration-structure
-			ext::vkCmdBuildAccelerationStructuresKHR(cmdBuf, 1, &buildAs[idx].BuildInfo, &buildAs[idx].RangeInfo);
+			commandList.BuildAccelerationStructure(buildAs[idx].BuildInfo, *buildAs[idx].RangeInfo);
 
 			// Since the scratch buffer is reused across builds, we need a barrier to ensure one build
 			// is finished before starting the next one.
 			VkMemoryBarrier barrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER };
 			barrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
 			barrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;
-			vkCmdPipelineBarrier(cmdBuf, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
-				VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+			commandList.PipelineBarrier(
+				VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+				VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+				0,
+				std::span<const VkMemoryBarrier>(&barrier, 1));
 
 			if (queryPool)
 			{
 				// Add a query to find the 'real' amount of memory needed, use for compaction
-				ext::vkCmdWriteAccelerationStructuresPropertiesKHR(cmdBuf, 1, &buildAs[idx].BuildInfo.dstAccelerationStructure,
-					VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR, queryPool, queryCnt++);
+				commandList.WriteAccelerationStructureProperties(
+					buildAs[idx].BuildInfo.dstAccelerationStructure,
+					VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR,
+					queryPool,
+					queryCnt++);
 			}
 		}
 	}
@@ -475,7 +473,7 @@ namespace cerberus
 	//--------------------------------------------------------------------------------------------------
 	// Low level of Tlas creation
 	//
-	VmaAllocation AccelerationStructureBuilder::CreateTlas(VkCommandBuffer cmdBuf, uint32_t countInstance, VkDeviceAddress instBufferAddr, VkBuildAccelerationStructureFlagsKHR flags, bool update, bool motion, ResourceAllocator& allocator, VkBuffer& outScratchBuffer, Handle<AccelerationStructure>& outTLAS)
+	VmaAllocation AccelerationStructureBuilder::CreateTlas(const RayTracingCommandList& commandList, uint32_t countInstance, VkDeviceAddress instBufferAddr, VkBuildAccelerationStructureFlagsKHR flags, bool update, bool motion, ResourceAllocator& allocator, VkBuffer& outScratchBuffer, Handle<AccelerationStructure>& outTLAS)
 	{
 		VkDevice device = RendererContext::GetCurrentVulkanDevice();
 		// Wraps a device pointer to the above uploaded instances.
@@ -539,7 +537,7 @@ namespace cerberus
 		const VkAccelerationStructureBuildRangeInfoKHR* pBuildOffsetInfo = &buildOffsetInfo;
 
 		// Build the TLAS
-		ext::vkCmdBuildAccelerationStructuresKHR(cmdBuf, 1, &buildInfo, &pBuildOffsetInfo);
+		commandList.BuildAccelerationStructure(buildInfo, *pBuildOffsetInfo);
 	
 		return scratchBufferAllocation;
 	}

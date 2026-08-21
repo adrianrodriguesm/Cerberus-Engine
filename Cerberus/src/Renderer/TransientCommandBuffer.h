@@ -25,7 +25,6 @@ namespace cerberus
 		TransientCommandBuffer& operator=(TransientCommandBuffer&& other) noexcept;
 
 		VkCommandBuffer GetNative() const { return m_CommandBuffer; }
-		operator VkCommandBuffer() const { return GetNative(); }
 		bool IsValid() const { return m_CommandBuffer != VK_NULL_HANDLE; }
 		CommandBufferView GetRecordingView(uint32_t frameIndex = 0) const
 		{

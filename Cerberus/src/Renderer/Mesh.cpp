@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "Mesh.h"
-#include "Renderer/RendererResources.h"
 #include "Asset/AssetManager.h"
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
@@ -71,7 +70,6 @@ namespace cerberus
 		}
 
 		m_Scene = scene;
-		m_MeshShader = RendererResources::GetShaderLibrary().Get("PBR");
 
 		LoadGeometry();
 		TraverseNodes(scene->mRootNode);
@@ -280,8 +278,10 @@ namespace cerberus
 			const std::string filename = materialPath.filename().string();
 			const std::string materialDirectory = materialPath.parent_path().string();
 
-			Ref<Material> material = CreateRef<Material>(m_MeshShader, materialName);
-			Ref<MaterialAsset> materialAsset = AssetManager::CreateNewAsset<MaterialAsset>(filename, materialDirectory, material);
+			Ref<MaterialAsset> materialAsset = AssetManager::CreateNewAsset<MaterialAsset>(
+				filename,
+				materialDirectory,
+				materialName);
 
 			glm::vec3 albedoColor(0.8f);
 			if (sourceMaterial)

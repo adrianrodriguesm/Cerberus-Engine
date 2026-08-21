@@ -2,10 +2,12 @@
 #include "Core/Base.h"
 #include "Core/Buffer.h"
 #include "Renderer/ResourceAllocator.h"
-#include "Renderer/VulkanUtility.h"
 #include "Core/Handle.h"
 namespace cerberus
 {
+	class CommandListBase;
+	class TransferCommandList;
+
 	enum ImageFlags : uint8_t
 	{
 		NONE = 0,
@@ -77,17 +79,25 @@ namespace cerberus
 		
 		const VkImageLayout GetImageLayout() const { return m_CurrentImgLayout; }
 
-		void InsertImageMemoryBarrier(VkCommandBuffer cmdbuffer,
+		void InsertImageMemoryBarrier(const CommandListBase& commandList,
 			VkAccessFlags srcAccessMask,
 			VkAccessFlags dstAccessMask,
 			VkImageLayout newImageLayout,
 			VkPipelineStageFlags srcStageMask,
 			VkPipelineStageFlags dstStageMask,
 			VkImageSubresourceRange subresourceRange);
+		void InsertImageMemoryBarrier(const CommandListBase& commandList,
+			VkAccessFlags srcAccessMask,
+			VkAccessFlags dstAccessMask,
+			VkImageLayout oldImageLayout,
+			VkImageLayout newImageLayout,
+			VkPipelineStageFlags srcStageMask,
+			VkPipelineStageFlags dstStageMask,
+			VkImageSubresourceRange subresourceRange);
 
-		void SetLayout(VkCommandBuffer cmd, VkImageLayout newImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask);
+		void SetLayout(const TransferCommandList& commandList, VkImageLayout newImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask);
+		void SetLayout(const TransferCommandList& commandList, VkImageLayout newImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkImageSubresourceRange subresourceRange);
 		void SetLayout(VkImageLayout newImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask);
-		void SetImageLayout(const utils::ImageLayoutSpecification& imgLayoutSpec);
 		VkImage GetHandle() const { return m_Image; }
 		uint64_t GetHash() const { return (uint64_t)(void*)m_Image; }
 

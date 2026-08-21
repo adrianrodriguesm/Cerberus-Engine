@@ -4,6 +4,7 @@
 #include "Renderer/ResourceManager.h"
 #include "Renderer/RenderQueueManager.h"
 #include "Renderer/DeferredResourceDeletionQueue.h"
+#include "Renderer/TransferCommandList.h"
 
 namespace cerberus
 {
@@ -100,6 +101,7 @@ namespace cerberus
 		CORE_ASSERT(m_Specification.Width > 0 && m_Specification.Height > 0, "Width or height less equal than zero!");
 
 		Release();
+		m_CurrentImgLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
 		VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 		ResourceAllocator allocator("Image2D");
@@ -167,18 +169,42 @@ namespace cerberus
 		});
 		m_Image = nullptr;
 		m_MemoryAlloc = nullptr;
+		m_CurrentImgLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	}
 
-	void Image::SetLayout(VkCommandBuffer cmd, VkImageLayout newImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask)
+	void Image::SetLayout(
+		const TransferCommandList& commandList,
+		VkImageLayout newImageLayout,
+		VkPipelineStageFlags srcStageMask,
+		VkPipelineStageFlags dstStageMask)
+	{
+		const VkImageAspectFlags aspectMask = Image::IsDepthFormat(m_Specification.Format) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+		VkImageSubresourceRange subresourceRange{};
+		subresourceRange.aspectMask = aspectMask;
+		subresourceRange.baseMipLevel = 0;
+		subresourceRange.levelCount = 1;
+		subresourceRange.baseArrayLayer = 0;
+		subresourceRange.layerCount = 1;
+		SetLayout(commandList, newImageLayout, srcStageMask, dstStageMask, subresourceRange);
+	}
+
+	void Image::SetLayout(
+		const TransferCommandList& commandList,
+		VkImageLayout newImageLayout,
+		VkPipelineStageFlags srcStageMask,
+		VkPipelineStageFlags dstStageMask,
+		VkImageSubresourceRange subresourceRange)
 	{
 		if (newImageLayout == m_CurrentImgLayout)
 			return;
 
-		const VkImageAspectFlags aspectMask = Image::IsDepthFormat(m_Specification.Format) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
-		utils::SetImageLayout(cmd, m_Image,
-			aspectMask,
-			m_CurrentImgLayout, newImageLayout,
-			srcStageMask, dstStageMask);
+		commandList.TransitionImageLayout(
+			m_Image,
+			m_CurrentImgLayout,
+			newImageLayout,
+			subresourceRange,
+			srcStageMask,
+			dstStageMask);
 
 		m_CurrentImgLayout = newImageLayout;
 	}
@@ -186,31 +212,34 @@ namespace cerberus
 	void Image::SetLayout(VkImageLayout newImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask)
 	{
 		TransientCommandBuffer cmdBuffer = Renderer::GetTransientCommandExecutor().BeginGraphics();
-		SetLayout(cmdBuffer, newImageLayout, srcStageMask, dstStageMask);
+		TransferCommandList transfer(cmdBuffer.GetRecordingView());
+		SetLayout(transfer, newImageLayout, srcStageMask, dstStageMask);
 		cmdBuffer.SubmitAndWait();
 	}
 
-	void Image::SetImageLayout(const utils::ImageLayoutSpecification& imgLayoutSpec)
-	{
-		if (m_CurrentImgLayout == imgLayoutSpec.NewImageLayout)
-			return;
-
-		VkImageSubresourceRange subresourceRange = {};
-		subresourceRange.aspectMask = imgLayoutSpec.AspectMask;
-		subresourceRange.baseMipLevel = imgLayoutSpec.BaseMipLevel;
-		subresourceRange.levelCount = imgLayoutSpec.LevelCount;
-		subresourceRange.layerCount = imgLayoutSpec.LayerCount;
-
-		utils::SetImageLayout(imgLayoutSpec.CommandBuffer, imgLayoutSpec.Image, m_CurrentImgLayout, imgLayoutSpec.NewImageLayout,
-			subresourceRange,
-			imgLayoutSpec.SrcStageMask, imgLayoutSpec.DstStageMask);
-
-		m_CurrentImgLayout = imgLayoutSpec.NewImageLayout;
-	}
-
-	void Image::InsertImageMemoryBarrier(VkCommandBuffer cmdbuffer,
+	void Image::InsertImageMemoryBarrier(const CommandListBase& commandList,
 		VkAccessFlags srcAccessMask,
 		VkAccessFlags dstAccessMask,
+		VkImageLayout newImageLayout,
+		VkPipelineStageFlags srcStageMask,
+		VkPipelineStageFlags dstStageMask,
+		VkImageSubresourceRange subresourceRange)
+	{
+		InsertImageMemoryBarrier(
+			commandList,
+			srcAccessMask,
+			dstAccessMask,
+			m_CurrentImgLayout,
+			newImageLayout,
+			srcStageMask,
+			dstStageMask,
+			subresourceRange);
+	}
+
+	void Image::InsertImageMemoryBarrier(const CommandListBase& commandList,
+		VkAccessFlags srcAccessMask,
+		VkAccessFlags dstAccessMask,
+		VkImageLayout oldImageLayout,
 		VkImageLayout newImageLayout,
 		VkPipelineStageFlags srcStageMask,
 		VkPipelineStageFlags dstStageMask,
@@ -219,7 +248,24 @@ namespace cerberus
 		// A memory dependency can be required even when the image remains in the
 		// same layout (for example, a storage-image write in one path-tracing
 		// dispatch followed by a read/write in the next dispatch).
-		utils::InsertImageMemoryBarrier(cmdbuffer, m_Image, srcAccessMask, dstAccessMask, m_CurrentImgLayout, newImageLayout, srcStageMask, dstStageMask, subresourceRange);
+		VkImageMemoryBarrier barrier{};
+		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.srcAccessMask = srcAccessMask;
+		barrier.dstAccessMask = dstAccessMask;
+		barrier.oldLayout = oldImageLayout;
+		barrier.newLayout = newImageLayout;
+		barrier.image = m_Image;
+		barrier.subresourceRange = subresourceRange;
+
+		commandList.PipelineBarrier(
+			srcStageMask,
+			dstStageMask,
+			0,
+			{},
+			{},
+			std::span<const VkImageMemoryBarrier>(&barrier, 1));
 		m_CurrentImgLayout = newImageLayout;
 	}
 

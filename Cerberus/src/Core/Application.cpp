@@ -91,6 +91,12 @@ namespace cerberus
 				RenderQueueManager::ExecuteRenderQueue();
 			}
 			swapChain->Present();
+
+			// Process exceptional lifecycle changes only after frame submission/present.
+			// The replacement path performs an explicit device wait before releasing
+			// resources, so recorded ImGui descriptors cannot outlive their images.
+			for (Layer* layer : m_LayerStack)
+				layer->OnFrameEnd();
 		}
 		
 	}

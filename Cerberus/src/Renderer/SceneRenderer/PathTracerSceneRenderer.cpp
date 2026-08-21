@@ -74,7 +74,9 @@ namespace cerberus
 
 			BindGroupSpecification bindGroupRTSpec;
 			bindGroupRTSpec.BindGroupLayout = m_RT_BindGroupLayout;
-			bindGroupRTSpec.Lifetime = DescriptorAllocationLifetime::Transient;
+			// This bind group is retained by the SceneRenderer across frames, so its
+			// descriptor sets must outlive the per-frame transient-pool reset.
+			bindGroupRTSpec.Lifetime = DescriptorAllocationLifetime::Persistent;
 			m_RT_BindGroup = ResourceManager::CreateBindGroup(bindGroupRTSpec);
 		}
 
@@ -219,31 +221,27 @@ namespace cerberus
 
 	PathTracerSceneRenderer::~PathTracerSceneRenderer()
 	{
+		// The SBT references the RT pipeline and must be released first.
+		m_ShaderBindingTable.reset();
+		if (m_RT_BindGroup.IsValid())
+			ResourceManager::DestroyBindGroup(m_RT_BindGroup);
+		if (m_RT_Pipeline.IsValid())
+			ResourceManager::DestroyRayTracingPipeline(m_RT_Pipeline);
+
 		if (m_RenderScene)
 		{
 			m_RenderScene->Shutdown();
 			m_RenderScene.reset();
 		}
 
-		if (m_RT_Pipeline.IsValid())
-			ResourceManager::DestroyRayTracingPipeline(m_RT_Pipeline);
-
-		if (m_RT_BindGroup.IsValid())
-			ResourceManager::DestroyBindGroup(m_RT_BindGroup);
-
 		if (m_RT_BindGroupLayout.IsValid())
 			ResourceManager::DestroyBindGroupLayout(m_RT_BindGroupLayout);
 
 		ReleaseRTImages();
-	}
 
-	void PathTracerSceneRenderer::BeginScene(const SceneRendererCamera& sceneRendererCamera)
-	{
-	}
-
-	void PathTracerSceneRenderer::EndScene()
-	{
-
+		// Raytrace is renderer-specific. Releasing it here guarantees a renderer
+		// switch does not retain the inactive pipeline's shader modules.
+		RendererResources::GetShaderLibrary().Unload("Raytrace");
 	}
 
 	void PathTracerSceneRenderer::ResetAccumulation()
@@ -583,7 +581,7 @@ namespace cerberus
 			accumulationRange.layerCount = 1;
 
 			accumulationImage->InsertImageMemoryBarrier(
-				rayTracing.GetNative(),
+				rayTracing,
 				VK_ACCESS_SHADER_WRITE_BIT,
 				VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
 				VK_IMAGE_LAYOUT_GENERAL,
@@ -604,10 +602,6 @@ namespace cerberus
 		// Keep sampleIndex + 1 representable in the shader.
 		if (m_AccumulatedFrames < std::numeric_limits<uint32_t>::max() - 1u)
 			++m_AccumulatedFrames;
-	}
-
-	void PathTracerSceneRenderer::SubmitMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform)
-	{
 	}
 
 	void PathTracerSceneRenderer::SetViewportSize(uint32_t width, uint32_t height)
@@ -740,16 +734,6 @@ namespace cerberus
 		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
 		if (m_RenderScene->SetDirectionalLights(directionalLights))
 			ResetAccumulation();
-	}
-
-	void PathTracerSceneRenderer::SetSceneContext(const Ref<Scene>& scene)
-	{
-		if (m_Scene == scene)
-			return;
-
-		m_Scene = scene;
-		m_HasPreviousCamera = false;
-		ResetAccumulation();
 	}
 
 	void PathTracerSceneRenderer::OnImGuiRender()

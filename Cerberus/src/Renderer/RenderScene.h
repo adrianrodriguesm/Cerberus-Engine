@@ -18,7 +18,10 @@ namespace cerberus
 	class TextureCube;
 	struct EnvironmentMap;
 
-	static constexpr uint32_t MaxRayTracingTextureCount = 128;
+	static constexpr uint32_t MaxMaterialTextureCount = 128;
+	// Compatibility name for the current RT shaders. Both renderers consume the
+	// same RenderScene-owned material texture table.
+	static constexpr uint32_t MaxRayTracingTextureCount = MaxMaterialTextureCount;
 
 	static_assert(sizeof(MeshSource::Vertex) == 14 * sizeof(float), "RT vertex fetch expects MeshSource::Vertex to contain 14 tightly packed floats");
 	static_assert(sizeof(MeshSource::Index) == 3 * sizeof(uint32_t), "RT index fetch expects tightly packed uint32 triangle indices");
@@ -84,8 +87,13 @@ namespace cerberus
 
 		// Render-friendly material table. MeshInstanceProxy::MaterialProxyIndex indexes this array.
 		const std::vector<MaterialProxy>& GetMaterialProxies() const { return m_MeshRegister.MaterialProxies; }
+		std::span<const Handle<MeshInstanceProxy>> GetRasterMeshInstances() const
+		{
+			return m_MeshRegister.RasterMeshInstances;
+		}
 		const MaterialProxy* GetMaterialProxy(uint32_t materialProxyIndex) const;
-		const std::vector<Handle<Texture2D>>& GetRayTracingTextures() const { return m_MeshRegister.GPUTextures; }
+		const std::vector<Handle<Texture2D>>& GetMaterialTextures() const { return m_MeshRegister.GPUTextures; }
+		const std::vector<Handle<Texture2D>>& GetRayTracingTextures() const { return GetMaterialTextures(); }
 		const std::vector<RayTracingInstanceData>& GetRayTracingInstances() const { return m_RayTracingInstances; }
 		const SkyLightProxy& GetSkyLight() const { return m_SkyLight; }
 		const std::array<DirectionalLightProxy, MaxDirectionalLightCount>& GetDirectionalLights() const { return m_DirectionalLights; }
@@ -162,6 +170,9 @@ namespace cerberus
 
 			// Mesh Source Proxy -> Submesh index -> Submesh instance
 			std::unordered_map<Handle<MeshSourceProxy>, std::unordered_map<uint32_t, std::vector<Handle<MeshInstanceProxy>>>> MeshInstanceMap;
+			// Flat draw order consumed by raster renderers. The per-source map above is
+			// retained for future batching/DrawStream work.
+			std::vector<Handle<MeshInstanceProxy>> RasterMeshInstances;
 
 			uint32_t MeshInstanceCount = 0;
 		} m_MeshRegister;

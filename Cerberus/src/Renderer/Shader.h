@@ -209,6 +209,8 @@ namespace cerberus
 		void Load(const std::string& path, bool forceCompile = false);
 		void Load(const std::string& name, const std::string& path);
 		void Load(const ShaderSpecification& specification, bool forceCompile = false);
+		bool Contains(const std::string& name) const;
+		void Unload(const std::string& name);
 
 		const Ref<Shader>& Get(const std::string& name) const;
 	private:

@@ -946,6 +946,21 @@ namespace cerberus
 		m_Shaders[specification.Name] = CreateRef<Shader>(specification, forceCompile);
 	}
 
+	bool ShaderLibrary::Contains(const std::string& name) const
+	{
+		return m_Shaders.find(name) != m_Shaders.end();
+	}
+
+	void ShaderLibrary::Unload(const std::string& name)
+	{
+		auto shaderIt = m_Shaders.find(name);
+		if (shaderIt == m_Shaders.end())
+			return;
+
+		shaderIt->second->SubmitResourcesToFree();
+		m_Shaders.erase(shaderIt);
+	}
+
 	const Ref<Shader>& ShaderLibrary::Get(const std::string& name) const
 	{
 		CORE_ASSERT(m_Shaders.find(name) != m_Shaders.end(), "Shader does not exits");

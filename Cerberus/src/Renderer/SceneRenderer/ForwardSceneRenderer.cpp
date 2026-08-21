@@ -1,491 +1,508 @@
 #include "pch.h"
 #include "ForwardSceneRenderer.h"
-#include "Renderer/Renderer.h"
 
-#include <Core/Application.h>
-//#include "glm/gtx/string_cast.hpp"
-#include "Utils/StringUtils.h"
-#include "Core/Input.h"
 #include "ImGui/ImGuiUI.h"
+#include "Renderer/GraphicsCommandList.h"
+#include "Renderer/RenderQueueManager.h"
+#include "Renderer/Renderer.h"
+#include "Renderer/RendererResources.h"
+#include "Renderer/ResourceAllocator.h"
+#include "Renderer/ResourceManager.h"
+#include "Utils/StringUtils.h"
 
-#if 0
+#include <algorithm>
 
 namespace cerberus
 {
-	ForwardSceneRenderer::ForwardSceneRenderer(Ref<Scene> scene, const SceneRendererSpecification& sceneRendererSpec)
-		: m_Scene(scene), m_Specification(sceneRendererSpec), m_ViewportWidth(m_Specification.Resolution.x), m_ViewportHeight(m_Specification.Resolution.y)
+	namespace
 	{
-		if (m_Specification.SwapChainTarget)
-			m_CommandBuffer = CommandBuffer::CreateFromSwapchain();
-		else
-			m_CommandBuffer = CommandBuffer::Create(Renderer::GetRendererConfig().FramesInFlight, "SceneRenderer");
+		constexpr uint32_t ForwardCameraBinding = 0;
+		constexpr uint32_t ForwardMaterialBinding = 1;
+		constexpr uint32_t ForwardTextureBinding = 2;
+		constexpr uint32_t ForwardRadianceBinding = 3;
+		constexpr uint32_t ForwardIrradianceBinding = 4;
+		constexpr uint32_t ForwardLightingBinding = 5;
 
-
-		// PreDepth
+		BindGroupLayout::BufferBinding BufferBinding(
+			const char* name,
+			uint32_t binding,
+			VkShaderStageFlagBits stages)
 		{
-			FramebufferSpecification preDepthFramebufferSpec;
-			preDepthFramebufferSpec.AttachmentsSpecification = { ImageFormat::RED32F, ImageFormat::DEPTH24STENCIL8 };
-			//preDepthFramebufferSpec.ClearColor = { 0.0f, 0.0f, 0.0f, 0.0f };
-			preDepthFramebufferSpec.DebugName = "PreDepth";
-
-			RenderPassSpecification preDepthRenderPassSpec;
-			preDepthRenderPassSpec.TargetFramebuffer = CreateRef<Framebuffer>(preDepthFramebufferSpec);
-			preDepthRenderPassSpec.DebugName = "PreDepth";
-
-			PipelineSpecification pipelineSpec;
-			pipelineSpec.DebugName = "PreDepth";
-			Ref<Shader> shader = Renderer::GetShaderLibrary().Get("PreDepth");
-			pipelineSpec.Shader = shader;
-			pipelineSpec.Layout = {
-				{ ShaderDataType::Float3, "a_Position" },
-				{ ShaderDataType::Float3, "a_Normal" },
-				{ ShaderDataType::Float3, "a_Tangent" },
-				{ ShaderDataType::Float3, "a_Binormal" },
-				{ ShaderDataType::Float2, "a_TexCoord" }
-			};
-			pipelineSpec.CullMode = CullMode::Back;
-			pipelineSpec.DepthOperator = DepthCompareOperator::LessOrEqual;
-			pipelineSpec.RenderPass = CreateRef<RenderPass>(preDepthRenderPassSpec);
-			m_PreDepthPipeline = CreateRef<Pipeline>(pipelineSpec);
-			m_PreDepthMaterial = CreateRef<Material>(shader, "PreDepth");
+			BindGroupLayout::BufferBinding result;
+			result.Name = name;
+			result.BindingPoint = binding;
+			result.ShaderStage = stages;
+			result.UsageType = BufferUsageType::Static;
+			return result;
 		}
-		// Shadow Map
+
+		BindGroupLayout::ImageBinding ImageBinding(
+			const char* name,
+			uint32_t binding,
+			uint32_t arraySize,
+			VkShaderStageFlagBits stages)
 		{
-			uint32_t shadowMapRes = Renderer::GetRendererConfig().ShadowMapResolution;
-			ImageSpecification imgSpec;
-			imgSpec.Width = shadowMapRes;
-			imgSpec.Height = shadowMapRes;
-			imgSpec.Layers = 4;         // One layer per cascade
-			imgSpec.Usage = ImageUsage::Attachment;
-			imgSpec.DebugName = "ShadowCascadeImage";
-			imgSpec.Format = ImageFormat::DEPTH32STENCIL8;
-			Ref<Image2D> image = CreateRef<Image2D>(imgSpec);
-			image->Invalidate();
-			image->CreatePerLayerImageViews();
-
-			FramebufferSpecification shadowFramebufferSpec;
-			shadowFramebufferSpec.AttachmentsSpecification = { ImageFormat::DEPTH32STENCIL8 };
-			shadowFramebufferSpec.ClearColor = { 0.0f, 0.0f, 0.0f, 0.0f };
-			//shadowFramebufferSpec.DepthClearValue = 1.0f;
-			shadowFramebufferSpec.NoResize = true;
-			shadowFramebufferSpec.DebugName = "ShadowMapCascade";
-			shadowFramebufferSpec.ExistingImage = image;
-			shadowFramebufferSpec.Width = shadowMapRes;
-			shadowFramebufferSpec.Height = shadowMapRes;
-
-			// 4 cascades
-			auto shadowPassShader = Renderer::GetShaderLibrary().Get("ShadowMap");
-			PipelineSpecification pipelineSpec;
-			pipelineSpec.DebugName = "ShadowMapCascade";
-			pipelineSpec.Shader = shadowPassShader;
-			pipelineSpec.DepthOperator = DepthCompareOperator::LessOrEqual;
-			pipelineSpec.CullMode = CullMode::Back;
-			pipelineSpec.Layout = {
-				{ ShaderDataType::Float3, "a_Position" },
-				{ ShaderDataType::Float3, "a_Normal" },
-				{ ShaderDataType::Float3, "a_Tangent" },
-				{ ShaderDataType::Float3, "a_Binormal" },
-				{ ShaderDataType::Float2, "a_TexCoord" }
-			};
-
-			for (uint32_t i = 0; i < 4; i++)
-			{
-				// Defining which layer (cascade of the shadow map) is going to be attach to each pipeline
-				 .ExistingImageLayers.clear();
-				shadowFramebufferSpec.ExistingImageLayers.emplace_back(i);
-
-				RenderPassSpecification shadowMapRenderPassSpec;
-				shadowMapRenderPassSpec.TargetFramebuffer = CreateRef<Framebuffer>(shadowFramebufferSpec);
-				shadowMapRenderPassSpec.DebugName = "ShadowMapCascade";
-				pipelineSpec.RenderPass = CreateRef<RenderPass>(shadowMapRenderPassSpec);
-				m_ShadowMapPipelines[i] = CreateRef<Pipeline>(pipelineSpec);
-
-			}
-			Ref<Shader> shader = Renderer::GetShaderLibrary().Get("ShadowMap");
-			m_ShadowMapMaterial = CreateRef<Material>(shader, "ShadowMap");
-
+			BindGroupLayout::ImageBinding result;
+			result.Name = name;
+			result.BindingPoint = binding;
+			result.ArraySize = arraySize;
+			result.ShaderStage = stages;
+			return result;
 		}
-		// Geometry pass
-		{
-			// Framebuffer
-			FramebufferSpecification framebufferSpec;
-			framebufferSpec.SwapchainTarget = false;
-			framebufferSpec.DebugName = "Geometry";
-			framebufferSpec.AttachmentsSpecification = { ImageFormat::RGBA32F, ImageFormat::DEPTH24STENCIL8 };
-			framebufferSpec.ClearDepthOnLoad = false;
-			framebufferSpec.ExistingImages[1] = m_PreDepthPipeline->GetSpecification().RenderPass->GetSpecification().TargetFramebuffer->GetDepthImage();
-			Ref<Framebuffer> framebuffer = CreateRef<Framebuffer>(framebufferSpec);
-			// Render Pass
-			RenderPassSpecification renderPassSpec;
-			renderPassSpec.TargetFramebuffer = framebuffer;
-			renderPassSpec.DebugName = "Geometry Pass";
-			Ref<RenderPass> renderPass = CreateRef<RenderPass>(renderPassSpec);
-			// Pipeline
-			Ref<Shader> shader = Renderer::GetShaderLibrary().Get("PBR");
-			PipelineSpecification pipelineSpec;
-			pipelineSpec.Layout = { { ShaderDataType::Float3, "a_Position"	},
-									{ ShaderDataType::Float3, "a_Normal"	},
-									{ ShaderDataType::Float3, "a_Tangent"	},
-									{ ShaderDataType::Float3, "a_Binormal"	},
-									{ ShaderDataType::Float2, "a_TexCoord"	}, };
-			pipelineSpec.Shader = shader;
-			pipelineSpec.DepthWrite = false;
-			pipelineSpec.DepthOperator = DepthCompareOperator::Equal;
-			pipelineSpec.RenderPass = renderPass;
-			pipelineSpec.CullMode = CullMode::Back;
-			pipelineSpec.DebugName = "Geometry Pass";
-			m_GeometryPipeline = CreateRef<Pipeline>(pipelineSpec);
-		}
-		// Skybox
-		{
-			// Material
-			Ref<Shader> skyboxShader = Renderer::GetShaderLibrary().Get("Skybox");
-			m_SkyboxMaterial = CreateRef<Material>(skyboxShader);
-			// Pipeline
-			PipelineSpecification pipelineSpec;
-			pipelineSpec.DebugName = "Skybox";
-			pipelineSpec.Shader = skyboxShader;
-			// -- Full screen quad
-			pipelineSpec.Layout = {  };
-#if VK_INVERTED_UP_COORD_SYSTEM
-			pipelineSpec.CullMode = CullMode::Front;
-#else
-			pipelineSpec.CullMode = CullMode::Back;
-#endif
-			pipelineSpec.DepthTest = false;
-			pipelineSpec.DepthWrite = false;
-			// -- Render to the same target texture as the geometry pass
-			pipelineSpec.RenderPass = m_GeometryPipeline->GetSpecification().RenderPass;
-			m_SkyboxPipeline = CreateRef<Pipeline>(pipelineSpec);
-
-		}
-		// Scene Composite pass
-		{
-			// Framebuffer
-			FramebufferSpecification framebufferSpec;
-			framebufferSpec.SwapchainTarget = m_Specification.SwapChainTarget;
-			framebufferSpec.DebugName = "Composite";
-			framebufferSpec.AttachmentsSpecification = { ImageFormat::RGBA };
-			Ref<Framebuffer> framebuffer = CreateRef<Framebuffer>(framebufferSpec);
-			// Render Pass
-			RenderPassSpecification renderPassSpec;
-			renderPassSpec.TargetFramebuffer = framebuffer;
-			renderPassSpec.DebugName = "Scene Composite Pass";
-			Ref<RenderPass> renderPass = CreateRef<RenderPass>(renderPassSpec);
-			// Material
-			Ref<Shader> sceneCompositeShader = Renderer::GetShaderLibrary().Get("SceneComposite");
-			m_SceneCompositeMaterial = CreateRef<Material>(sceneCompositeShader, "Scene Composite Material", false);
-			// Pipeline
-			PipelineSpecification pipelineSpec;
-			pipelineSpec.Layout = {  }; // Full Screen Quad (Positions ans Tex Coord are created inside the vertex shader)
-#if VK_INVERTED_UP_COORD_SYSTEM
-			pipelineSpec.CullMode = CullMode::Front;
-#else
-			pipelineSpec.CullMode = CullMode::Back;
-#endif
-			pipelineSpec.Shader = sceneCompositeShader;
-			pipelineSpec.RenderPass = renderPass;
-			pipelineSpec.DebugName = "Scene Composite";
-			pipelineSpec.DepthTest = false;
-			pipelineSpec.DepthWrite = false;
-			m_SceneCompositePipeline = CreateRef<Pipeline>(pipelineSpec);
-
-		}
-		// UniformBuffer;
-		m_UniformBufferSet = CreateRef<UniformBufferSet>(Renderer::GetRendererConfig().FramesInFlight);
-		m_UniformBufferSet->Create(sizeof(CameraUB), 0);
-		m_UniformBufferSet->Create(sizeof(EnvironmentUB), 1);
-		m_UniformBufferSet->Create(sizeof(RendererDataUB), 2);
-		m_UniformBufferSet->Create(sizeof(ShadowDataUB), 3);
-		m_UniformBufferSet->Create(sizeof(ScreenDataUB), 17);
-
 	}
+
+	ForwardSceneRenderer::ForwardSceneRenderer(
+		Ref<Scene> scene,
+		const SceneRendererSpecification& specification)
+		: m_Specification(specification), m_Scene(std::move(scene))
+	{
+		m_ViewportResolution.x = specification.Resolution.x > 0
+			? static_cast<uint32_t>(specification.Resolution.x)
+			: 1920u;
+		m_ViewportResolution.y = specification.Resolution.y > 0
+			? static_cast<uint32_t>(specification.Resolution.y)
+			: 1080u;
+		m_RenderScene = CreateScope<RenderScene>();
+
+		const VkPhysicalDeviceLimits limits = Renderer::GetDeviceLimits();
+		constexpr uint32_t requiredForwardSampledImages = MaxMaterialTextureCount + 2u;
+		CORE_ASSERT(
+			limits.maxPerStageDescriptorSampledImages >= requiredForwardSampledImages &&
+			limits.maxDescriptorSetSampledImages >= requiredForwardSampledImages,
+			"The selected GPU cannot expose the material texture table plus the two environment maps to the Forward fragment shader");
+
+		CreateRasterResources();
+	}
+
 	ForwardSceneRenderer::~ForwardSceneRenderer()
 	{
+		// Descriptor/pipeline state references RenderScene textures and material
+		// buffers, so release the consumer side before the producer-side proxies.
+		DestroyRasterResources();
+
+		if (m_RenderScene)
+		{
+			m_RenderScene->Shutdown();
+			m_RenderScene.reset();
+		}
 	}
 
-	void ForwardSceneRenderer::BeginScene(const SceneRendererCamera& sceneRendererCamera)
+	void ForwardSceneRenderer::CreateRasterResources()
 	{
-		/////////////////////////////////////////////////////
-		///  Update Scene Data
-		/////////////////////////////////////////////////////
-		m_SceneData.SceneRendererCamera = sceneRendererCamera;
-		m_SceneData.LightEnvironment = m_Scene->m_LightEnvironment;
-		/////////////////////////////////////////////////////
-		///  Resize
-		/////////////////////////////////////////////////////
-		if (m_NeedsResize)
-		{
-			m_NeedsResize = false;
+		auto& shaderLibrary = RendererResources::GetShaderLibrary();
+		CORE_ASSERT(!shaderLibrary.Contains("ForwardPBR") && !shaderLibrary.Contains("ForwardSky"),
+			"Forward renderer shaders are already owned by another renderer");
 
-		}
-		/////////////////////////////////////////////////////
-		///  Update Uniform Buffer Data (UBO)
-		/////////////////////////////////////////////////////
-		uint32_t frameInFlight = Renderer::GetCurrentFrameIndex();
+		ShaderSpecification geometryShaderSpecification;
+		geometryShaderSpecification.Name = "ForwardPBR";
+		geometryShaderSpecification.Stages = {
+			{ VK_SHADER_STAGE_VERTEX_BIT, "engine://Shaders/Forward/ForwardPBR.vert" },
+			{ VK_SHADER_STAGE_FRAGMENT_BIT, "engine://Shaders/Forward/ForwardPBR.frag" }
+		};
+		shaderLibrary.Load(geometryShaderSpecification, true);
 
-		// Camera
-		Ref<UniformBuffer> cameraUniformBuffer = m_UniformBufferSet->Get(0, 0, frameInFlight);
-		CameraUB cameraUBO;
-		cameraUBO.Projection = m_SceneData.SceneRendererCamera.Camera.GetProjection();
-		cameraUBO.View = m_SceneData.SceneRendererCamera.ViewMatrix;
-		cameraUBO.ViewProjection = cameraUBO.Projection * cameraUBO.View;
-		cameraUBO.InverseView = glm::inverse(cameraUBO.View);
-		cameraUBO.InverseProjection = glm::inverse(cameraUBO.Projection);
-		glm::mat4 inverseViewProjection = cameraUBO.InverseView * cameraUBO.InverseProjection;
-		cameraUBO.InverseViewReverseProjection = cameraUBO.InverseView * glm::inverse(m_SceneData.SceneRendererCamera.Camera.GetReverseProjection());
-		cameraUniformBuffer->SetData(&cameraUBO, sizeof(CameraUB), 0);
-		// Light Environment
-		{
-			Ref<UniformBuffer> environmentUniformBuffer = m_UniformBufferSet->Get(1, 0, frameInFlight);
-			EnvironmentUB environmentUB;
-			for (uint32_t i = 0; i < (uint32_t)environmentUB.DirectionalLights.size(); i++)
-			{
-				auto& sceneLight = m_SceneData.LightEnvironment.DirectionalLights[i];
-				environmentUB.DirectionalLights[i].Direction = { sceneLight.Direction, 1.f };
-				environmentUB.DirectionalLights[i].Intensity = sceneLight.Multiplier;
-				environmentUB.DirectionalLights[i].Radience = { sceneLight.Radiance, 1.f };
-			}
-			environmentUB.CameraPosition = sceneRendererCamera.ViewPosition;
-			environmentUniformBuffer->SetData(&environmentUB, sizeof(EnvironmentUB), 0);
-		}
-		// Screen Data
-		{
-			Ref<UniformBuffer> screenUniformBuffer = m_UniformBufferSet->Get(17, 0, frameInFlight);
-			ScreenDataUB screenUB;
-			screenUB.Resolution = { m_ViewportWidth , m_ViewportHeight };
-			screenUniformBuffer->SetData(&screenUB, sizeof(ScreenDataUB), 0);
-		}
-		// Shadow Data
-		{
-			m_ShadowData.UpdateShadowCascade(m_SceneData.SceneRendererCamera, inverseViewProjection, m_SceneData.LightEnvironment.DirectionalLights[0].Direction);
-			ShadowDataUB shadowUB;
-			uint32_t shadowCascades = Renderer::GetRendererConfig().ShadowCascadesCount;
-			for (uint32_t i = 0; i < shadowCascades; i++)
-				shadowUB.LightViewProjectionMatrix[i] = m_ShadowData.GetShadowCascade(i).ViewProjectionMatrix;
+		ShaderSpecification skyShaderSpecification;
+		skyShaderSpecification.Name = "ForwardSky";
+		skyShaderSpecification.Stages = {
+			{ VK_SHADER_STAGE_VERTEX_BIT, "engine://Shaders/Forward/ForwardSky.vert" },
+			{ VK_SHADER_STAGE_FRAGMENT_BIT, "engine://Shaders/Forward/ForwardSky.frag" }
+		};
+		shaderLibrary.Load(skyShaderSpecification, true);
 
-			Ref<UniformBuffer> shadowUniformBuffer = m_UniformBufferSet->Get(3, 0, frameInFlight);
-			shadowUniformBuffer->SetData(&shadowUB, sizeof(ShadowDataUB), 0);
-		}
-		// Renderer Data
-		{
-			uint32_t shadowCascades = Renderer::GetRendererConfig().ShadowCascadesCount;
-			for (uint32_t i = 0; i < shadowCascades; i++)
-				m_RendererDataUB.CascadeSplits[i] = m_ShadowData.GetShadowCascade(i).CascadeSplit;
+		RenderQueueManager::ExecuteRenderQueue();
 
-			Ref<UniformBuffer> rendererUniformBuffer = m_UniformBufferSet->Get(2, 0, frameInFlight);
-			rendererUniformBuffer->SetData(&m_RendererDataUB, sizeof(RendererDataUB), 0);
-		}
-		/////////////////////////////////////////////////////
-		///  Update Environment
-		/////////////////////////////////////////////////////
-		Ref<Image2D> shadowMap = m_ShadowMapPipelines[0]->GetSpecification().RenderPass->GetSpecification().TargetFramebuffer->GetDepthImage();
-		Renderer::SetSceneEnvironment(this, m_SceneData.LightEnvironment.SkyLight.EnvironmentMap, shadowMap);
+		RenderPassSpecification renderPassSpecification;
+		renderPassSpecification.DebugName = "Forward";
+		// Pipeline currently uses this flag to emit one color blend attachment
+		// state per color target. The attachment itself keeps blending disabled.
+		renderPassSpecification.Blend = true;
+		renderPassSpecification.Attachments = {
+			{ "Forward Color", ImageFormat::RGBA16F, LOAD_OP::CLEAR, STORE_OP::STORE, BlendMode::OneZero, false, true },
+			{ "Forward Depth", ImageFormat::DEPTH32F, LOAD_OP::CLEAR, STORE_OP::STORE, BlendMode::None, false, true }
+		};
+		m_RenderPass = ResourceManager::CreateRenderPass(renderPassSpecification);
+
+		FramebufferSpecification framebufferSpecification;
+		framebufferSpecification.DebugName = "Forward";
+		framebufferSpecification.RenderPass = m_RenderPass;
+		framebufferSpecification.Width = m_ViewportResolution.x;
+		framebufferSpecification.Height = m_ViewportResolution.y;
+		framebufferSpecification.IsResizable = true;
+
+		RenderTargetProperties colorTarget;
+		colorTarget.DebugName = "Forward Color";
+		colorTarget.Format = ImageFormat::RGBA16F;
+		colorTarget.Width = m_ViewportResolution.x;
+		colorTarget.Height = m_ViewportResolution.y;
+		colorTarget.Resizable = true;
+		colorTarget.ShaderResource = true;
+		colorTarget.ClearColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+
+		RenderTargetProperties depthTarget;
+		depthTarget.DebugName = "Forward Depth";
+		depthTarget.Format = ImageFormat::DEPTH32F;
+		depthTarget.Width = m_ViewportResolution.x;
+		depthTarget.Height = m_ViewportResolution.y;
+		depthTarget.Resizable = true;
+		depthTarget.ShaderResource = false;
+		framebufferSpecification.RenderTargetsInfo = { colorTarget, depthTarget };
+		m_Framebuffer = ResourceManager::CreateFramebuffer(framebufferSpecification);
+
+		PipelineSpecification skyPipelineSpecification;
+		skyPipelineSpecification.DebugName = "Forward Sky";
+		skyPipelineSpecification.Shader = shaderLibrary.Get("ForwardSky");
+		skyPipelineSpecification.RenderPass = m_RenderPass;
+		skyPipelineSpecification.CullMode = CullMode::None;
+		skyPipelineSpecification.DepthTest = false;
+		skyPipelineSpecification.DepthWrite = false;
+		m_SkyPipeline = ResourceManager::CreateGraphicsPipeline(skyPipelineSpecification);
+
+		PipelineSpecification geometryPipelineSpecification;
+		geometryPipelineSpecification.DebugName = "Forward Geometry";
+		geometryPipelineSpecification.Shader = shaderLibrary.Get("ForwardPBR");
+		geometryPipelineSpecification.RenderPass = m_RenderPass;
+		geometryPipelineSpecification.CullMode = CullMode::Back;
+		geometryPipelineSpecification.DepthOperator = DepthCompareOperator::LessOrEqual;
+		geometryPipelineSpecification.DepthTest = true;
+		geometryPipelineSpecification.DepthWrite = true;
+		geometryPipelineSpecification.Layout = {
+			{ ShaderDataType::Float3, "a_Position" },
+			{ ShaderDataType::Float3, "a_Normal" },
+			{ ShaderDataType::Float3, "a_Tangent" },
+			{ ShaderDataType::Float3, "a_Binormal" },
+			{ ShaderDataType::Float2, "a_TexCoord" }
+		};
+		m_GeometryPipeline = ResourceManager::CreateGraphicsPipeline(geometryPipelineSpecification);
+
+		UniformBufferSetSpecification cameraBufferSpecification;
+		cameraBufferSpecification.Frames = ResourceManager::GetFramesInFlight();
+		cameraBufferSpecification.Size = sizeof(CameraUB);
+		cameraBufferSpecification.BindingPoint = ForwardCameraBinding;
+		m_CameraBufferSet = CreateRef<UniformBufferSet>(cameraBufferSpecification);
+
+		UniformBufferSetSpecification lightingBufferSpecification;
+		lightingBufferSpecification.Frames = ResourceManager::GetFramesInFlight();
+		lightingBufferSpecification.Size = sizeof(ForwardLightingUB);
+		lightingBufferSpecification.BindingPoint = ForwardLightingBinding;
+		m_LightingBufferSet = CreateRef<UniformBufferSet>(lightingBufferSpecification);
+
+		StorageBufferSetSpecification materialBufferSpecification;
+		materialBufferSpecification.Frames = ResourceManager::GetFramesInFlight();
+		materialBufferSpecification.Size = sizeof(GPUMaterialData);
+		materialBufferSpecification.BindingPoint = ForwardMaterialBinding;
+		materialBufferSpecification.BufferUsage = BufferUsageType::Static;
+		m_MaterialBufferSet = CreateRef<StorageBufferSet>(materialBufferSpecification);
+
+		GPUMaterialData fallbackMaterial{};
+		for (uint32_t frameIndex = 0; frameIndex < ResourceManager::GetFramesInFlight(); ++frameIndex)
+			m_MaterialBufferSet->Get(frameIndex)->SetData(&fallbackMaterial, sizeof(fallbackMaterial), 0);
+
+		BindGroupLayout::BindGroupLayoutInfo skyLayout;
+		skyLayout.Set = 0;
+		skyLayout.UniformBuffers = {
+			BufferBinding("CameraData", ForwardCameraBinding, VK_SHADER_STAGE_ALL),
+			BufferBinding("ForwardLightingData", ForwardLightingBinding, VK_SHADER_STAGE_ALL)
+		};
+		skyLayout.ImageSamplers = {
+			ImageBinding("EnvironmentRadiance", ForwardRadianceBinding, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		m_SkyBindGroupLayout = ResourceManager::CreateBindGroupLayout(skyLayout);
+		m_SkyBindGroup = ResourceManager::CreateBindGroup({ m_SkyBindGroupLayout, DescriptorAllocationLifetime::Persistent });
+
+		BindGroupLayout::BindGroupLayoutInfo geometryLayout;
+		geometryLayout.Set = 0;
+		geometryLayout.UniformBuffers = {
+			BufferBinding("CameraData", ForwardCameraBinding, VK_SHADER_STAGE_ALL),
+			BufferBinding("ForwardLightingData", ForwardLightingBinding, VK_SHADER_STAGE_ALL)
+		};
+		geometryLayout.StorageBuffers = {
+			BufferBinding("MaterialTable", ForwardMaterialBinding, VK_SHADER_STAGE_ALL)
+		};
+		geometryLayout.ImageSamplers = {
+			ImageBinding("MaterialTextures", ForwardTextureBinding, MaxMaterialTextureCount, VK_SHADER_STAGE_FRAGMENT_BIT),
+			ImageBinding("EnvironmentRadiance", ForwardRadianceBinding, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
+			ImageBinding("EnvironmentIrradiance", ForwardIrradianceBinding, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
+		};
+		m_GeometryBindGroupLayout = ResourceManager::CreateBindGroupLayout(geometryLayout);
+		m_GeometryBindGroup = ResourceManager::CreateBindGroup({ m_GeometryBindGroupLayout, DescriptorAllocationLifetime::Persistent });
+
+		BindGroup* skyBindGroup = ResourceManager::GetBindGroup(m_SkyBindGroup);
+		BindGroup* geometryBindGroup = ResourceManager::GetBindGroup(m_GeometryBindGroup);
+		CORE_ASSERT(skyBindGroup && geometryBindGroup, "Failed to create Forward bind groups");
+		skyBindGroup->SetUniformBuffer(m_CameraBufferSet, ForwardCameraBinding);
+		skyBindGroup->SetUniformBuffer(m_LightingBufferSet, ForwardLightingBinding);
+		geometryBindGroup->SetUniformBuffer(m_CameraBufferSet, ForwardCameraBinding);
+		geometryBindGroup->SetUniformBuffer(m_LightingBufferSet, ForwardLightingBinding);
+		geometryBindGroup->SetStorageBuffer(m_MaterialBufferSet, ForwardMaterialBinding);
+
+		UpdateTextureTable();
+		UpdateEnvironmentBindings();
 	}
-	void ForwardSceneRenderer::EndScene()
-	{
-		FlushAndReset();
-	}
 
-	void ForwardSceneRenderer::SubmitMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform)
+	void ForwardSceneRenderer::DestroyRasterResources()
 	{
-		m_SceneData.DrawList.push_back({ mesh, materialTable, transform });
+		if (m_GeometryBindGroup.IsValid())
+			ResourceManager::DestroyBindGroup(m_GeometryBindGroup);
+		if (m_SkyBindGroup.IsValid())
+			ResourceManager::DestroyBindGroup(m_SkyBindGroup);
+		if (m_GeometryBindGroupLayout.IsValid())
+			ResourceManager::DestroyBindGroupLayout(m_GeometryBindGroupLayout);
+		if (m_SkyBindGroupLayout.IsValid())
+			ResourceManager::DestroyBindGroupLayout(m_SkyBindGroupLayout);
+
+		if (m_GeometryPipeline.IsValid())
+			ResourceManager::DestroyGraphicsPipeline(m_GeometryPipeline);
+		if (m_SkyPipeline.IsValid())
+			ResourceManager::DestroyGraphicsPipeline(m_SkyPipeline);
+		if (m_Framebuffer.IsValid())
+			ResourceManager::DestroyFramebuffer(m_Framebuffer);
+		if (m_RenderPass.IsValid())
+			ResourceManager::DestroyRenderPass(m_RenderPass);
+
+		m_CameraBufferSet.reset();
+		m_LightingBufferSet.reset();
+		m_MaterialBufferSet.reset();
+
+		m_GeometryBindGroup = {};
+		m_SkyBindGroup = {};
+		m_GeometryBindGroupLayout = {};
+		m_SkyBindGroupLayout = {};
+		m_GeometryPipeline = {};
+		m_SkyPipeline = {};
+		m_Framebuffer = {};
+		m_RenderPass = {};
+
+		auto& shaderLibrary = RendererResources::GetShaderLibrary();
+		shaderLibrary.Unload("ForwardPBR");
+		shaderLibrary.Unload("ForwardSky");
 	}
 
 	void ForwardSceneRenderer::SetViewportSize(uint32_t width, uint32_t height)
 	{
-		if (m_ViewportWidth != width || m_ViewportHeight != height)
+		if (width == 0 || height == 0 || m_ViewportResolution == glm::uvec2(width, height))
+			return;
+
+		m_ViewportResolution = { width, height };
+		Framebuffer* framebuffer = ResourceManager::GetFramebuffer(m_Framebuffer);
+		CORE_ASSERT(framebuffer, "Forward framebuffer is invalid");
+		framebuffer->Resize(width, height);
+	}
+
+	bool ForwardSceneRenderer::IsRegistered(RenderObjectID renderObjectID)
+	{
+		return m_RenderScene && m_RenderScene->IsRegistered(renderObjectID);
+	}
+
+	bool ForwardSceneRenderer::RegisterMesh(
+		RenderObjectID renderObjectID,
+		const Ref<Mesh>& mesh,
+		const Ref<MaterialTable>& materialTable,
+		const glm::mat4& transform)
+	{
+		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+		return m_RenderScene->RegisterMesh(renderObjectID, mesh, materialTable, transform);
+	}
+
+	bool ForwardSceneRenderer::UnregisterMesh(RenderObjectID renderObjectID)
+	{
+		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+		return m_RenderScene->UnregisterMesh(renderObjectID);
+	}
+
+	void ForwardSceneRenderer::UpdateMeshTransform(RenderObjectID renderObjectID, const glm::mat4& transform)
+	{
+		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+		m_RenderScene->UpdateMeshTransform(renderObjectID, transform);
+	}
+
+	bool ForwardSceneRenderer::UpdateMeshMaterials(RenderObjectID renderObjectID, const Ref<MaterialTable>& materialTable)
+	{
+		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+		return m_RenderScene->UpdateMeshMaterials(renderObjectID, materialTable);
+	}
+
+	void ForwardSceneRenderer::OnMaterialAssetChanged(const Ref<MaterialAsset>& materialAsset)
+	{
+		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+		m_RenderScene->UpdateMaterialProxy(materialAsset);
+	}
+
+	void ForwardSceneRenderer::SetSkyLight(
+		const Ref<EnvironmentMap>& environment,
+		float intensity,
+		uint32_t sampleLOD)
+	{
+		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+		m_RenderScene->SetSkyLight(environment, intensity, sampleLOD);
+	}
+
+	void ForwardSceneRenderer::SetDirectionalLights(std::span<const DirectionalLight> directionalLights)
+	{
+		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+		m_RenderScene->SetDirectionalLights(directionalLights);
+	}
+
+	void ForwardSceneRenderer::UpdateCameraBuffer()
+	{
+		CameraUB cameraData;
+		cameraData.ViewProjection =
+			m_SceneRendererCamera.Camera.GetProjection() * m_SceneRendererCamera.ViewMatrix;
+		cameraData.InverseViewProjection = glm::inverse(cameraData.ViewProjection);
+		cameraData.CameraPosition = glm::vec4(m_SceneRendererCamera.ViewPosition, 1.0f);
+		cameraData.Presentation.x = m_SceneRendererCamera.Camera.GetExposure();
+
+		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+		m_CameraBufferSet->Get(frameIndex)->SetData(&cameraData, sizeof(cameraData), 0);
+	}
+
+	void ForwardSceneRenderer::UpdateLightingBuffer()
+	{
+		ForwardLightingUB lightingData;
+		const SkyLightProxy& skyLight = m_RenderScene->GetSkyLight();
+		lightingData.SkyLightParameters = glm::vec4(skyLight.Intensity, skyLight.SampleLOD, 0.0f, 0.0f);
+		lightingData.DirectionalLightParameters.x = m_RenderScene->GetDirectionalLightCount();
+
+		const auto& directionalLights = m_RenderScene->GetDirectionalLights();
+		for (uint32_t lightIndex = 0; lightIndex < m_RenderScene->GetDirectionalLightCount(); ++lightIndex)
 		{
-			m_ViewportWidth = width;
-			m_ViewportHeight = height;
-			m_NeedsResize = true;
-			m_PreDepthPipeline->GetSpecification().RenderPass->GetSpecification().TargetFramebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
-			m_GeometryPipeline->GetSpecification().RenderPass->GetSpecification().TargetFramebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
-			m_SceneCompositePipeline->GetSpecification().RenderPass->GetSpecification().TargetFramebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
-			m_SkyboxPipeline->GetSpecification().RenderPass->GetSpecification().TargetFramebuffer->Resize(m_ViewportWidth, m_ViewportHeight);
+			const DirectionalLightProxy& light = directionalLights[lightIndex];
+			lightingData.DirectionalLights[lightIndex].DirectionAndIntensity =
+				glm::vec4(light.Direction, light.Intensity);
+			lightingData.DirectionalLights[lightIndex].Radiance = glm::vec4(light.Radiance, 0.0f);
 		}
+
+		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+		m_LightingBufferSet->Get(frameIndex)->SetData(&lightingData, sizeof(lightingData), 0);
+	}
+
+	void ForwardSceneRenderer::UpdateMaterialBuffer()
+	{
+		const std::vector<MaterialProxy>& materialProxies = m_RenderScene->GetMaterialProxies();
+		std::vector<GPUMaterialData> materialData;
+		materialData.reserve(std::max(materialProxies.size(), size_t{ 1 }));
+		for (const MaterialProxy& materialProxy : materialProxies)
+			materialData.push_back(materialProxy.GPUData);
+		if (materialData.empty())
+			materialData.emplace_back();
+
+		const uint32_t uploadSize = static_cast<uint32_t>(materialData.size() * sizeof(GPUMaterialData));
+		for (uint32_t frameIndex = 0; frameIndex < ResourceManager::GetFramesInFlight(); ++frameIndex)
+			m_MaterialBufferSet->Get(frameIndex)->SetData(materialData.data(), uploadSize, 0);
+	}
+
+	void ForwardSceneRenderer::UpdateTextureTable()
+	{
+		std::vector<Handle<ImageView>> imageViews;
+		const std::vector<Handle<Texture2D>>& textures = m_RenderScene->GetMaterialTextures();
+		CORE_ASSERT(textures.size() <= MaxMaterialTextureCount, "Forward material texture table capacity exceeded");
+		imageViews.reserve(textures.size());
+		for (Handle<Texture2D> textureHandle : textures)
+		{
+			Texture2D* texture = ResourceManager::GetTexture2D(textureHandle);
+			CORE_ASSERT(texture, "Forward material texture table contains an invalid Texture2D");
+			imageViews.push_back(texture->GetImageView());
+		}
+
+		Texture2D* fallbackTexture = ResourceManager::GetTexture2D(RendererResources::GetWhiteTexture());
+		BindGroup* geometryBindGroup = ResourceManager::GetBindGroup(m_GeometryBindGroup);
+		CORE_ASSERT(fallbackTexture && geometryBindGroup, "Invalid Forward material fallback resources");
+		geometryBindGroup->SetImageViewArray(
+			imageViews,
+			fallbackTexture->GetImageView(),
+			ForwardTextureBinding);
+	}
+
+	void ForwardSceneRenderer::UpdateEnvironmentBindings()
+	{
+		const SkyLightProxy& skyLight = m_RenderScene->GetSkyLight();
+		const Handle<TextureCube> radianceHandle = skyLight.RadianceMap.IsValid()
+			? skyLight.RadianceMap
+			: RendererResources::GetBlackCubeTexture();
+		const Handle<TextureCube> irradianceHandle = skyLight.IrradianceMap.IsValid()
+			? skyLight.IrradianceMap
+			: RendererResources::GetBlackCubeTexture();
+
+		TextureCube* radiance = ResourceManager::GetTextureCube(radianceHandle);
+		TextureCube* irradiance = ResourceManager::GetTextureCube(irradianceHandle);
+		BindGroup* skyBindGroup = ResourceManager::GetBindGroup(m_SkyBindGroup);
+		BindGroup* geometryBindGroup = ResourceManager::GetBindGroup(m_GeometryBindGroup);
+		CORE_ASSERT(radiance && irradiance && skyBindGroup && geometryBindGroup,
+			"Invalid Forward environment resources");
+
+		skyBindGroup->SetImageView(radiance->GetImageView(), ForwardRadianceBinding);
+		geometryBindGroup->SetImageView(radiance->GetImageView(), ForwardRadianceBinding);
+		geometryBindGroup->SetImageView(irradiance->GetImageView(), ForwardIrradianceBinding);
+	}
+
+	void ForwardSceneRenderer::Render(const SceneRendererCamera& sceneRendererCamera)
+	{
+		m_SceneRendererCamera = sceneRendererCamera;
+		UpdateCameraBuffer();
+		UpdateLightingBuffer();
+		UpdateMaterialBuffer();
+		UpdateTextureTable();
+		UpdateEnvironmentBindings();
+
+		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+		BindGroup* skyBindGroup = ResourceManager::GetBindGroup(m_SkyBindGroup);
+		BindGroup* geometryBindGroup = ResourceManager::GetBindGroup(m_GeometryBindGroup);
+		CORE_ASSERT(skyBindGroup && geometryBindGroup, "Invalid Forward bind groups");
+		skyBindGroup->Update(frameIndex);
+		geometryBindGroup->Update(frameIndex);
+
+		CommandBuffer* commandBuffer = Renderer::GetMainCommandBuffer(m_Specification.SwapChainTarget);
+		CORE_ASSERT(commandBuffer, "Invalid Forward main command buffer");
+		commandBuffer->BeginRenderThread();
+
+		GraphicsCommandList graphics(
+			commandBuffer->GetRecordingView(frameIndex),
+			&Renderer::GetFrameStatistics());
+		graphics.BeginRendering(m_RenderPass, m_Framebuffer);
+		graphics.DrawFullscreen(m_SkyPipeline, m_SkyBindGroup);
+
+		DrawArea geometryDrawArea;
+		geometryDrawArea.GraphicsPipeline = m_GeometryPipeline;
+		geometryDrawArea.Framebuffer = m_Framebuffer;
+		geometryDrawArea.BindGroup0 = m_GeometryBindGroup;
+		graphics.RenderMeshInstances(
+			geometryDrawArea,
+			m_RenderScene->GetRasterMeshInstances(),
+			m_RenderScene->GetMaterialProxies());
+		graphics.EndRendering();
+
+		commandBuffer->EndRenderThread();
+		commandBuffer->SubmitRenderThread();
 	}
 
 	void ForwardSceneRenderer::OnImGuiRender()
 	{
 		ImGui::Begin("Renderer");
+		if (ui::PropertyGridHeader("Statistics", true))
 		{
-			if (ui::PropertyGridHeader("Statistics", true))
-			{
-				ImGui::Separator();
-				ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-				GPUMemoryStats memoryStats = ResourceAllocator::GetStats();
-				std::string used = utils::BytesToString(memoryStats.Used);
-				std::string free = utils::BytesToString(memoryStats.Free);
-				ImGui::Text("Used VRAM: %s", used.c_str());
-				ImGui::Text("Free VRAM: %s", free.c_str());
+			ImGui::TextUnformatted("Active renderer: Forward");
+			ImGui::Text("Mesh instances: %zu",
+				m_RenderScene ? m_RenderScene->GetRasterMeshInstances().size() : size_t{ 0 });
+			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
+				1000.0f / ImGui::GetIO().Framerate,
+				ImGui::GetIO().Framerate);
 
-				if (ui::PropertyGridHeader("Render Pass Statistics", true))
-				{
-					ImGui::Text("GPU time per frame: %.3fms", m_GPUStatistics.GPUTimePerFrame);
-					ImGui::Text("Depth Pre Pass: %.3fms", m_GPUStatistics.DepthPrePass.TimeStamp);
-					ImGui::Text("Shadow Map Pass: %.3fms", m_GPUStatistics.ShadowPass.TimeStamp);
-					ImGui::Text("Geometry Pass: %.3fms", m_GPUStatistics.GeometryPass.TimeStamp);
-					ImGui::Text("Scene Composite Pass: %.3fms", m_GPUStatistics.SceneCompositePass.TimeStamp);
-
-					ui::EndTreeNode();
-
-				}
-
-				if (ui::BeginTreeNode("Pipeline Statistics"))
-				{
-					const auto& pipelineStats = m_CommandBuffer->GetPipelineStatistics();
-					ImGui::Text("Input Assembly Vertices: %llu", pipelineStats.InputAssemblyVertices);
-					ImGui::Text("Input Assembly Primitives: %llu", pipelineStats.InputAssemblyPrimitives);
-					ImGui::Text("Vertex Shader Invocations: %llu", pipelineStats.VertexShaderInvocations);
-					ImGui::Text("Clipping Invocations: %llu", pipelineStats.ClippingInvocations);
-					ImGui::Text("Clipping Primitives: %llu", pipelineStats.ClippingPrimitives);
-					ImGui::Text("Fragment Shader Invocations: %llu", pipelineStats.FragmentShaderInvocations);
-					ImGui::Text("Compute Shader Invocations: %llu", pipelineStats.ComputeShaderInvocations);
-					ui::EndTreeNode();
-				}
-				ui::EndTreeNode();
-
-			}
-			if (ui::PropertyGridHeader("AA Techniques", true))
-			{
-				ui::BeginPropertyGrid();
-				ui::Property("Enable FXAA", m_EnableFXAA);
-				ui::EndPropertyGrid();
-				ui::EndTreeNode();
-			}
-
-			if (ui::PropertyGridHeader("Shadows", true))
-			{
-				ui::BeginPropertyGrid();
-				ui::Property("Show Cascades", m_RendererDataUB.ShowCascades);
-				ui::Property("Soft Shadows", m_RendererDataUB.SoftShadows);
-				ui::Property("Directional Light Size", m_RendererDataUB.LightSize, 0.01f);
-				ui::Property("Max Shadow Distance", m_RendererDataUB.MaxShadowDistance, 1.0f);
-				ui::Property("Shadow Fade", m_RendererDataUB.ShadowFade, 5.0f);
-				ui::EndPropertyGrid();
-				if (ui::BeginTreeNode("Cascade Settings"))
-				{
-					ui::BeginPropertyGrid();
-					ui::Property("Cascade Fading", m_RendererDataUB.CascadeFading);
-					ui::Property("Cascade Transition Fade", m_RendererDataUB.CascadeTransitionFade, 0.05f, 0.0f, FLT_MAX);
-					ui::Property("Cascade Split", *m_ShadowData.GetCascadeSplitLambda(), 0.01f);
-					ui::Property("Cascade Near Plane Offset", *m_ShadowData.GetCascadeNearPlaneOffset(), 0.1f, -FLT_MAX, 0.0f);
-					ui::Property("Cascade Far Plane Offset", *m_ShadowData.GetCascadeFarPlaneOffset(), 0.1f, 0.0f, FLT_MAX);
-					ui::EndPropertyGrid();
-					ui::EndTreeNode();
-				}
-				if (ui::BeginTreeNode("Shadow Maps", false))
-				{
-					Ref<Image2D> image = m_ShadowMapPipelines[0]->GetSpecification().RenderPass->GetSpecification().TargetFramebuffer->GetDepthImage();
-					float size = ImGui::GetContentRegionAvailWidth();
-					ui::BeginPropertyGrid();
-					ui::PropertySlider("Cascade Index", m_CascadeIndex, 0, 3);
-					ui::EndPropertyGrid();
-					ui::Image(image, (uint32_t)m_CascadeIndex, { size, size }, { 0, 1 }, { 1, 0 });
-					ui::EndTreeNode();
-				}
-				ui::EndTreeNode();
-			}
+			const GPUMemoryStats memoryStats = ResourceAllocator::GetStats();
+			const std::string used = utils::BytesToString(memoryStats.Used);
+			const std::string free = utils::BytesToString(memoryStats.Free);
+			ImGui::Text("Used VRAM: %s", used.c_str());
+			ImGui::Text("Free VRAM: %s", free.c_str());
+			ui::EndTreeNode();
 		}
 		ImGui::End();
-		/**/
-	}
-	Ref<Image2D> ForwardSceneRenderer::GetFinalPassImage() const
-	{
-		return m_SceneCompositePipeline->GetSpecification().RenderPass->GetSpecification().TargetFramebuffer->GetImage(0);
-	}
-	void ForwardSceneRenderer::FlushAndReset()
-	{
-		m_CommandBuffer->Begin();
-		{
-			ShadowPass();
-			PreDepthPass();
-			GeometryPass();
-			SceneCompositePass();
-		}
-		m_CommandBuffer->End();
-		m_CommandBuffer->Submit();
-
-		m_GPUStatistics.GPUTimePerFrame = m_CommandBuffer->GetExecutionGPUTime(0);
-		m_GPUStatistics.DepthPrePass.TimeStamp = m_CommandBuffer->GetExecutionGPUTime(m_GPUStatistics.DepthPrePass.QueryIndex);
-		m_GPUStatistics.ShadowPass.TimeStamp = m_CommandBuffer->GetExecutionGPUTime(m_GPUStatistics.ShadowPass.QueryIndex);
-		m_GPUStatistics.GeometryPass.TimeStamp = m_CommandBuffer->GetExecutionGPUTime(m_GPUStatistics.GeometryPass.QueryIndex);
-		m_GPUStatistics.SceneCompositePass.TimeStamp = m_CommandBuffer->GetExecutionGPUTime(m_GPUStatistics.SceneCompositePass.QueryIndex);
-
-		// Clear Data
-		m_SceneData.DrawList.clear();
-		m_SceneData = {};
 	}
 
-	void ForwardSceneRenderer::PreDepthPass()
+	Handle<ImageView> ForwardSceneRenderer::GetFinalPassImage() const
 	{
-		uint32_t queryIndex = m_CommandBuffer->BeginTimestampQuery();
-		m_GPUStatistics.DepthPrePass.QueryIndex = queryIndex;
-		Renderer::BeginRenderPass(m_CommandBuffer, m_PreDepthPipeline->GetSpecification().RenderPass);
-		{
-			for (auto& mesh : m_SceneData.DrawList)
-				Renderer::RenderMeshWithMaterial(m_CommandBuffer, m_UniformBufferSet, m_PreDepthPipeline, mesh.Mesh, mesh.Transform, m_PreDepthMaterial);
-		}
-		Renderer::EndRenderPass(m_CommandBuffer);
-		m_CommandBuffer->EndTimestampQuery(queryIndex);
-	}
-	void ForwardSceneRenderer::ShadowPass()
-	{
-		uint32_t queryIndex = m_CommandBuffer->BeginTimestampQuery();
-		m_GPUStatistics.ShadowPass.QueryIndex = queryIndex;
-		for (int i = 0; i < 4; i++)
-		{
-			Renderer::BeginRenderPass(m_CommandBuffer, m_ShadowMapPipelines[i]->GetSpecification().RenderPass);
-			// Render entities
-			Buffer cascade(&i, sizeof(uint32_t));
-			for (auto& dc : m_SceneData.DrawList)
-			{
-				Renderer::RenderMeshWithMaterial(m_CommandBuffer, m_UniformBufferSet, m_ShadowMapPipelines[i], dc.Mesh, dc.Transform, m_ShadowMapMaterial, cascade);
-			}
-			Renderer::EndRenderPass(m_CommandBuffer);
-		}
+		Framebuffer* framebuffer = ResourceManager::GetFramebuffer(m_Framebuffer);
+		if (!framebuffer || framebuffer->GetColorAttachmentCount() == 0)
+			return {};
 
-		m_CommandBuffer->EndTimestampQuery(queryIndex);
-	}
-	void ForwardSceneRenderer::GeometryPass()
-	{
-		uint32_t queryIndex = m_CommandBuffer->BeginTimestampQuery();
-		m_GPUStatistics.GeometryPass.QueryIndex = queryIndex;
-		Renderer::BeginRenderPass(m_CommandBuffer, m_GeometryPipeline->GetSpecification().RenderPass);
-		{
-			// Render Skybox
-			m_SkyboxMaterial->Set("u_MaterialUniforms.TextureLod", m_SceneData.LightEnvironment.SkyLight.SampleLOD);
-			m_SkyboxMaterial->Set("u_MaterialUniforms.Intensity", m_SceneData.LightEnvironment.SkyLight.Multiplier);
-			const Ref<TextureCube> radianceMap = m_SceneData.LightEnvironment.SkyLight.EnvironmentMap->RadianceMap;
-			m_SkyboxMaterial->Set("u_Texture", radianceMap);
-			Renderer::RenderFullscreenQuad(m_CommandBuffer, m_SkyboxPipeline, m_UniformBufferSet, m_SkyboxMaterial);
-			// Render Geometry
-			/**/
-			for (auto& mesh : m_SceneData.DrawList)
-				Renderer::RenderMesh(m_CommandBuffer, m_UniformBufferSet, m_GeometryPipeline, mesh.Mesh, mesh.MaterialTable, mesh.Transform);
-			/**/
-		}
-		Renderer::EndRenderPass(m_CommandBuffer);
-		m_CommandBuffer->EndTimestampQuery(queryIndex);
-	}
-	void ForwardSceneRenderer::SceneCompositePass()
-	{
-		uint32_t queryIndex = m_CommandBuffer->BeginTimestampQuery();
-		m_GPUStatistics.SceneCompositePass.QueryIndex = queryIndex;
-		// Update Scene Composite Material
-		float exposure = m_SceneData.SceneRendererCamera.Camera.GetExposure();
-		Ref<Image2D> sceneImage = m_GeometryPipeline->GetSpecification().RenderPass->GetSpecification().TargetFramebuffer->GetImage(0);
-		m_SceneCompositeMaterial->Set("u_Uniforms.Exposure", exposure);
-		m_SceneCompositeMaterial->Set("u_Uniforms.FXAA", m_EnableFXAA);
-		m_SceneCompositeMaterial->Set("u_Texture", sceneImage);
-		// Composite pass
-		Renderer::BeginRenderPass(m_CommandBuffer, m_SceneCompositePipeline->GetSpecification().RenderPass, true);
-		{
-			Renderer::RenderFullscreenQuad(m_CommandBuffer, m_SceneCompositePipeline, m_UniformBufferSet, m_SceneCompositeMaterial);
-		}
-		Renderer::EndRenderPass(m_CommandBuffer);
-		m_CommandBuffer->EndTimestampQuery(queryIndex);
+		RenderTargetTexture* colorTarget = ResourceManager::GetRenderTarget(framebuffer->GetColorTarget());
+		return colorTarget ? colorTarget->GetImageView() : Handle<ImageView>{};
 	}
 }
-#endif // 0

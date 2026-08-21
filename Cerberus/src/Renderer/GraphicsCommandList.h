@@ -55,7 +55,8 @@ namespace cerberus
 		void ExecuteDrawStream(const DrawArea& drawArea, std::span<const uint32_t> drawStream);
 		void RenderMeshInstances(
 			const DrawArea& drawArea,
-			std::span<const Handle<MeshInstanceProxy>> meshInstances);
+			std::span<const Handle<MeshInstanceProxy>> meshInstances,
+			std::span<const MaterialProxy> materialProxies);
 
 	private:
 		VkPipelineLayout m_BoundPipelineLayout = VK_NULL_HANDLE;

@@ -4,8 +4,27 @@
 #include "Renderer/RendererContext.h"
 #include "Renderer/ResourceManager.h"
 
+#include <cmath>
+
 namespace cerberus
 {
+	namespace
+	{
+		// One vertex-stage range keeps the current Shader push-constant reflection
+		// deterministic. The material index is forwarded flat to the fragment shader.
+		struct RasterDrawPushConstants
+		{
+			glm::mat4 WorldTransform = glm::mat4(1.0f);
+			glm::vec4 NormalColumn0 = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+			glm::vec4 NormalColumn1 = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+			glm::vec4 NormalColumn2 = glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
+			uint32_t MaterialIndex = 0;
+		};
+
+		static_assert(sizeof(RasterDrawPushConstants) == 116,
+			"RasterDrawPushConstants must match ForwardPBR.vert");
+	}
+
 	GraphicsCommandList::GraphicsCommandList(
 		CommandBufferView commandBuffer,
 		RendererFrameStatistics* statistics)
@@ -253,7 +272,8 @@ namespace cerberus
 
 	void GraphicsCommandList::RenderMeshInstances(
 		const DrawArea& drawArea,
-		std::span<const Handle<MeshInstanceProxy>> meshInstances)
+		std::span<const Handle<MeshInstanceProxy>> meshInstances,
+		std::span<const MaterialProxy> materialProxies)
 	{
 		if (meshInstances.empty())
 			return;
@@ -283,10 +303,24 @@ namespace cerberus
 			}
 
 			const SubmeshSourceProxy& submesh = meshSource->Submeshes[meshInstance->SubmeshIndex];
+			CORE_ASSERT(meshInstance->MaterialProxyIndex < materialProxies.size(), "MeshInstanceProxy references an invalid raster MaterialProxy");
+			const MaterialProxy& materialProxy = materialProxies[meshInstance->MaterialProxyIndex];
+			CORE_ASSERT(materialProxy.GPUMaterialIndex != InvalidMaterialProxyIndex, "Raster MaterialProxy has no GPU index");
+			RasterDrawPushConstants pushConstants;
+			pushConstants.WorldTransform = meshInstance->WorldTransform;
+			const glm::mat3 worldTransform3x3(meshInstance->WorldTransform);
+			const float determinant = glm::determinant(worldTransform3x3);
+			const glm::mat3 normalTransform = std::abs(determinant) > 0.000001f
+				? glm::transpose(glm::inverse(worldTransform3x3))
+				: worldTransform3x3;
+			pushConstants.NormalColumn0 = glm::vec4(normalTransform[0], 0.0f);
+			pushConstants.NormalColumn1 = glm::vec4(normalTransform[1], 0.0f);
+			pushConstants.NormalColumn2 = glm::vec4(normalTransform[2], 0.0f);
+			pushConstants.MaterialIndex = materialProxy.GPUMaterialIndex;
 			PushConstants(
 				m_BoundPipelineLayout,
 				VK_SHADER_STAGE_VERTEX_BIT,
-				AsBytes(meshInstance->WorldTransform));
+				AsBytes(pushConstants));
 			DrawIndexed(submesh.IndexCount, 1, submesh.BaseIndex, submesh.BaseVertex, 0);
 		}
 	}

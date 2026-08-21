@@ -121,6 +121,17 @@ namespace cerberus
 	{
 	}
 
+	void Renderer::WaitIdleAndDrain()
+	{
+		CORE_ASSERT(s_Data, "Renderer is not initialized");
+
+		// Execute queued recording/submission first, then wait for that work before
+		// releasing any native object referenced by the active renderer.
+		RenderQueueManager::ExecuteRenderQueue();
+		VK_CHECK_RESULT(vkDeviceWaitIdle(RendererContext::GetCurrentVulkanDevice()));
+		DeferredResourceDeletionQueue::FlushAll();
+	}
+
 	Ref<RendererContext> Renderer::GetRenderContext()
 	{
 		return Application::Get().GetWindow()->GetRendererContext();

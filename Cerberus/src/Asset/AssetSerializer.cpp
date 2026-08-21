@@ -263,6 +263,7 @@ namespace cerberus
 		YAML::Emitter out;
 		out << YAML::BeginMap;
 		out << YAML::Key << "Scene" << YAML::Value << scene->m_Name;
+		out << YAML::Key << "Renderer" << YAML::Value << std::string(SceneRendererTypeToString(scene->m_RendererType));
 		out << YAML::Key << "Entities" << YAML::Value << YAML::BeginSeq;
 		scene->m_Registry.each([&](auto entityID)
 		{
@@ -312,6 +313,8 @@ namespace cerberus
 
 		std::string sceneName = data["Scene"].as<std::string>();
 		Ref<Scene> scene = CreateRef<Scene>(sceneName);
+		if (data["Renderer"])
+			scene->m_RendererType = SceneRendererTypeFromString(data["Renderer"].as<std::string>());
 
 		NV_CORE_TRACE("Deserializing scene '{0}'", sceneName);
 
@@ -452,14 +455,11 @@ namespace cerberus
 		if (!data["Material"])
 			return false;
 
-		Ref<MaterialAsset> material = CreateRef<MaterialAsset>();
+		Ref<MaterialAsset> material = CreateRef<MaterialAsset>(metadata.FilePath.stem().string());
 		YAML::Node rootNode = data["Material"];
 
 		if (rootNode["AlbedoColor"])
 			material->SetAlbedoColor(rootNode["AlbedoColor"].as<glm::vec3>());
-
-		if (rootNode["UseNormalMap"])
-			material->SetUseNormalMap(rootNode["UseNormalMap"].as<bool>());
 
 		if (rootNode["Metalness"])
 			material->SetMetalness(rootNode["Metalness"].as<float>());
@@ -481,6 +481,12 @@ namespace cerberus
 
 		if (rootNode["RoughnessMapHandle"])
 			material->SetRoughnessMap((AssetHandle)rootNode["RoughnessMapHandle"].as<uint64_t>());
+
+		// SetNormalMap enables normal sampling for newly assigned textures. Restore
+		// the serialized user toggle afterwards so a present-but-disabled normal map
+		// remains disabled across save/load.
+		if (rootNode["UseNormalMap"])
+			material->SetUseNormalMap(rootNode["UseNormalMap"].as<bool>());
 
 		material->Handle = metadata.Handle;
 		asset = material;
