@@ -1,6 +1,4 @@
 #pragma once
-#include "Renderer/UniformBufferSet.h"
-#include "Renderer/Material.h"
 namespace cerberus
 {
 	///////////////////////////////////////////////////////////////////////
@@ -75,32 +73,4 @@ namespace cerberus
 		std::unordered_map<DescriptorLayoutInfo, VkDescriptorSetLayout, DescriptorLayoutHash> m_DescriptoLayoutCache;
 	};
 
-	class DescriptorLibrary
-	{
-	public:
-		DescriptorLibrary();
-		~DescriptorLibrary();
-
-		void AddDescriptor(uint32_t ShaderHash, uint32_t set, VkDescriptorSet& descriptor);
-		VkDescriptorSet GetDescriptor(uint32_t ShaderHash, uint32_t set);
-
-	private:
-		// Frame -> Shader | DescriptorSets
-		std::vector<std::unordered_map<uint32_t, std::vector<VkDescriptorSet>>> m_LibraryData;
-	};
-
-	class DescriptorBuilder
-	{
-	public:
-		DescriptorBuilder() = default;
-		~DescriptorBuilder() = default;
-
-		void BeginBuilding(DescriptorAllocator* allocator, Ref<Shader> shader, uint32_t set);
-		void SubmitWriteDescriptor(VkWriteDescriptorSet& writeDescriptor);
-		void EndBuilding(VkDescriptorSet& outDescriptor, bool allocate = true);
-	private:
-		DescriptorAllocator* m_Allocator;
-		std::vector<VkWriteDescriptorSet> m_WriteDescriptors;
-		Ref<Shader> m_Shader; uint32_t m_Set;
-	};
 }

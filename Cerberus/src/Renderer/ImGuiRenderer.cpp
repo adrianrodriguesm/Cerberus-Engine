@@ -95,7 +95,7 @@ namespace cerberus
 
 		// Upload Fonts
 		{
-			TransientCommandBuffer commandBuffer = Renderer::BeginTransientCommandBuffer();
+			TransientCommandBuffer commandBuffer = Renderer::GetTransientCommandExecutor().BeginGraphics();
 			ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
 			commandBuffer.SubmitAndWait();
 

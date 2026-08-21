@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/Base.h"
 #include "VulkanMemoryAllocator/vk_mem_alloc.h"
 #include "Renderer/Device.h"
 namespace cerberus

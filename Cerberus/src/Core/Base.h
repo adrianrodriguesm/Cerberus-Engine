@@ -1,4 +1,12 @@
 #pragma once
+
+#include <chrono>
+#include <cstdint>
+#include <memory>
+#include <thread>
+#include <utility>
+#include <vulkan/vulkan.h>
+
 #include "Log.h"
 #define ASSERT(x, errorMSG) if(!(x) )								\
 							{										\
@@ -23,8 +31,6 @@
 #else
 #define VK_COORD_SYSTEM VK_FRONT_FACE_CLOCKWISE
 #endif
-
-#define OLD_RENDERER 0
 
 namespace cerberus 
 {

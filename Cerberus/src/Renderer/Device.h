@@ -1,4 +1,10 @@
 #pragma once
+#include "Core/Base.h"
+
+#include <string>
+#include <unordered_set>
+#include <vector>
+
 namespace cerberus
 {
 	struct DeviceProperties

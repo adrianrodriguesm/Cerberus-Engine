@@ -109,26 +109,14 @@ namespace cerberus
 			if (utils::IsDepthFormat(attachmentInfo.Format))
 			{
 				sampleDepthAttachment = attachmentInfo.IsRenderTarget;
-				// TODO: Separate layouts requires a "separate layouts" flag to be enabled
-				if (attachmentInfo.Format == ImageFormat::DEPTH24STENCIL8 || true)
-				{
-					if (attachmentInfo.IsRenderTarget)
-
-						attachmentDescription.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-					else
-						attachmentDescription.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-					depthAttachmentReference = { attachmentIndex, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
-				}
+				// Use the combined depth/stencil layouts for both depth-only and
+				// depth-stencil formats. Separate layouts require an optional feature.
+				if (attachmentInfo.IsRenderTarget)
+					attachmentDescription.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 				else
-				{
-					if (attachmentInfo.IsRenderTarget)
-						attachmentDescription.finalLayout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL;
-					else
-						attachmentDescription.finalLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+					attachmentDescription.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-					depthAttachmentReference = { attachmentIndex, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL };
-				}
+				depthAttachmentReference = { attachmentIndex, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 				
 			}
 			////////////////////////////////////////////////////
@@ -190,7 +178,6 @@ namespace cerberus
 				depedency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 			}
 		}
-		/**/
 		if (sampleDepthAttachment)
 		{
 			// Conversion from VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL or VK_IMAGE_LAYOUT_UNDEFINED
@@ -209,7 +196,6 @@ namespace cerberus
 			}
 
 			// Conversion from VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL to VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
-			//if(sampleDepthAttachment)
 			{
 				// Transition must happen after...
 				VkSubpassDependency& depedency = dependencies.emplace_back();
@@ -223,7 +209,6 @@ namespace cerberus
 				depedency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 			}
 		}
-		/**/
 		VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 		///////////////////////////////////////////////////////////
 		// Create the actual RenderPass

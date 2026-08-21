@@ -441,7 +441,6 @@ namespace cerberus
 			NV_CORE_TRACE("  Size: {0}", size);
 			NV_CORE_TRACE("-------------------");
 		}
-		/**/
 		NV_CORE_TRACE("Storage Buffers:");
 		for (const auto& resource : resources.storage_buffers)
 		{
@@ -548,7 +547,6 @@ namespace cerberus
 				buffer.Uniforms[uniformName] = ShaderUniform(uniformName, utils::SPIRTypeToShaderUniformType(type), size, offset);
 			}
 		}
-		/**/
 		NV_CORE_TRACE("Sampled Images:");
 		for (const auto& resource : resources.sampled_images)
 		{
@@ -675,14 +673,12 @@ namespace cerberus
 				}
 				
 			}
-			/**/
 			if (shaderDescriptorSet.StorageBuffers.size())
 			{
 				VkDescriptorPoolSize& typeCount = m_TypeCounts[set].emplace_back();
 				typeCount.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 				typeCount.descriptorCount = (uint32_t)(shaderDescriptorSet.StorageBuffers.size());
 			}
-			/**/
 			if (shaderDescriptorSet.ImageSamplers.size())
 			{
 				VkDescriptorPoolSize& typeCount = m_TypeCounts[set].emplace_back();
@@ -716,7 +712,6 @@ namespace cerberus
 				set.descriptorCount = 1;
 				set.dstBinding = layoutBinding.binding;
 			}
-			/**/
 			for (auto& [binding, strorageBuffer] : shaderDescriptorSet.StorageBuffers)
 			{
 				VkDescriptorSetLayoutBinding& layoutBinding = layoutBindings.emplace_back();
@@ -749,7 +744,6 @@ namespace cerberus
 				set.descriptorCount = 1;
 				set.dstBinding = layoutBinding.binding;
 			}
-			/**/
 			for (auto& [binding, imageSampler] : shaderDescriptorSet.ImageSamplers)
 			{
 				auto& layoutBinding = layoutBindings.emplace_back();
@@ -760,7 +754,7 @@ namespace cerberus
 				layoutBinding.binding = binding;
 
 				CORE_ASSERT(shaderDescriptorSet.UniformBuffers.find(binding) == shaderDescriptorSet.UniformBuffers.end(), "Binding is already present!");
-				//CORE_ASSERT(shaderDescriptorSet.StorageBuffers.find(binding) == shaderDescriptorSet.StorageBuffers.end(), "Binding is already present!");
+				CORE_ASSERT(shaderDescriptorSet.StorageBuffers.find(binding) == shaderDescriptorSet.StorageBuffers.end(), "Binding is already present!");
 
 				VkWriteDescriptorSet& set = shaderDescriptorSet.WriteDescriptorSets[imageSampler.Name];
 				set = {};
@@ -779,11 +773,10 @@ namespace cerberus
 				layoutBinding.pImmutableSamplers = nullptr;
 
 				uint32_t binding = bindingAndSet & 0xffffffff;
-				//uint32_t descriptorSet = (bindingAndSet >> 32);
 				layoutBinding.binding = binding;
 
 				CORE_ASSERT(shaderDescriptorSet.UniformBuffers.find(binding) == shaderDescriptorSet.UniformBuffers.end(), "Binding is already present!");
-				//CORE_ASSERT(shaderDescriptorSet.StorageBuffers.find(binding) == shaderDescriptorSet.StorageBuffers.end(), "Binding is already present!");
+				CORE_ASSERT(shaderDescriptorSet.StorageBuffers.find(binding) == shaderDescriptorSet.StorageBuffers.end(), "Binding is already present!");
 				CORE_ASSERT(shaderDescriptorSet.ImageSamplers.find(binding) == shaderDescriptorSet.ImageSamplers.end(), "Binding is already present!");
 
 				VkWriteDescriptorSet& set = shaderDescriptorSet.WriteDescriptorSets[imageSampler.Name];
@@ -794,7 +787,6 @@ namespace cerberus
 				set.dstBinding = layoutBinding.binding;
 			}
 
-			/**/
 			VkDescriptorSetLayoutCreateInfo descriptorLayout = {};
 			descriptorLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 			descriptorLayout.pNext = nullptr;
@@ -808,7 +800,6 @@ namespace cerberus
 				shaderDescriptorSet.StorageBuffers.size(),
 				shaderDescriptorSet.ImageSamplers.size(),
 				shaderDescriptorSet.StorageImages.size());
-			/**/
 			if (set >= m_DescriptorSetLayouts.size())
 				m_DescriptorSetLayouts.resize((size_t)(set + 1));
 

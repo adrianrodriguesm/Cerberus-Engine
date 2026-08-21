@@ -82,9 +82,9 @@ namespace cerberus
 		VkApplicationInfo appInfo = {};
 		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 		appInfo.pApplicationName = "Cerberus";						// Custom name of the application
-		//appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);	// Custom version of the application
+		appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
 		appInfo.pEngineName = "Cerberus";							// Custom name of the engine
-		//appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);			// Custon version of the engine
+		appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
 		appInfo.apiVersion = VK_API_VERSION_1_3;					// The Vulkan Version
 
 		// Necessary info for a creation of a VkInstance 
@@ -113,8 +113,10 @@ namespace cerberus
 			createInfo.ppEnabledLayerNames = nullptr;
 		}
 
-		VkValidationFeatureEnableEXT enables[] = { /*VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,*/  VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
-												   /*VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT,*/ VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT};
+		VkValidationFeatureEnableEXT enables[] = {
+			VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
+			VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT
+		};
 		VkValidationFeaturesEXT features = {};
 		features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
 		features.enabledValidationFeatureCount = sizeof(enables)/sizeof(VkValidationFeatureEnableEXT);
@@ -122,7 +124,7 @@ namespace cerberus
 
 		createInfo.pNext = &features;
 
-		// VkAllocationCallbacks(2บ parameter) is a paremeter that 
+		// VkAllocationCallbacks(2ยบ parameter) is a paremeter that 
 		// allow us to specify where and how store the memory -> Require good knowledge in memory manegement
 		VK_CHECK_RESULT(vkCreateInstance(&createInfo, nullptr, &(m_VulkanInstance)));
 	}

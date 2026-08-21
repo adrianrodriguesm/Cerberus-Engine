@@ -106,7 +106,7 @@ namespace cerberus
 
 		VmaAllocationCreateInfo allocCreateInfo = {};
 		allocCreateInfo.usage = usage;
-		//allocCreateInfo.flags = flags;
+		allocCreateInfo.flags = flags;
 
 		VmaAllocation allocation;
 		vmaCreateBuffer(s_Data->Allocator, &bufferCreateInfo, &allocCreateInfo, &outBuffer, &allocation, nullptr);

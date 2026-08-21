@@ -28,7 +28,6 @@ namespace cerberus
 	{
 		CreateSwapchain();
 		CreateRenderPass();
-		//CreateDepthStencil();
 		CreateFramebuffers();
 		CreateCommandPool();
 		AllocateCommandBuffer();
@@ -128,12 +127,6 @@ namespace cerberus
 			vkDestroyImageView(vulkanDevice, image.ImageView, nullptr);
 
 		m_SwapchainImages.clear();
-		/** /
-		// DepthStencil Image
-		vkDestroyImageView(vulkanDevice, m_DepthStencil.ImageView, nullptr);
-		VulkanAllocator allocator("DepthStencilBufferImage");
-		allocator.DestroyImage(m_DepthStencil.Image, m_DepthStencil.MemoryAllocation);
-		/**/
 		vkDestroySwapchainKHR(vulkanDevice, m_Swapchain, nullptr);
 		vkDestroySurfaceKHR(m_VulkanInstance, m_Surface, nullptr);
 		m_Swapchain = VK_NULL_HANDLE;
@@ -149,10 +142,7 @@ namespace cerberus
 		auto device = m_Device->GetVulkanDevice();
 		vkDeviceWaitIdle(device);
 		CreateSwapchain();
-		//CreateDepthStencil();
-		//CreateRenderPass();
 		CreateFramebuffers();
-		//AllocateCommandBuffer();
 		vkDeviceWaitIdle(device);
 	}
 
@@ -193,7 +183,7 @@ namespace cerberus
 	// Best format is subjective, but for ours will be:
 	// Format		: VK_FORMAT_R8G8B8A8_UNORM ( VK_FORMAT_B8G8R8A8_UNORM as backup)
 	// colorSpace	: VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
-	VkSurfaceFormatKHR Swapchain::ChooseBestSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats)
+	VkSurfaceFormatKHR Swapchain::ChooseBestSurfaceFormat(std::span<const VkSurfaceFormatKHR> formats)
 	{
 		// If only 1 format availble and is undefined then this meas ALL formatas are available (no restrictions)
 		if (formats.size() == 1 && formats[0].format == VK_FORMAT_UNDEFINED)
@@ -215,7 +205,7 @@ namespace cerberus
 	}
 
 	// We choose formats that do not risk tearing
-	VkPresentModeKHR Swapchain::ChooseBestPresentationMode(const std::vector<VkPresentModeKHR>& presentationModes)
+	VkPresentModeKHR Swapchain::ChooseBestPresentationMode(std::span<const VkPresentModeKHR> presentationModes)
 	{
 		// Look for Mailbox presentation mode
 		for (const auto& presentationMode : presentationModes)
@@ -260,7 +250,6 @@ namespace cerberus
 
 	VkImageView Swapchain::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags)
 	{
-		/**/
 		VkImageViewCreateInfo viewCreateInfo = {}; // Basically define the parts of the image that will be able to view
 		viewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		viewCreateInfo.image = image;										// Image to create view for
@@ -363,28 +352,6 @@ namespace cerberus
 		// Enable transfer destination on swap chain images if supported
 		if (swapChainDetails.SurfaceCapabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT)
 			swapChainCreateInfo.imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-		/** /
-		// Get Quaue Family Indices
-		VulkanPhysicalDevice::QueueFamilyIndices indices = m_Device->GetPhysicalDevice();
-		// If Graphics and Presentation families are different, then swapchain must let images be shared between families
-		if (indices.graphicsFamily != indices.presentationFamily)
-		{
-			// Queues to share between
-			uint32_t queueFamilyIndices[2] = {
-				(uint32_t)indices.graphicsFamily,
-				(uint32_t)indices.presentationFamily
-			};
-			swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;		// Image share handling
-			swapChainCreateInfo.queueFamilyIndexCount = 2;							// Number of queues to share images between (PrensentationQueue and GraphicQueue)
-			swapChainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;			// Array of queue to share between
-		}
-		else
-		{
-			swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;		// Image not share handling
-			swapChainCreateInfo.queueFamilyIndexCount = 0;							// Number of queues to share images between (e.g PrensentationQueue and GraphicQueue)
-			swapChainCreateInfo.pQueueFamilyIndices = nullptr;						// Array of queue to share between
-		}
-		/**/
 		swapChainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;		// Image not share handling
 		swapChainCreateInfo.queueFamilyIndexCount = 0;							// Number of queues to share images between (e.g PrensentationQueue and GraphicQueue)
 		swapChainCreateInfo.pQueueFamilyIndices = nullptr;						// Array of queue to share between
@@ -400,21 +367,10 @@ namespace cerberus
 				vkDestroyFramebuffer(vulkanDevice, framebuffer, nullptr);
 
 			m_SwapchainFrambuffers.clear();
-			//vkDestroyRenderPass(vulkanDevice, m_MainRenderPass, nullptr);
-			/** /
-			vkFreeCommandBuffers(vulkanDevice, m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
-			m_CommandBuffers.clear();
-			/**/
 			for (auto& image : m_SwapchainImages)
 				vkDestroyImageView(vulkanDevice, image.ImageView, nullptr);
 
 			m_SwapchainImages.clear();
-			/** /
-			// DepthStencil Image
-			vkDestroyImageView(vulkanDevice, m_DepthStencil.ImageView, nullptr);
-			VulkanAllocator allocator("DepthStencilBufferImage");
-			allocator.DestroyImage(m_DepthStencil.Image, m_DepthStencil.MemoryAllocation);
-			/**/
 			// Crate SwapChain
 			VK_CHECK_RESULT(vkCreateSwapchainKHR(vulkanDevice, &swapChainCreateInfo, nullptr, &m_Swapchain));
 
@@ -455,7 +411,6 @@ namespace cerberus
 		VkAttachmentDescription colorAttachment = {};
 		colorAttachment.format = m_SwapchainImageFormat;						// Format to use for attachment
 		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;						// Number of samples to write for multisampling
-		//colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;					// Describes what to do with attachment before rendering (in this case this op is equivalent to glClearColor)
 		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;					// Describes what to do with attachment before rendering (in this case this op is equivalent to glClearColor)
 		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;					// Describes what to do with attachment after rendering
 		colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;		// Describes what to do with stencil before rendering
@@ -464,35 +419,17 @@ namespace cerberus
 		// to give optimal use for certain operations
 		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;			// Image data layout before render pass starts
 		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;		// Image data layout after render pass (to change to)
-		/** /
-		// -- Depth attachment of render pass
-		VkAttachmentDescription depthAttachment = {};
-		depthAttachment.format = m_Device->GetPhysicalDevice()->GetDepthFormat();
-		depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-		depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-		/**/
 		// REFERENCES
 		// Attachment reference uses an attachment index that refers to index in the attachment list passed to renderPassCreateInfo
 		VkAttachmentReference colorAttachmentReference = {};
 		colorAttachmentReference.attachment = 0;
 		colorAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		/** /
-		VkAttachmentReference depthAttachmentReference = {};
-		depthAttachmentReference.attachment = 1;
-		depthAttachmentReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-		/**/
 		// Information about a particular subpass the Render Pass is using
 		VkSubpassDescription subpass = {};
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;		// Pipeline type subpass is to be bound to
 		subpass.colorAttachmentCount = 1;
 		subpass.pColorAttachments = &colorAttachmentReference;
 		subpass.pDepthStencilAttachment = nullptr;
-		//subpass.pDepthStencilAttachment = &depthAttachmentReference;
 		// Need to determine when layout transitions occur using subpass dependencies
 		std::array<VkSubpassDependency, 2> subpassDependencies;
 		// Conversion from VK_IMAGE_LAYOUT_UNDEFINED to VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
@@ -517,7 +454,6 @@ namespace cerberus
 		subpassDependencies[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
 		subpassDependencies[1].dependencyFlags = 0;
 
-		//std::array< VkAttachmentDescription, 2> renderPassAttachments = { colorAttachment, depthAttachment };
 		std::array< VkAttachmentDescription, 1> renderPassAttachments = { colorAttachment };
 
 		// Create info for Render Pass
@@ -544,8 +480,7 @@ namespace cerberus
 		for (size_t i = 0; i < m_SwapchainFrambuffers.size(); i++)
 		{
 			std::array<VkImageView, 1> attachments = {
-				m_SwapchainImages[i].ImageView,
-				//m_DepthStencil.ImageView
+				m_SwapchainImages[i].ImageView
 			};
 
 			VkFramebufferCreateInfo framebufferCreateInfo = {};
@@ -559,51 +494,6 @@ namespace cerberus
 
 			VK_CHECK_RESULT(vkCreateFramebuffer(logicalDevice, &framebufferCreateInfo, nullptr, &m_SwapchainFrambuffers[i]));
 		}
-	}
-
-	void Swapchain::CreateDepthStencil()
-	{
-		/** /
-		VkDevice device = m_Device->GetVulkanDevice();
-		VkFormat depthFormat = m_Device->GetPhysicalDevice()->GetDepthFormat();
-		// CREATE IMAGE
-		// Image Creation Info
-		VkImageCreateInfo imageCreateInfo{};
-		imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;					// Type of image (1D, 2D, 3D)
-		imageCreateInfo.extent.width = m_SwapchainExtent.width;
-		imageCreateInfo.extent.height = m_SwapchainExtent.height;
-		imageCreateInfo.extent.depth = 1;								// Depth of image (just 1, no 3D aspect)
-		imageCreateInfo.mipLevels = 1;
-		imageCreateInfo.arrayLayers = 1;
-		imageCreateInfo.format = depthFormat;
-		imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;				// How depth image should be "tiled" (arranged for optimal reading)
-		imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;		// Layout of image data on creation
-		// Bit flags defining what the image will be use for
-		imageCreateInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-		imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;				// Number of samples for multi-sampling
-		imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;		// Whether the image can be shared between queues
-
-		VulkanAllocator allocator("DepthStencilBufferImage");
-		m_DepthStencil.MemoryAllocation = allocator.AllocateImage(imageCreateInfo, VMA_MEMORY_USAGE_GPU_ONLY, m_DepthStencil.Image);
-
-		// CREATE IMAGE VIEW
-		VkImageViewCreateInfo imageViewCreateInfo{};
-		imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		imageViewCreateInfo.image = m_DepthStencil.Image;
-		imageViewCreateInfo.format = depthFormat;
-		imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-		imageViewCreateInfo.subresourceRange.levelCount = 1;
-		imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
-		imageViewCreateInfo.subresourceRange.layerCount = 1;
-		imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-		// Stencil aspect should only be set on depth + stencil formats (VK_FORMAT_D16_UNORM_S8_UINT..VK_FORMAT_D32_SFLOAT_S8_UINT
-		if (depthFormat >= VK_FORMAT_D16_UNORM_S8_UINT)
-			imageViewCreateInfo.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-
-		VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCreateInfo, nullptr, &m_DepthStencil.ImageView));
-		/**/
 	}
 
 	void Swapchain::CreateCommandPool()

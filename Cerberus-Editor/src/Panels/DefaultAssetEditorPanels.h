@@ -1,6 +1,8 @@
 #pragma once
 #include "AssetEditor.h"
 #include "Renderer/Mesh.h"
+#include "Renderer/Texture.h"
+#include "Renderer/TextureAsset.h"
 namespace cerberus
 {
 	class MaterialPanel : public AssetEditorPanel

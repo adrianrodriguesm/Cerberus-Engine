@@ -54,7 +54,10 @@ namespace cerberus
 		if (m_OwnedBySwapchain)
 			return;
 
-		DeferredResourceDeletionQueue::SubmitCurrentFrame([commandPool = m_CommandPool, commandBuffers = m_CommandBuffers, waitFences = m_WaitFences, timestampQueryPools = m_TimestampQueryPools, pipelineQueryPool = m_PipelineStatisticsQueryPools]()
+		const VkCommandPool commandPool = m_CommandPool
+			? m_CommandPool->GetVulkanCommandPool()
+			: VK_NULL_HANDLE;
+		DeferredResourceDeletionQueue::SubmitCurrentFrame([commandPool, commandBuffers = m_CommandBuffers, waitFences = m_WaitFences, timestampQueryPools = m_TimestampQueryPools, pipelineQueryPool = m_PipelineStatisticsQueryPools]()
 		{
 			VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 
@@ -67,8 +70,14 @@ namespace cerberus
 			for (auto& fence : waitFences)
 				vkDestroyFence(vulkanDevice, fence, nullptr);
 
-			if (commandPool && !commandBuffers.empty())
-				commandPool->FreeCommandBuffers(commandBuffers);
+			if (commandPool != VK_NULL_HANDLE && !commandBuffers.empty())
+			{
+				vkFreeCommandBuffers(
+					vulkanDevice,
+					commandPool,
+					static_cast<uint32_t>(commandBuffers.size()),
+					commandBuffers.data());
+			}
 		});
 
 		m_WaitFences.clear();
@@ -134,21 +143,6 @@ namespace cerberus
 
 		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 		SubmitInternal(frameIndex, false);
-	}
-
-	void CommandBuffer::RT_Begin()
-	{
-		BeginRenderThread();
-	}
-
-	void CommandBuffer::RT_End()
-	{
-		EndRenderThread();
-	}
-
-	void CommandBuffer::RT_Submit()
-	{
-		SubmitRenderThread();
 	}
 
 	uint32_t CommandBuffer::BeginTimestampQuery()
@@ -262,13 +256,6 @@ namespace cerberus
 			sizeof(PipelineStatistics), &m_PipelineStatisticsQueryResults[frameIndex], sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
 	}
 
-	VkCommandBuffer CommandBuffer::GetCommandBuffer() const
-	{
-		uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
-		CORE_ASSERT(frameIndex < m_CommandBuffers.size(), "Overflow! Invalid command buffer index!");
-		return m_CommandBuffers[frameIndex];
-		
-	}
 	Ref<CommandBuffer> CommandBuffer::CreateFromSwapchain()
 	{
 		return CreateRef<CommandBuffer>(true, "Swapchain");

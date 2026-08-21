@@ -1,6 +1,8 @@
 #pragma once
 #include "Renderer/Device.h"
 #include "Renderer/ResourceAllocator.h"
+
+#include <span>
 namespace cerberus
 {
 	class Swapchain
@@ -57,7 +59,6 @@ namespace cerberus
 		void CreateSwapchain();
 		void CreateRenderPass();
 		// Create the depth buffer and stencil buffer image
-		void CreateDepthStencil();
 		void CreateFramebuffers();
 		void CreateCommandPool();
 		void AllocateCommandBuffer();
@@ -66,8 +67,8 @@ namespace cerberus
 		SwapchainDetails GetSwapchainDetails(VkPhysicalDevice physicalDevice);
 
 		// -- Choose Functions
-		VkSurfaceFormatKHR ChooseBestSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats);
-		VkPresentModeKHR ChooseBestPresentationMode(const std::vector<VkPresentModeKHR>& presentationModes);
+		VkSurfaceFormatKHR ChooseBestSurfaceFormat(std::span<const VkSurfaceFormatKHR> formats);
+		VkPresentModeKHR ChooseBestPresentationMode(std::span<const VkPresentModeKHR> presentationModes);
 		VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& surfaceCapabilities);
 		// -- Creates Support Functions
 		VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
@@ -105,17 +106,6 @@ namespace cerberus
 		uint32_t m_CurrentCmdBufferIndex = 0;
 		uint32_t m_CurrentImageIndex = 0;
 
-		// NOTE: We don't more need more than one depth image because 
-		//		 we only use it for drawing not for presenting
-		// Depth Buffer Image
-		/** /
-		struct
-		{
-			VkImage Image;					// We get the image from the swapchain
-			VkImageView ImageView;			// In order to interact with an image we created an ImageView
-			VmaAllocation MemoryAllocation;
-		} m_DepthStencil;
-		/**/
 	};
 };
 

@@ -1,7 +1,5 @@
 #pragma once
 #include "Renderer/Shader.h"
-#include "Renderer/TextureAsset.h"
-#include "Renderer/Texture.h"
 #include "Asset/Asset.h"
 
 namespace cerberus
@@ -45,19 +43,15 @@ namespace cerberus
 		glm::uvec4 TextureIndices = glm::uvec4(InvalidMaterialTextureIndex);
 	};
 
-	/**/
 	class Material
 	{
 	public:
-		Material(const Ref<Shader>& shader, const std::string& name = "None", bool persistent = true);
+		Material(const Ref<Shader>& shader, const std::string& name = "None");
 		~Material();
 
 		Ref<Shader> GetShader()  { return m_Shader; }
 		const std::string& GetName() const  { return m_Name; }
 		Buffer GetUniformBufferStorage() { return m_UniformBufferStorage; }
-		const VkDescriptorSet GetDescriptorSet(uint32_t frameIndex) const { return !m_DescriptorSets.empty() ? m_DescriptorSets[frameIndex] : nullptr; }
-		// Render Thread
-		void UpdateForRender(const std::vector<std::vector<std::vector<VkWriteDescriptorSet>>>& uniformBufferWriteDescriptors = std::vector<std::vector<std::vector<VkWriteDescriptorSet>>>());
 		void Set(const std::string& name, float value);
 		void Set(const std::string& name, int value);
 		void Set(const std::string& name, uint32_t value);
@@ -70,9 +64,6 @@ namespace cerberus
 		void Set(const std::string& name, const glm::vec4& value);
 		void Set(const std::string& name, const glm::mat3& value);
 		void Set(const std::string& name, const glm::mat4& value);
-
-		void Set(const std::string& name, const Handle<TextureCube>& texture);
-		void Set(const std::string& name, const Ref<Image>& image);
 
 		template <typename T>
 		void Set(const std::string& name, const T& value)
@@ -96,10 +87,6 @@ namespace cerberus
 		glm::mat3& GetMatrix3(const std::string& name);
 		glm::mat4& GetMatrix4(const std::string& name);
 
-		Ref<TextureCube> GetTextureCube(const std::string& name);
-
-		Ref<TextureCube> TryGetTextureCube(const std::string& name);
-
 		template<typename T>
 		T& Get(const std::string& name)
 		{
@@ -109,57 +96,14 @@ namespace cerberus
 			return buffer.Read<T>(decl->GetOffset());
 		}
 
-		template<typename T>
-		Ref<T> GetResource(const std::string& name)
-		{
-			auto decl = FindResourceDeclaration(name);
-			CORE_ASSERT(decl, "Could not find uniform with name 'x'");
-			uint32_t slot = decl->GetRegister();
-			CORE_ASSERT(slot < m_Textures.size(), "Texture slot is invalid!");
-			return std::dynamic_pointer_cast<T>(m_Textures[slot]);
-		}
-
-		template<typename T>
-		Ref<T> TryGetResource(const std::string& name)
-		{
-			auto decl = FindResourceDeclaration(name);
-			if (!decl)
-				return nullptr;
-
-			uint32_t slot = decl->GetRegister();
-			if (slot >= m_Textures.size())
-				return nullptr;
-
-			return std::dynamic_pointer_cast<T>(m_Textures[slot]);
-		}
-
-	private:
-		enum class PendingDescriptorType
-		{
-			None = 0, TextureCube, Image2D
-		};
-		struct PendingDescriptor
-		{
-			PendingDescriptorType Type = PendingDescriptorType::None;
-			VkWriteDescriptorSet WriteDescriptorSet;
-			Ref<Texture> Texture;
-			Ref<Image> Image;
-		};
 	private:
 		void AllocateStorage();
 		const ShaderUniform* FindUniformDeclaration(const std::string& name);
-		const ShaderResourceDeclaration* FindResourceDeclaration(const std::string& name);
 	private:
 		Ref<Shader> m_Shader;
 		std::string m_Name;
 		// TODO: Change name
 		Buffer m_UniformBufferStorage;
-		std::vector<Ref<Texture>> m_Textures;
-		std::vector<Ref<Image>> m_Images;
-		std::unordered_map<uint32_t, std::shared_ptr<PendingDescriptor>> m_ResidentDescriptors;
-		std::vector<VkDescriptorSet> m_DescriptorSets;
-		std::vector<std::vector<VkWriteDescriptorSet>> m_WriteDescriptors;
-		bool m_Persistent = true;
 	};
 
 	// High-level material asset. Stores CPU-side scalar data and texture asset handles.
@@ -226,7 +170,6 @@ namespace cerberus
 		Ref<Material> m_Material;
 
 	};
-	/**/
 	class MaterialTable
 	{
 	public:
@@ -256,4 +199,3 @@ namespace cerberus
 
 	};
 }
-

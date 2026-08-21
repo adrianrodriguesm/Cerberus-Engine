@@ -38,7 +38,6 @@ namespace cerberus
 	GPUBuffer::GPUBuffer(const GPUBufferSpecification& bufferSpec)
 		: Size(bufferSpec.Size), DebugName(bufferSpec.DebugName)
 	{
-		//strcpy(DebugName, bufferSpec.DebugName.c_str());
 		// Information to create a buffer (doesn't include assigning memory)
 		VkBufferCreateInfo bufferCreateInfo = {};
 		bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;

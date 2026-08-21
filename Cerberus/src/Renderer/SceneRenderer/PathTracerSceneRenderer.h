@@ -124,11 +124,6 @@ namespace cerberus
 
 		Handle<ImageView> m_FinalPassImage;
 
-		Handle<Framebuffer> m_Framebuffer;
-		Handle<RenderPass> m_RenderPass;
-		Handle<GraphicsPipeline> m_Pipeline;
-
-		Ref<UniformBufferSet> m_UniformBufferSet;
 		Ref<UniformBufferSet> m_UniformBufferSetCamera;
 		Ref<UniformBufferSet> m_RT_SkyLightBufferSet;
 		Ref<UniformBufferSet> m_RT_PathTracerBufferSet;
@@ -138,12 +133,6 @@ namespace cerberus
 
 		// Renderer-side representation of the logical scene.
 		Scope<RenderScene> m_RenderScene;
-
-		Handle<BindGroupLayout> m_BindGroup0Layout;
-		Handle<BindGroup> m_BindGroup0;
-
-		Handle<BindGroupLayout> m_BindGroup1Layout;
-		Handle<BindGroup> m_BindGroup1;
 
 		Handle<BindGroupLayout> m_RT_BindGroupLayout;
 		Handle<BindGroup> m_RT_BindGroup;

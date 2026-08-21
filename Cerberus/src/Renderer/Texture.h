@@ -109,7 +109,6 @@ namespace cerberus
 		virtual uint64_t GetHash() const override;
 
 
-		//const VkDescriptorImageInfo& GetVulkanDescriptorInfo() const { return m_DescriptorImageInfo; }
 	private:
 		void Invalidate(ImageFormat format, const uint32_t width, const uint32_t height);
 	private:

@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/Base.h"
 #include "Core/Buffer.h"
 #include "Renderer/ResourceAllocator.h"
 #include "Renderer/VulkanUtility.h"

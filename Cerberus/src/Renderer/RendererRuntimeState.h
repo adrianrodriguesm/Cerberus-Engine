@@ -3,9 +3,9 @@
 #include "Core/Base.h"
 #include "Renderer/RendererContext.h"
 #include "Renderer/CommandBuffer.h"
+#include "Renderer/CommandList.h"
 #include "Renderer/CommandPool.h"
-#include "Renderer/UniformBufferSet.h"
-#include "Renderer/SceneRenderer/SceneRenderer.h"
+#include "Renderer/TransientCommandExecutor.h"
 
 namespace cerberus
 {
@@ -15,26 +15,15 @@ namespace cerberus
 	struct RendererCommandState
 	{
 		Scope<CommandPool> GraphicsCommandPool;
-		Scope<CommandPool> ComputeCommandPool;
+		Scope<TransientCommandExecutor> TransientExecutor;
 
 		Scope<CommandBuffer> MainCommandBuffer;
 		Scope<CommandBuffer> SwapchainCommandBuffer;
 	};
 
-	struct RendererDescriptorState
-	{
-		// Descriptor allocation/layout ownership lives in DescriptorManager.
-		// This state only stores renderer-level descriptor caches.
-		std::unordered_map<SceneRenderer*, std::vector<std::vector<VkDescriptorSet>>> RendererDescriptorSetCache;
-		VkDescriptorSet ActiveRendererDescriptorSet = VK_NULL_HANDLE;
-
-		// UniformBufferSet -> Shader Hash -> Frame -> Set -> WriteDescriptor
-		std::unordered_map<UniformBufferSet*, std::unordered_map<uint64_t, std::vector<std::vector<std::vector<VkWriteDescriptorSet>>>>> UniformBufferWriteDescriptorCache;
-	};
-
 	struct RendererFrameState
 	{
 		VkPhysicalDeviceLimits DeviceLimits{};
-		uint32_t DrawCallCount = 0;
+		RendererFrameStatistics Statistics{};
 	};
 }

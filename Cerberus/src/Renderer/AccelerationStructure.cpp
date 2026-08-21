@@ -90,40 +90,6 @@ namespace cerberus
 
 		m_TLASInstances.emplace_back(instance);
 	}
-#if 0
-	void AccelerationStructureBuilder::EndTLASBuild(Handle<AccelerationStructure>& outTLAS)
-	{
-		m_UpdateTLAS = outTLAS.IsValid() ? true : false;
-		uint32_t countInstance = static_cast<uint32_t>(m_TLASInstances.size());
-		// Command buffer to create the TLAS
-		TransientCommandBuffer cmdBuf = Renderer::BeginTransientCommandBuffer(false);
-
-		ResourceAllocator allocator("Top Level Acceleration Structure");
-		
-		VkBuffer instancesBuffer;
-		VmaAllocation instBufferAllocation = CreateInstanceBuffer(m_TLASInstances, allocator, instancesBuffer);  // Buffer of instances containing the matrices and BLAS ids
-		VkDeviceAddress           instBufferAddr = utils::GetBufferDeviceAddress(instancesBuffer);
-		/**/
-		// Make sure the copy of the instance buffer are copied before triggering the acceleration structure build
-		VkMemoryBarrier barrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER };
-		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		barrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
-		vkCmdPipelineBarrier(cmdBuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
-			0, 1, &barrier, 0, nullptr, 0, nullptr);
-
-		/**/
-		// Creating the TLAS
-		VkBuffer scratchBuffer;
-		VmaAllocation scratchBufferAllocation = CreateTlas(cmdBuf, countInstance, instBufferAddr, m_Flags, m_UpdateTLAS, m_MotionTLAS, allocator, scratchBuffer, outTLAS);
-
-		// Finalizing and destroying temporary data
-		cmdBuf.SubmitAndWait(true);
-
-		allocator.DestroyBuffer(instancesBuffer, instBufferAllocation);
-		allocator.DestroyBuffer(scratchBuffer, scratchBufferAllocation);
-
-	}
-#else
 	void AccelerationStructureBuilder::EndTLASBuild(Handle<AccelerationStructure>& outTLAS)
 	{
 		// For now, always rebuild the TLAS from scratch.
@@ -140,7 +106,7 @@ namespace cerberus
 
 		CORE_ASSERT(countInstance > 0, "Trying to build a TLAS with 0 instances");
 
-		TransientCommandBuffer cmdBuf = Renderer::BeginTransientCommandBuffer(false);
+		TransientCommandBuffer cmdBuf = Renderer::GetTransientCommandExecutor().BeginGraphics();
 
 		ResourceAllocator allocator("Top Level Acceleration Structure");
 
@@ -181,12 +147,11 @@ namespace cerberus
 				outTLAS
 			);
 
-		cmdBuf.SubmitAndWait(true);
+		cmdBuf.SubmitAndWait();
 
 		allocator.DestroyBuffer(instancesBuffer, instBufferAllocation);
 		allocator.DestroyBuffer(scratchBuffer, scratchBufferAllocation);
 	}
-#endif
 	void AccelerationStructureBuilder::BeginBLASBuild(VkBuildAccelerationStructureFlagsKHR flags)
 	{
 		m_Flags = flags;
@@ -196,13 +161,11 @@ namespace cerberus
 
 	void AccelerationStructureBuilder::SummitMesh(const Handle<MeshSourceProxy>& mesh)
 	{
-		/**/
 		if (m_BLASInputData.find(mesh) != m_BLASInputData.end())
 		{
 			CORE_ASSERT(false, "Mesh Proxy already added to the AS Builder!");
 			return;
 		}
-		/**/
 		MeshSourceProxy* meshProxy = ResourceManager::GetMeshSourceProxy(mesh);
 		// Convert Mesh geometry to VkGeometryKHR
 		// BLAS builder requires raw device addresses.
@@ -213,7 +176,6 @@ namespace cerberus
 		VkBuffer indexBuffer = meshProxy->IndexBuffer->GetHandle();
 		VkDeviceAddress indexAddress = utils::GetBufferDeviceAddress(indexBuffer);
 
-		//uint32_t maxPrimitiveCount = mesh->GetMeshSource()->GetIndexBuffer()->GetCount() / 3;
 		uint32_t vertexBufferStride = meshProxy->VertexBuffer->GetLayout().GetStride();
 		// Describe buffer as array of VertexElement.
 		VkAccelerationStructureGeometryTrianglesDataKHR triangles{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR };
@@ -230,7 +192,6 @@ namespace cerberus
 		// Indicate identity transform by setting transformData to null device pointer.
 		triangles.transformData = {};
 		auto& blasInputData = m_BLASInputData[mesh];
-		//blasInputData.resize(meshProxy->Submeshes.size());
 		for (uint32_t submeshIndex = 0; submeshIndex < meshProxy->Submeshes.size(); submeshIndex++)
 		{
 			SubmeshSourceProxy submesh = meshProxy->Submeshes[submeshIndex];
@@ -299,33 +260,6 @@ namespace cerberus
 			}
 
 		}
-#if 0
-		for (uint32_t idx = 0; idx < nbBlas; idx++)
-		{
-			// Filling partially the VkAccelerationStructureBuildGeometryInfoKHR for querying the build sizes.
-			// Other information will be filled in the createBlas (see #2)
-			buildAs[idx].BuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-			buildAs[idx].BuildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
-			buildAs[idx].BuildInfo.flags = m_Flags;
-			buildAs[idx].BuildInfo.geometryCount = 1;
-			buildAs[idx].BuildInfo.pGeometries = &(m_BLASInputData[idx].ASGeometry);
-
-			// Build range information
-			buildAs[idx].RangeInfo = &(m_BLASInputData[idx].ASBuildOffsetInfo);
-
-			// Finding sizes to create acceleration structures and scratch
-			uint32_t maxPrimCount = m_BLASInputData[idx].ASBuildOffsetInfo.primitiveCount; // Number of primitives/triangles
-
-			ext::vkGetAccelerationStructureBuildSizesKHR(device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
-				&buildAs[idx].BuildInfo, &maxPrimCount, &buildAs[idx].SizeInfo);
-
-			buildAs[idx].SizeInfo.buildScratchSize = utils::RoundUp(buildAs[idx].SizeInfo.buildScratchSize, m_ScratchAlignment);
-			// Extra info
-			asTotalSize += buildAs[idx].SizeInfo.accelerationStructureSize;
-			maxScratchSize = std::max(maxScratchSize, buildAs[idx].SizeInfo.buildScratchSize);
-			nbCompactions += HasFlag(buildAs[idx].BuildInfo.flags, VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR);
-		}
-#endif
 		// Allocate the scratch buffers holding the temporary data of the acceleration structure builder
 		VkBufferCreateInfo bufferInfo = {};
 		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -364,26 +298,22 @@ namespace cerberus
 			// Over the limit or last BLAS element
 			if (batchSize >= batchLimit || idx == nbBlas - 1)
 			{
-				TransientCommandBuffer cmdBuf = Renderer::BeginTransientCommandBuffer(false);
+				TransientCommandBuffer cmdBuf = Renderer::GetTransientCommandExecutor().BeginGraphics();
 				CreateBlas(cmdBuf, indices, buildAs, scratchBufferAddress, queryPool);
-				cmdBuf.SubmitAndWait(true);
+				cmdBuf.SubmitAndWait();
 				if (queryPool)
 				{
 					// After creation, the real space can be smaller, and it is possible to copy the acceleration structure 
 					// to one that is using exactly what is needed. This could save over 50% of the device memory usage
-					TransientCommandBuffer cmdBuf = Renderer::BeginTransientCommandBuffer(false);
+					TransientCommandBuffer cmdBuf = Renderer::GetTransientCommandExecutor().BeginGraphics();
 					CompactBlas(cmdBuf, indices, buildAs, queryPool);
-					cmdBuf.SubmitAndWait(true);
+					cmdBuf.SubmitAndWait();
 					// Destroy the non-compacted version
 					DestroyNonCompacted(indices, buildAs);
 				}
 				// Reset
 				batchSize = 0;
 				indices.clear();
-				// TODO: removed? currently we are using one single scratch buffer to build all the blas
-				/** /
-				scratchBufferAddress += buildAs[idx].SizeInfo.buildScratchSize;
-				/**/
 			}
 		}
 
@@ -394,10 +324,8 @@ namespace cerberus
 			for (uint32_t i = 0; i < buildAs.size(); i++)
 				compactSize += buildAs[i].SizeInfo.accelerationStructureSize;
 		
-			/**/
 			AS_LOG_INFO(" Ray Tracing BLAS: reducing from: {0} to: {1} => Reduction of {2} ({3}% smaller) \n", asTotalSize, compactSize,
 				asTotalSize - compactSize, (asTotalSize - compactSize) / float(asTotalSize) * 100.f);
-			/**/
 		}
 
 		// Clean up
@@ -407,9 +335,9 @@ namespace cerberus
 		m_BLASInputData.clear();
 	}
 
-	VmaAllocation AccelerationStructureBuilder::CreateInstanceBuffer(const std::vector<VkAccelerationStructureInstanceKHR>& ASInstances, ResourceAllocator& allocator, VkBuffer& outIntanceBuffer)
+	VmaAllocation AccelerationStructureBuilder::CreateInstanceBuffer(std::span<const VkAccelerationStructureInstanceKHR> asInstances, ResourceAllocator& allocator, VkBuffer& outIntanceBuffer)
 	{
-		uint32_t bufferSize = ASInstances.size() * sizeof(ASInstances[0]);
+		uint32_t bufferSize = static_cast<uint32_t>(asInstances.size_bytes());
 		// CREATE STAGING BUFFER
 		// Information to create a buffer (doesn't include assigning memory)
 		VkBufferCreateInfo stagingBufferCreateInfo = {};
@@ -427,7 +355,7 @@ namespace cerberus
 		// 1. Create pointer to a point in normal memory and  "Map" the staging buffer memory to that point
 		uint8_t* destData = allocator.MapMemory<uint8_t>(stagingBufferAllocation);
 		// 2. Copy memory from vertices vector to the point
-		memcpy(destData, ASInstances.data(), bufferSize);
+		memcpy(destData, asInstances.data(), bufferSize);
 		// 3. Unmap the vertex buffer memory
 		allocator.UnmapMemory(stagingBufferAllocation);
 
@@ -442,7 +370,7 @@ namespace cerberus
 		VmaAllocation instanceAllocation = allocator.AllocateBuffer(bufferInfo, VMA_MEMORY_USAGE_GPU_ONLY, outIntanceBuffer);
 		// Get a copy command buffer to tranfer the data 
 		// from the staging buffer to the vertex buffer
-		TransientCommandBuffer copyCmd = Renderer::BeginTransientCommandBuffer();
+		TransientCommandBuffer copyCmd = Renderer::GetTransientCommandExecutor().BeginGraphics();
 
 		// Region of data to copy from and to
 		VkBufferCopy copyRegion = {};
@@ -459,16 +387,15 @@ namespace cerberus
 		return instanceAllocation;
 	}
 
-	void AccelerationStructureBuilder::DestroyNonCompacted(std::vector<uint32_t> indices, std::vector<BuildAccelerationStructure>& buildAs)
+	void AccelerationStructureBuilder::DestroyNonCompacted(std::span<const uint32_t> indices, std::span<BuildAccelerationStructure> buildAs)
 	{
 		for (auto& i : indices)
 		{
 			ResourceManager::DestroyAccelerationStructure( buildAs[i].CleanupAStructure);
-			//buildAs[i].CleanupAStructure = nullptr;
 		}
 	}
 
-	void AccelerationStructureBuilder::CompactBlas(VkCommandBuffer cmdBuf, std::vector<uint32_t> indices, std::vector<BuildAccelerationStructure>& buildAs, VkQueryPool queryPool)
+	void AccelerationStructureBuilder::CompactBlas(VkCommandBuffer cmdBuf, std::span<const uint32_t> indices, std::span<BuildAccelerationStructure> buildAs, VkQueryPool queryPool)
 	{
 		VkDevice device = RendererContext::GetCurrentVulkanDevice();
 		uint32_t queryCtn{ 0 };
@@ -500,7 +427,7 @@ namespace cerberus
 		}
 	}
 
-	void AccelerationStructureBuilder::CreateBlas(VkCommandBuffer cmdBuf, std::vector<uint32_t> indices, std::vector<BuildAccelerationStructure>& buildAs, VkDeviceAddress scratchAddress, VkQueryPool queryPool)
+	void AccelerationStructureBuilder::CreateBlas(VkCommandBuffer cmdBuf, std::span<const uint32_t> indices, std::span<BuildAccelerationStructure> buildAs, VkDeviceAddress scratchAddress, VkQueryPool queryPool)
 	{
 		VkDevice device = RendererContext::GetCurrentVulkanDevice();
 		// For querying the compaction size

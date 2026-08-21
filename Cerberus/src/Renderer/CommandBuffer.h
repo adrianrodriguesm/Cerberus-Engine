@@ -1,5 +1,6 @@
 #pragma once
 #include "Renderer/CommandPool.h"
+#include "Renderer/CommandBufferView.h"
 
 namespace cerberus
 {
@@ -43,18 +44,11 @@ namespace cerberus
 
 		PipelineStatistics GetPipelineStatistics() const;
 
-		// Legacy aliases kept temporarily while older call sites are migrated.
-		void RT_Begin();
-		void RT_End();
-		void RT_Submit();
-
-		VkCommandBuffer GetCommandBuffer(uint32_t frameIndex) const
+		CommandBufferView GetRecordingView(uint32_t frameIndex) const
 		{
 			CORE_ASSERT(frameIndex < m_CommandBuffers.size(), "Overflow! Invalid command buffer index!");
-			return m_CommandBuffers[frameIndex];
+			return CommandBufferView(m_CommandBuffers[frameIndex], frameIndex);
 		}
-
-		VkCommandBuffer GetCommandBuffer() const;
 
 		static Ref<CommandBuffer> CreateFromSwapchain();
 		static Ref<CommandBuffer> Create(uint32_t count = 0,const std::string& debugName = "");

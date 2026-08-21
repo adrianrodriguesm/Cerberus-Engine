@@ -9,7 +9,6 @@
 namespace cerberus
 {
 	struct SceneRendererCamera;
-	class ForwardSceneRenderer;
 	class SceneRenderer;
 	class Entity;
 	class SceneHierarchyPanel;
@@ -68,7 +67,6 @@ namespace cerberus
 		std::vector<RenderObjectID> m_MeshToRemoved;
 
 		friend class Entity;
-		friend class ForwardSceneRenderer;
 		friend class SceneSerializer;
 		friend class SceneHierarchyPanel;
 		friend class ScenePropertiesPanel;

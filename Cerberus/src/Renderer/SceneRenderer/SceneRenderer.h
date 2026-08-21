@@ -1,12 +1,7 @@
 #pragma once
-#include "Renderer/CommandBuffer.h"
-#include "Renderer/Pipeline.h"
 #include "Scene/Scene.h"
-#include "Renderer/UniformBufferSet.h"
 #include "Renderer/Mesh.h"
 #include "Renderer/Camera.h"
-#include "Renderer/ComputePipeline.h"
-#include "Renderer/Shadow.h"
 #include "Renderer/Image.h"
 #include "Renderer/RenderObjectID.h"
 #include <span>
@@ -54,7 +49,5 @@ namespace cerberus
 
 		virtual Handle<ImageView> GetFinalPassImage() const = 0;
 
-
-		
 	};
 }

@@ -7,10 +7,9 @@
 #include "Renderer/ResourceManager.h"
 #include "Renderer/RenderQueueManager.h"
 #include "Renderer/RendererContext.h"
-#include "Renderer/VulkanExtensions.h"
+#include "Renderer/RayTracingCommandList.h"
 #include "ImGui/ImGuiUI.h"
 #include "Utils/StringUtils.h"
-// TODO: Remove these to (only for test)
 #include "Renderer/ShaderCompiler.h"
 
 #include <cmath>
@@ -18,10 +17,6 @@
 
 namespace cerberus
 {
-	// Keep the legacy raster test path isolated while the RT path is built in
-	// independently testable phases.
-	static constexpr bool ENABLE_RASTER_TEST_PATH = false;
-
 	static constexpr bool ENABLE_ACCELERATION_STRUCTURES = true;
 
 	static constexpr uint32_t RT_OUTPUT_BINDING = 16;
@@ -37,15 +32,8 @@ namespace cerberus
 	static constexpr uint32_t RT_ACCUMULATION_BINDING = 17;
 	static constexpr uint32_t RT_MAX_BOUNCES = 4;
 
-	static constexpr bool RT_RAYGEN_ONLY = false;
-
-	/** /
-	* Bind groups / DescriptorSets
-	* Set 0 = Fully static data (e.g Enviroment Maps)
-	* Set 1 = Per Frame data (e.g shadow map)
-	* Set 2 = Per render pass data (e.g to be determine)
-	* Set 3 = Per draw data (e.g. materials)
-	/**/
+	// Bind-group convention: set 0 is persistent/global, set 1 is per-frame,
+	// set 2 is per-pass, and set 3 is per-material/draw.
 	PathTracerSceneRenderer::PathTracerSceneRenderer(Ref<Scene> scene, const SceneRendererSpecification& spec)
 	{
 		m_Scene = scene;
@@ -63,20 +51,8 @@ namespace cerberus
 			physicalDeviceLimits.maxDescriptorSetSampledImages >= MaxRayTracingTextureCount,
 			"The selected GPU cannot expose the fixed RT texture table to one shader stage");
 
-		// ---------------------------------------------------------------------
-		// RT PATH TRACING BOOTSTRAP
-		// ---------------------------------------------------------------------
-		// Goal: keep the RT integrator and its scene data independent from the old
-		// raster test path while materials, environment lighting and accumulation
-		// are introduced incrementally.
-		//
-		// Intentionally disabled while ENABLE_RASTER_TEST_PATH is false:
-		// - raster test pass
-		// - Ronaldo texture test
-		// - camera/material UBOs for the raster path
-		// - BLAS/TLAS builds
-		// - mesh rendering
-		// ---------------------------------------------------------------------
+		// The path tracer owns only RT resources. Raster rendering is rebuilt as
+		// an independent renderer on top of GraphicsCommandList.
 
 		auto& shaderLibrary = RendererResources::GetShaderLibrary();
 		ShaderSpecification rtShaderSpec;
@@ -129,7 +105,7 @@ namespace cerberus
 		// Camera UBO for RT path.
 		{
 			UniformBufferSetSpecification uboSetCamSpec;
-			uboSetCamSpec.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
+			uboSetCamSpec.Frames = ResourceManager::GetFramesInFlight();
 			uboSetCamSpec.Size = sizeof(CameraUB);
 			uboSetCamSpec.BindingPoint = RT_CAMERA_BINDING;
 
@@ -146,7 +122,7 @@ namespace cerberus
 		// environment asset.
 		{
 			UniformBufferSetSpecification skyLightBufferSpecification;
-			skyLightBufferSpecification.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
+			skyLightBufferSpecification.Frames = ResourceManager::GetFramesInFlight();
 			skyLightBufferSpecification.Size = sizeof(SkyLightUB);
 			skyLightBufferSpecification.BindingPoint = RT_SKY_LIGHT_BINDING;
 
@@ -164,7 +140,7 @@ namespace cerberus
 		// already represented by the accumulation image.
 		{
 			UniformBufferSetSpecification pathTracerBufferSpecification;
-			pathTracerBufferSpecification.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
+			pathTracerBufferSpecification.Frames = ResourceManager::GetFramesInFlight();
 			pathTracerBufferSpecification.Size = sizeof(PathTracerUB);
 			pathTracerBufferSpecification.BindingPoint = RT_PATH_TRACER_BINDING;
 
@@ -179,7 +155,7 @@ namespace cerberus
 		// raygen evaluates them explicitly and traces one visibility ray per light.
 		{
 			UniformBufferSetSpecification directionalLightBufferSpecification;
-			directionalLightBufferSpecification.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
+			directionalLightBufferSpecification.Frames = ResourceManager::GetFramesInFlight();
 			directionalLightBufferSpecification.Size = sizeof(DirectionalLightUB);
 			directionalLightBufferSpecification.BindingPoint = RT_DIRECTIONAL_LIGHTS_BINDING;
 
@@ -194,7 +170,7 @@ namespace cerberus
 		// the material selected by its mesh/submesh.
 		{
 			StorageBufferSetSpecification materialBufferSpec;
-			materialBufferSpec.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
+			materialBufferSpec.Frames = ResourceManager::GetFramesInFlight();
 			materialBufferSpec.Size = sizeof(GPUMaterialData);
 			materialBufferSpec.BindingPoint = RT_MATERIALS_BINDING;
 			materialBufferSpec.BufferUsage = BufferUsageType::Static;
@@ -202,7 +178,7 @@ namespace cerberus
 			m_RT_MaterialBufferSet = CreateRef<StorageBufferSet>(materialBufferSpec);
 
 			GPUMaterialData fallbackMaterial{};
-			for (uint32_t frameIndex = 0; frameIndex < ResourceManager::GetRendererConfig().FramesInFlight; frameIndex++)
+			for (uint32_t frameIndex = 0; frameIndex < ResourceManager::GetFramesInFlight(); frameIndex++)
 			{
 				Ref<StorageBuffer> materialBuffer = m_RT_MaterialBufferSet->Get(frameIndex);
 				materialBuffer->SetData(&fallbackMaterial, sizeof(GPUMaterialData), 0);
@@ -218,7 +194,7 @@ namespace cerberus
 		// closest-hit, which resolves the material selected by the mesh/submesh.
 		{
 			StorageBufferSetSpecification instanceBufferSpec;
-			instanceBufferSpec.Frames = ResourceManager::GetRendererConfig().FramesInFlight;
+			instanceBufferSpec.Frames = ResourceManager::GetFramesInFlight();
 			instanceBufferSpec.Size = sizeof(RayTracingInstanceData);
 			instanceBufferSpec.BindingPoint = RT_INSTANCES_BINDING;
 			instanceBufferSpec.BufferUsage = BufferUsageType::Static;
@@ -226,7 +202,7 @@ namespace cerberus
 			m_RT_InstanceBufferSet = CreateRef<StorageBufferSet>(instanceBufferSpec);
 
 			RayTracingInstanceData fallbackInstance{};
-			for (uint32_t frameIndex = 0; frameIndex < ResourceManager::GetRendererConfig().FramesInFlight; frameIndex++)
+			for (uint32_t frameIndex = 0; frameIndex < ResourceManager::GetFramesInFlight(); frameIndex++)
 			{
 				Ref<StorageBuffer> instanceBuffer = m_RT_InstanceBufferSet->Get(frameIndex);
 				instanceBuffer->SetData(&fallbackInstance, sizeof(RayTracingInstanceData), 0);
@@ -237,15 +213,6 @@ namespace cerberus
 
 			rtBindGroup->SetStorageBuffer(m_RT_InstanceBufferSet, RT_INSTANCES_BINDING);
 		}
-
-		if constexpr (ENABLE_RASTER_TEST_PATH)
-		{
-			// The old raster test path is intentionally disabled during the RT smoke test.
-			// Re-enable this block later when the minimal RT path is stable.
-			// Keep the existing RegisterMesh/UnregisterMesh/UpdateMeshTransform mechanisms;
-			// they are not deleted, only not used by this isolated path.
-		}
-
 
 		RenderQueueManager::ExecuteRenderQueue();
 	}
@@ -258,29 +225,8 @@ namespace cerberus
 			m_RenderScene.reset();
 		}
 
-		if (m_Framebuffer.IsValid())
-			ResourceManager::DestroyFramebuffer(m_Framebuffer);
-
-		if (m_Pipeline.IsValid())
-			ResourceManager::DestroyGraphicsPipeline(m_Pipeline);
-
 		if (m_RT_Pipeline.IsValid())
 			ResourceManager::DestroyRayTracingPipeline(m_RT_Pipeline);
-
-		if (m_RenderPass.IsValid())
-			ResourceManager::DestroyRenderPass(m_RenderPass);
-
-		if (m_BindGroup0.IsValid())
-			ResourceManager::DestroyBindGroup(m_BindGroup0);
-
-		if (m_BindGroup0Layout.IsValid())
-			ResourceManager::DestroyBindGroupLayout(m_BindGroup0Layout);
-
-		if (m_BindGroup1.IsValid())
-			ResourceManager::DestroyBindGroup(m_BindGroup1);
-
-		if (m_BindGroup1Layout.IsValid())
-			ResourceManager::DestroyBindGroupLayout(m_BindGroup1Layout);
 
 		if (m_RT_BindGroup.IsValid())
 			ResourceManager::DestroyBindGroup(m_RT_BindGroup);
@@ -445,7 +391,7 @@ namespace cerberus
 
 		const uint32_t uploadSize = static_cast<uint32_t>(gpuMaterials.size() * sizeof(GPUMaterialData));
 
-		for (uint32_t frameIndex = 0; frameIndex < ResourceManager::GetRendererConfig().FramesInFlight; frameIndex++)
+		for (uint32_t frameIndex = 0; frameIndex < ResourceManager::GetFramesInFlight(); frameIndex++)
 		{
 			Ref<StorageBuffer> materialBuffer = m_RT_MaterialBufferSet->Get(frameIndex);
 			CORE_ASSERT(materialBuffer, "Invalid RT material storage buffer");
@@ -464,7 +410,7 @@ namespace cerberus
 
 		const uint32_t uploadSize = static_cast<uint32_t>(rtInstances.size() * sizeof(RayTracingInstanceData));
 
-		for (uint32_t frameIndex = 0; frameIndex < ResourceManager::GetRendererConfig().FramesInFlight; frameIndex++)
+		for (uint32_t frameIndex = 0; frameIndex < ResourceManager::GetFramesInFlight(); frameIndex++)
 		{
 			Ref<StorageBuffer> instanceBuffer = m_RT_InstanceBufferSet->Get(frameIndex);
 			CORE_ASSERT(instanceBuffer, "Invalid RT instance storage buffer");
@@ -598,15 +544,6 @@ namespace cerberus
 			ubo->SetData(&directionalLightUBO, sizeof(DirectionalLightUB), 0);
 		}
 
-		if constexpr (ENABLE_RASTER_TEST_PATH)
-		{
-			BindGroup* bindGroup1 = ResourceManager::GetBindGroup(m_BindGroup1);
-			bindGroup1->Update(frameIndex);
-
-			BindGroup* bindGroup0 = ResourceManager::GetBindGroup(m_BindGroup0);
-			bindGroup0->Update(frameIndex);
-		}
-
 		BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
 		CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
 		rtBindGroup->Update(frameIndex);
@@ -624,79 +561,13 @@ namespace cerberus
 
 		commandBuffer->BeginRenderThread();
 
-		if constexpr (ENABLE_RASTER_TEST_PATH)
-		{
-			// Legacy raster test path intentionally disabled during RT development.
-		}
-
 		// Ray tracing dispatch: iterative path integration -> storage image.
 		{
-			VkCommandBuffer cmd = commandBuffer->GetCommandBuffer(frameIndex);
-
-			RayTracingPipeline* rtPipeline = ResourceManager::GetRayTracingPipeline(m_RT_Pipeline);
-			BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
-			GPUBuffer* sbtBuffer = ResourceManager::GetBuffer(m_ShaderBindingTable->GetGPUBuffer());
-
-			CORE_ASSERT(rtPipeline, "Invalid RT pipeline");
-			CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
-			CORE_ASSERT(sbtBuffer, "Invalid SBT buffer");
-
-			const auto& rtProps = RendererContext::GetCurrentDevice()->GetRayTracingProperties();
-
-			auto AlignUp = [](VkDeviceSize value, VkDeviceSize alignment)
-				{
-					return (value + alignment - 1) & ~(alignment - 1);
-				};
-
-			const uint32_t handleSize = rtProps.shaderGroupHandleSize;
-			const uint32_t handleAlignment = rtProps.shaderGroupHandleAlignment;
-			const uint32_t baseAlignment = rtProps.shaderGroupBaseAlignment;
-
-			const VkDeviceSize handleSizeAligned = AlignUp(handleSize, handleAlignment);
-
-			VkDeviceAddress sbtBase = sbtBuffer->GetDeviceAddress();
-			CORE_ASSERT(sbtBase != 0, "Invalid SBT device address");
-
-			VkStridedDeviceAddressRegionKHR raygenRegion{};
-			raygenRegion.deviceAddress = sbtBase;
-			raygenRegion.stride = AlignUp(handleSizeAligned, baseAlignment);
-			raygenRegion.size = raygenRegion.stride;
-
-			VkStridedDeviceAddressRegionKHR missRegion{};
-			VkStridedDeviceAddressRegionKHR hitRegion{};
-			VkStridedDeviceAddressRegionKHR callableRegion{};
-
-			if constexpr (!RT_RAYGEN_ONLY)
-			{
-				const VkDeviceSize raygenSize = raygenRegion.size;
-				const VkDeviceSize missOffset = raygenSize;
-				const VkDeviceSize missSize = AlignUp(handleSizeAligned, baseAlignment);
-				const VkDeviceSize hitOffset = missOffset + missSize;
-				const VkDeviceSize hitSize = AlignUp(handleSizeAligned, baseAlignment);
-
-				missRegion.deviceAddress = sbtBase + missOffset;
-				missRegion.stride = handleSizeAligned;
-				missRegion.size = missSize;
-
-				hitRegion.deviceAddress = sbtBase + hitOffset;
-				hitRegion.stride = handleSizeAligned;
-				hitRegion.size = hitSize;
-			}
-
-			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, rtPipeline->GetHandle());
-
-			VkDescriptorSet rtDescriptorSet = rtBindGroup->GetHandle(frameIndex);
-			CORE_ASSERT(rtDescriptorSet != VK_NULL_HANDLE, "Invalid RT descriptor set");
-
-			vkCmdBindDescriptorSets(
-				cmd,
-				VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
-				rtPipeline->GetVulkanPipelineLayout(),
-				0,
-				1,
-				&rtDescriptorSet,
-				0,
-				nullptr);
+			RayTracingCommandList rayTracing(
+				commandBuffer->GetRecordingView(frameIndex),
+				&Renderer::GetFrameStatistics());
+			rayTracing.BindRayTracingPipeline(m_RT_Pipeline);
+			rayTracing.BindDescriptorSets(m_RT_BindGroup);
 
 			// Preserve storage-image writes from the previous dispatch before this
 			// dispatch reads and updates the running average. The layout intentionally
@@ -712,7 +583,7 @@ namespace cerberus
 			accumulationRange.layerCount = 1;
 
 			accumulationImage->InsertImageMemoryBarrier(
-				cmd,
+				rayTracing.GetNative(),
 				VK_ACCESS_SHADER_WRITE_BIT,
 				VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
 				VK_IMAGE_LAYOUT_GENERAL,
@@ -720,12 +591,8 @@ namespace cerberus
 				VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
 				accumulationRange);
 
-			ext::vkCmdTraceRaysKHR(
-				cmd,
-				&raygenRegion,
-				&missRegion,
-				&hitRegion,
-				&callableRegion,
+			rayTracing.TraceRays(
+				*m_ShaderBindingTable,
 				(uint32_t)m_ViewportResolution.x,
 				(uint32_t)m_ViewportResolution.y,
 				1);
@@ -753,15 +620,6 @@ namespace cerberus
 
 		m_ViewportResolution.x = width;
 		m_ViewportResolution.y = height;
-
-		if constexpr (ENABLE_RASTER_TEST_PATH)
-		{
-			if (m_Framebuffer.IsValid())
-			{
-				Framebuffer* framebuffer = ResourceManager::GetFramebuffer(m_Framebuffer);
-				framebuffer->Resize(width, height);
-			}
-		}
 
 		ReleaseRTImages();
 		CreateRTImages();

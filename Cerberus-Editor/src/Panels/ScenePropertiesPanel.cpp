@@ -3,6 +3,7 @@
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>
 #include "ImGui/ImGuiUI.h"
+#include "Renderer/Renderer.h"
 #include "Renderer/ResourceManager.h"
 #include "Utils/FileDialogs.h"
 #include "Utils/FileSystem.h"
@@ -320,7 +321,7 @@ namespace cerberus
 			ui::EndPropertyGrid();
 			Ref<EnvironmentMap> envMap = AssetManager::GetAsset<EnvironmentMap>(component.EnvironmentHandle);
 
-			const uint32_t environmentResolution = ResourceManager::GetRendererConfig().EnvironmentMapResolution;
+			const uint32_t environmentResolution = Renderer::GetRendererConfig().EnvironmentMapResolution;
 			uint32_t maxSampleLOD = Image::CalculateMipCount(environmentResolution, environmentResolution) - 1;
 			if (envMap && envMap->RadianceMap.IsValid())
 			{

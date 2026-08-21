@@ -5,6 +5,8 @@
 #include "Renderer/UniformBufferSet.h"
 #include "Renderer/StorageBufferSet.h"
 #include "Renderer/Image.h"
+
+#include <span>
 namespace cerberus
 {
 	class AccelerationStructure;
@@ -85,7 +87,7 @@ namespace cerberus
 		void SetStorageBuffer(const Ref<StorageBufferSet> storageBufferSet, uint32_t bindingPoint);
 		void SetImageView(const Handle<ImageView> imgView, uint32_t bindingPoint);
 		void SetImageViewArray(
-			const std::vector<Handle<ImageView>>& imageViews,
+			std::span<const Handle<ImageView>> imageViews,
 			const Handle<ImageView> fallbackImageView,
 			uint32_t bindingPoint);
 		void SetAccelerationStructure(const Handle<AccelerationStructure> as, uint32_t bindingPoint);
@@ -111,16 +113,5 @@ namespace cerberus
 		std::vector<std::vector<VkWriteDescriptorSet>> m_WriteDescriptors;
 		DescriptorAllocationLifetime m_Lifetime = DescriptorAllocationLifetime::Persistent;
 	};
-
-	/** /
-	// 0 -> Global Perisistent data (env map)
-	// 1 -> Global dynamic data (once per frame) (e.g shadow map, camera)
-	// 2 -> Global dynamic data per render pass (once per frame)
-	// 3 -> material data (once per draw)
-	ShaderDescriptorSetData descData = Shader->GetShaderDescriptotSetData(3);
-	// this function then creates or gets the layout a build the  BindGroup
-	Handle<BindGroup> BindGroup = ResourceManager::CreateBindGroup(material, descData);
-	ResourceManager::UpdateBindGroup(BindGroup);
-	/**/
 
 }

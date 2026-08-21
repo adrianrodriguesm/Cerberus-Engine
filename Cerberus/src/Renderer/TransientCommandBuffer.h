@@ -1,19 +1,21 @@
 #pragma once
 #include "Renderer/CommandPool.h"
+#include "Renderer/CommandBufferView.h"
 
 namespace cerberus
 {
+	class TransientCommandExecutor;
+
 	// Lightweight wrapper for one-shot command buffers used by uploads, copies,
 	// image transitions and other immediate setup work.
 	//
 	// Persistent frame command buffers are represented by CommandBuffer.
-	// TransientCommandBuffer borrows a renderer-owned CommandPool and frees its
-	// command buffer back to that pool after SubmitAndWait().
+	// TransientCommandBuffer borrows a renderer-owned CommandPool and returns its
+	// native command buffer to TransientCommandExecutor's recycle cache.
 	class TransientCommandBuffer
 	{
 	public:
 		TransientCommandBuffer() = default;
-		TransientCommandBuffer(VkCommandBuffer commandBuffer, CommandPool* commandPool);
 		~TransientCommandBuffer();
 
 		TransientCommandBuffer(const TransientCommandBuffer&) = delete;
@@ -25,21 +27,27 @@ namespace cerberus
 		VkCommandBuffer GetNative() const { return m_CommandBuffer; }
 		operator VkCommandBuffer() const { return GetNative(); }
 		bool IsValid() const { return m_CommandBuffer != VK_NULL_HANDLE; }
+		CommandBufferView GetRecordingView(uint32_t frameIndex = 0) const
+		{
+			return CommandBufferView(m_CommandBuffer, frameIndex);
+		}
 
-		// Ends the command buffer, submits it, waits for completion and frees it from
-		// its owning command pool.
-		void SubmitAndWait(bool waitForQueueIdle = false);
-
-		// Legacy escape hatch used by Renderer::GetCommandBuffer(). Ownership is
-		// transferred to the caller, who must later free the raw command buffer.
-		VkCommandBuffer Release();
+		// Ends the command buffer, submits it, waits for completion and recycles it.
+		void SubmitAndWait();
 
 	private:
+		friend class TransientCommandExecutor;
+
+		TransientCommandBuffer(
+			VkCommandBuffer commandBuffer,
+			CommandPool* commandPool,
+			TransientCommandExecutor* executor);
 		void Free();
 		void MoveFrom(TransientCommandBuffer&& other) noexcept;
 
 	private:
 		VkCommandBuffer m_CommandBuffer = VK_NULL_HANDLE;
 		CommandPool* m_CommandPool = nullptr;
+		TransientCommandExecutor* m_Executor = nullptr;
 	};
 }

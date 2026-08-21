@@ -64,11 +64,6 @@ namespace cerberus
 		s_DescriptorManagerData->TransientAllocator->ResetPool();
 	}
 
-	void DescriptorManager::ResetFramePools()
-	{
-		ResetTransientFramePools();
-	}
-
 	VkDescriptorSet DescriptorManager::AllocateDescriptorSet(VkDescriptorSetLayout layout, DescriptorAllocationLifetime lifetime)
 	{
 		CORE_ASSERT(s_DescriptorManagerData, "DescriptorManager is not initialized");
@@ -88,46 +83,11 @@ namespace cerberus
 		return allocator->Allocate(layout);
 	}
 
-	VkDescriptorSet DescriptorManager::AllocateDescriptorSet(VkDescriptorSetLayout layout, bool persistent)
-	{
-		return AllocateDescriptorSet(
-			layout,
-			persistent ? DescriptorAllocationLifetime::Persistent : DescriptorAllocationLifetime::Transient);
-	}
-
-	VkDescriptorSet DescriptorManager::AllocateTransientDescriptorSet(VkDescriptorSetLayout layout)
-	{
-		return AllocateDescriptorSet(layout, DescriptorAllocationLifetime::Transient);
-	}
-
-	VkDescriptorSet DescriptorManager::AllocatePersistentDescriptorSet(VkDescriptorSetLayout layout)
-	{
-		return AllocateDescriptorSet(layout, DescriptorAllocationLifetime::Persistent);
-	}
-
 	VkDescriptorSetLayout DescriptorManager::CreateDescriptorSetLayout(VkDescriptorSetLayoutCreateInfo* info)
 	{
 		CORE_ASSERT(s_DescriptorManagerData, "DescriptorManager is not initialized");
 		CORE_ASSERT(s_DescriptorManagerData->LayoutCache, "Invalid descriptor layout cache");
 		return s_DescriptorManagerData->LayoutCache->CreateDescriptorLayout(info);
-	}
-
-	DescriptorAllocator& DescriptorManager::GetTransientAllocator()
-	{
-		CORE_ASSERT(s_DescriptorManagerData && s_DescriptorManagerData->TransientAllocator, "Invalid transient descriptor allocator");
-		return *s_DescriptorManagerData->TransientAllocator;
-	}
-
-	DescriptorAllocator& DescriptorManager::GetPersistentAllocator()
-	{
-		CORE_ASSERT(s_DescriptorManagerData && s_DescriptorManagerData->PersistentAllocator, "Invalid persistent descriptor allocator");
-		return *s_DescriptorManagerData->PersistentAllocator;
-	}
-
-	DescriptorLayoutCache& DescriptorManager::GetLayoutCache()
-	{
-		CORE_ASSERT(s_DescriptorManagerData && s_DescriptorManagerData->LayoutCache, "Invalid descriptor layout cache");
-		return *s_DescriptorManagerData->LayoutCache;
 	}
 
 	bool DescriptorManager::IsInitialized()

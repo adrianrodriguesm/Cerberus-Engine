@@ -185,7 +185,7 @@ namespace cerberus
 
 	void Image::SetLayout(VkImageLayout newImageLayout, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask)
 	{
-		TransientCommandBuffer cmdBuffer = Renderer::BeginTransientCommandBuffer();
+		TransientCommandBuffer cmdBuffer = Renderer::GetTransientCommandExecutor().BeginGraphics();
 		SetLayout(cmdBuffer, newImageLayout, srcStageMask, dstStageMask);
 		cmdBuffer.SubmitAndWait();
 	}
@@ -302,10 +302,6 @@ namespace cerberus
 		Image* image = ResourceManager::GetImage(m_Properties.Image);
 		const ImageSpecification& imgSpec = image->GetSpecification();
 		VkImage vkImage = image->GetHandle();
-		/** /
-		if (m_Specification.Format == ImageFormat::DEPTH24STENCIL8)
-			aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-		/**/
 		/////////////////////////////////////////////////
 		////// Create Image View
 		/////////////////////////////////////////////////

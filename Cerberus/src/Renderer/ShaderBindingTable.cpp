@@ -103,6 +103,8 @@ namespace cerberus
 	void ShaderBindingTable::Invalidate()
 	{
 		Release();
+		CORE_ASSERT(m_Spec.RayGenPrograms.size() == 1,
+			"vkCmdTraceRaysKHR requires exactly one active ray-generation record");
 
 		const auto& rtProperties = RendererContext::GetCurrentDevice()->GetRayTracingProperties();
 
@@ -161,6 +163,28 @@ namespace cerberus
 		GPUBuffer* sbtBuffer = ResourceManager::GetBuffer(m_Buffer);
 		CORE_ASSERT(sbtBuffer, "Failed to create SBT buffer");
 
+		const VkDeviceAddress sbtAddress = sbtBuffer->GetDeviceAddress();
+		CORE_ASSERT(sbtAddress != 0, "ShaderBindingTable has an invalid device address");
+
+		m_Regions = {};
+		m_Regions.RayGen.deviceAddress = sbtAddress + rayGenOffset;
+		m_Regions.RayGen.stride = rayGenEntrySize;
+		m_Regions.RayGen.size = rayGenEntrySize;
+
+		if (!m_Spec.MissPrograms.empty())
+		{
+			m_Regions.Miss.deviceAddress = sbtAddress + missOffset;
+			m_Regions.Miss.stride = missEntrySize;
+			m_Regions.Miss.size = missEntrySize * m_Spec.MissPrograms.size();
+		}
+
+		if (!m_Spec.HitPrograms.empty())
+		{
+			m_Regions.Hit.deviceAddress = sbtAddress + hitGroupOffset;
+			m_Regions.Hit.stride = hitGroupEntrySize;
+			m_Regions.Hit.size = hitGroupEntrySize * m_Spec.HitPrograms.size();
+		}
+
 		ResourceAllocator allocator("Shader Binding Table Buffer");
 
 		uint8_t* mappedData = allocator.MapMemory<uint8_t>(sbtBuffer->Allocation);
@@ -201,6 +225,7 @@ namespace cerberus
 
 		Handle<GPUBuffer> bufferToDestroy = m_Buffer;
 		m_Buffer = Handle<GPUBuffer>{};
+		m_Regions = {};
 
 		ResourceManager::DestroyBuffer(bufferToDestroy);
 	}

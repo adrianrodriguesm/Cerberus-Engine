@@ -24,7 +24,6 @@ namespace cerberus
 	{
 		NV_CORE_TRACE("===========================");
 		NV_CORE_TRACE(" Shader Reflection");
-		//NV_CORE_TRACE(" {0}", m_AssetPath);
 		NV_CORE_TRACE("===========================");
 
 		spirv_cross::Compiler compiler(shaderData);

@@ -1,8 +1,6 @@
 #include "pch.h"
 #include "Material.h"
 #include "Renderer/RendererResources.h"
-#include "Renderer/Renderer.h"
-#include "Renderer/DescriptorManager.h"
 namespace cerberus
 {
 	static const std::string s_AlbedoColorUniform = "u_MaterialUniforms.AlbedoColor";
@@ -11,73 +9,14 @@ namespace cerberus
 	static const std::string s_RoughnessUniform = "u_MaterialUniforms.Roughness";
 	static const std::string s_EmissionUniform = "u_MaterialUniforms.Emission";
 
-	static const std::string s_AlbedoMapUniform = "u_AlbedoTex";
-	static const std::string s_NormalMapUniform = "u_NormalTex";
-	static const std::string s_MetalnessMapUniform = "u_MetallicTex";
-	static const std::string s_RoughnessMapUniform = "u_RoughnessTex";
-
-	Material::Material(const Ref<Shader>& shader, const std::string& name, bool persistent)
-		: m_Shader(shader), m_Name(name), m_WriteDescriptors(Renderer::GetRendererConfig().FramesInFlight),
-		m_DescriptorSets(Renderer::GetRendererConfig().FramesInFlight), m_Persistent(persistent)
+	Material::Material(const Ref<Shader>& shader, const std::string& name)
+		: m_Shader(shader), m_Name(name)
 	{
-		for(auto& descriptor : m_DescriptorSets)
-			descriptor = VK_NULL_HANDLE;
-		
 		AllocateStorage();
 	}
 	Material::~Material()
 	{
 		m_UniformBufferStorage.Release();
-		m_DescriptorSets.clear();
-		m_WriteDescriptors.clear();
-		m_ResidentDescriptors.clear();
-		m_Textures.clear();
-	}
-
-	void Material::UpdateForRender(const std::vector<std::vector<std::vector<VkWriteDescriptorSet>>>& uniformBufferWriteDescriptors)
-	{
-		VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-		uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
-		/**/
-		// We can't cache the results atm because we might render the same material 
-		// in different viewports, and so we can't bind to the same uniform buffers
-		m_WriteDescriptors[frameIndex].clear();
-		/**/
-		/////////////////////////////////////
-		// Get VkWriteDescriptor of each type
-		/////////////////////////////////////
-		// Uniform Buffer
-		if (!uniformBufferWriteDescriptors.empty())
-		{
-			// Update VkWriteDescripor List
-			for (auto& writeDescriptor : uniformBufferWriteDescriptors[frameIndex][0])
-				m_WriteDescriptors[frameIndex].push_back(writeDescriptor); 
-		}
-		// Resources
-		for (auto&& [binding, pendingDescriptor] : m_ResidentDescriptors)
-		{
-			// Update VkWriteDescripor List
-			m_WriteDescriptors[frameIndex].push_back(pendingDescriptor->WriteDescriptorSet);
-		}
-
-		auto& descriptorSetLayouts = m_Shader->GetDescriptorSetLayouts();
-		//const bool persistent = m_Persistent;
-		const bool persistent = false;
-		if ((!persistent || m_DescriptorSets[frameIndex] == VK_NULL_HANDLE) && descriptorSetLayouts.size())
-		{
-			VkDescriptorSetLayout descriptorSetLayout = descriptorSetLayouts[0];
-			m_DescriptorSets[frameIndex] = DescriptorManager::AllocateDescriptorSet(descriptorSetLayout, persistent);
-
-			CORE_ASSERT(m_DescriptorSets[frameIndex], "Invalid descriptor set created!");
-			//m_DescriptorSets[frameIndex] = descriptorSet;
-			for (auto& writeDescriptor : m_WriteDescriptors[frameIndex])
-				writeDescriptor.dstSet = m_DescriptorSets[frameIndex];
-
-			vkUpdateDescriptorSets(vulkanDevice, (uint32_t)m_WriteDescriptors[frameIndex].size(), m_WriteDescriptors[frameIndex].data(), 0, nullptr);
-		}
-
-
-
 	}
 
 	void Material::Set(const std::string& name, float value)
@@ -129,51 +68,6 @@ namespace cerberus
 		Set<glm::mat4>(name, value);
 	}
 
-	void Material::Set(const std::string& name, const Ref<Image>& image)
-	{
-#if OLD_RENDERER
-		const ShaderResourceDeclaration* resource = FindResourceDeclaration(name);
-		CORE_ASSERT(resource, "Resource does not exist!");
-
-		uint32_t binding = resource->GetRegister();
-		// Texture is already set
-		if (binding < m_Images.size() && m_Images[binding] && image->GetHash() == m_Images[binding]->GetHash())
-			return;
-
-		if (binding >= m_Images.size())
-			m_Images.resize(binding + 1);
-
-		m_Images[binding] = image;
-
-		const VkWriteDescriptorSet* writeDescriptorSet = m_Shader->GetWriteDescriptorSet(name, 0);
-		CORE_ASSERT(writeDescriptorSet, "Descriptor set not found!");
-		m_ResidentDescriptors[binding] = std::make_shared<PendingDescriptor>(PendingDescriptor{ PendingDescriptorType::Image2D, *writeDescriptorSet, nullptr, image });
-		//image->UpdateDescriptor();
-		m_ResidentDescriptors[binding]->WriteDescriptorSet.pImageInfo = &image->GetVulkanDescriptorInfo();
-#endif
-	}
-	void Material::Set(const std::string& name, const Handle<TextureCube>& texture)
-	{
-#if OLD_RENDERER
-		const ShaderResourceDeclaration* resource = FindResourceDeclaration(name);
-		CORE_ASSERT(resource, "Resource does not exist!");
-
-		uint32_t binding = resource->GetRegister();
-		// Texture is already set
-		if (binding < m_Textures.size() && m_Textures[binding] && texture->GetHash() == m_Textures[binding]->GetHash())
-			return;
-
-		if (binding >= m_Textures.size())
-			m_Textures.resize(binding + 1);
-
-		m_Textures[binding] = texture;
-
-		const VkWriteDescriptorSet* writeDescriptorSet = m_Shader->GetWriteDescriptorSet(name, 0);
-		CORE_ASSERT(writeDescriptorSet, "Descriptor set not found!");
-		m_ResidentDescriptors[binding] = std::make_shared<PendingDescriptor>(PendingDescriptor{ PendingDescriptorType::TextureCube, *writeDescriptorSet,  std::static_pointer_cast<Texture>(texture) });
-		m_ResidentDescriptors[binding]->WriteDescriptorSet.pImageInfo = &texture->GetVulkanDescriptorInfo();
-#endif
-	}
 	void Material::AllocateStorage()
 	{
 		const auto& shaderBuffers = m_Shader->GetShaderBuffers();
@@ -202,16 +96,6 @@ namespace cerberus
 				return nullptr;
 
 			return &buffer.Uniforms.at(name);
-		}
-		return nullptr;
-	}
-	const ShaderResourceDeclaration* Material::FindResourceDeclaration(const std::string& name)
-	{
-		const auto& shaderResources = m_Shader->GetResources();
-		for (const auto& [n, resource] : shaderResources)
-		{
-			if (resource.GetName() == name)
-				return &resource;
 		}
 		return nullptr;
 	}
@@ -250,16 +134,6 @@ namespace cerberus
 	glm::mat4& Material::GetMatrix4(const std::string& name)
 	{
 		return Get<glm::mat4>(name);
-	}
-
-	Ref<TextureCube> Material::GetTextureCube(const std::string& name)
-	{
-		return GetResource<TextureCube>(name);
-	}
-
-	Ref<TextureCube> Material::TryGetTextureCube(const std::string& name)
-	{
-		return TryGetResource<TextureCube>(name);
 	}
 
 	MaterialAsset::MaterialAsset()

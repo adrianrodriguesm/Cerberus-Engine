@@ -375,12 +375,8 @@ namespace cerberus
 					slc.EnvironmentHandle = AssetManager::IsAssetHandleValid(assetHandle)
 						? assetHandle
 						: AssetHandle(0);
-					// Intensity was named Multiplier in early scene files. Keep that
-					// compatibility while always writing the canonical Intensity key.
 					if (skyLightComponent["Intensity"])
 						slc.Intensity = skyLightComponent["Intensity"].as<float>();
-					else if (skyLightComponent["Multiplier"])
-						slc.Intensity = skyLightComponent["Multiplier"].as<float>();
 
 					if (skyLightComponent["SampleLOD"])
 						slc.SampleLOD = skyLightComponent["SampleLOD"].as<uint32_t>();
@@ -392,8 +388,6 @@ namespace cerberus
 					auto& dlc = deserializedEntity.AddComponent<DirectionalLightComponent>();
 					if (directionalLightComponent["Intensity"])
 						dlc.Intensity = directionalLightComponent["Intensity"].as<float>();
-					else if (directionalLightComponent["Multiplier"])
-						dlc.Intensity = directionalLightComponent["Multiplier"].as<float>();
 
 					if (directionalLightComponent["Radiance"])
 						dlc.Radiance = directionalLightComponent["Radiance"].as<glm::vec3>();

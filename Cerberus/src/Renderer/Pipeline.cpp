@@ -190,9 +190,7 @@ namespace cerberus
 		VkPipelineViewportStateCreateInfo pipelineViewportCreateInfo = {};
 		pipelineViewportCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 		pipelineViewportCreateInfo.scissorCount = 1;
-		//pipelineViewportCreateInfo.pScissors = &scissor;
 		pipelineViewportCreateInfo.viewportCount = 1;
-		//pipelineViewportCreateInfo.pViewports = &viewport;
 
 		// -- DYNAMIC STATE --
 		// Dynamics states to enable (e.g resize of the screen)
@@ -209,7 +207,6 @@ namespace cerberus
 		dynamicStateCreationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
 		dynamicStateCreationInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStateEnables.size());
 		dynamicStateCreationInfo.pDynamicStates = dynamicStateEnables.data();
-		/**/
 		// -- RASTERIZER -- (Convert the primitive into individual fragments)
 		VkPipelineRasterizationStateCreateInfo pipelineRasterizerCreateInfo = {};
 		pipelineRasterizerCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -415,33 +412,15 @@ namespace cerberus
 
 		VkDevice vulkanDevice = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 
-		// TODO: get rid of this....
-		// Push constant structure for the ray tracer
-		struct PushConstantRay
-		{
-			glm::vec4  ClearColor;
-			glm::vec3  LightPosition;
-			float LightIntensity;
-			int   LightType;
-		};
-
-		// -- PUSH CONSTANT --
-		//const std::vector<VkPushConstantRange>& pushConstantRanges = m_Specification.Shader->GetVulkanPushConstantRanges();
-		// Push constant: we want to be able to update constants used by the shaders
-		VkPushConstantRange pushConstant{ VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR,
-										 0, sizeof(PushConstantRay) };
-
-
 		// -- PIPELINE LAYOUT --
 		auto& descriptorSetLayout = m_Specification.Shader->GetDescriptorSetLayouts();
+		const std::vector<VkPushConstantRange>& pushConstantRanges = m_Specification.Shader->GetVulkanPushConstantRanges();
 		VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {};
 		pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		pipelineLayoutCreateInfo.setLayoutCount = (uint32_t)descriptorSetLayout.size();
 		pipelineLayoutCreateInfo.pSetLayouts = descriptorSetLayout.data();
-		//pipelineLayoutCreateInfo.pushConstantRangeCount = (uint32_t)pushConstantRanges.size();
-		//pipelineLayoutCreateInfo.pPushConstantRanges = pushConstantRanges.data();
-		pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
-		pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstant;
+		pipelineLayoutCreateInfo.pushConstantRangeCount = static_cast<uint32_t>(pushConstantRanges.size());
+		pipelineLayoutCreateInfo.pPushConstantRanges = pushConstantRanges.data();
 
 
 		VK_CHECK_RESULT(vkCreatePipelineLayout(vulkanDevice, &pipelineLayoutCreateInfo, nullptr, &m_rtPipelineLayout));

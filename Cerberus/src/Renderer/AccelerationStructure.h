@@ -3,6 +3,8 @@
 #include "Renderer/CommandBuffer.h"
 #include "Renderer/GPUBuffer.h"
 #include "Core/Handle.h"
+
+#include <span>
 namespace cerberus
 {
 	enum class AccelerationStructureType
@@ -88,21 +90,21 @@ namespace cerberus
 
 	private:
 		bool HasFlag(VkFlags item, VkFlags flag) { return (item & flag) == flag; }
-		VmaAllocation CreateInstanceBuffer(const std::vector<VkAccelerationStructureInstanceKHR>& m_TLASInstances, ResourceAllocator& allocator, VkBuffer& outInstanceBuffer);
+		VmaAllocation CreateInstanceBuffer(std::span<const VkAccelerationStructureInstanceKHR> tlasInstances, ResourceAllocator& allocator, VkBuffer& outInstanceBuffer);
 		//--------------------------------------------------------------------------------------------------
 		// Destroy all the non-compacted acceleration structures
-		void DestroyNonCompacted(std::vector<uint32_t> indices, std::vector<BuildAccelerationStructure>& buildAs);
+		void DestroyNonCompacted(std::span<const uint32_t> indices, std::span<BuildAccelerationStructure> buildAs);
 		//--------------------------------------------------------------------------------------------------
 		// Create and replace a new acceleration structure and buffer based on the size retrieved by the Query.
-		void CompactBlas(VkCommandBuffer cmdBuf, std::vector<uint32_t> indices, std::vector<BuildAccelerationStructure>& buildAs, VkQueryPool queryPool);
+		void CompactBlas(VkCommandBuffer cmdBuf, std::span<const uint32_t> indices, std::span<BuildAccelerationStructure> buildAs, VkQueryPool queryPool);
 		//--------------------------------------------------------------------------------------------------
 		// Creating the bottom level acceleration structure for all indices of `buildAs` vector.
 		// The array of BuildAccelerationStructure was created in buildBlas and the vector of
 		// indices limits the number of BLAS to create at once. This limits the amount of
 		// memory needed when compacting the BLAS.
 		void CreateBlas(VkCommandBuffer              cmdBuf,
-			std::vector<uint32_t>                    indices,
-			std::vector<BuildAccelerationStructure>& buildAs,
+			std::span<const uint32_t>                 indices,
+			std::span<BuildAccelerationStructure>     buildAs,
 			VkDeviceAddress                          scratchAddress,
 			VkQueryPool                              queryPool);
 		//--------------------------------------------------------------------------------------------------

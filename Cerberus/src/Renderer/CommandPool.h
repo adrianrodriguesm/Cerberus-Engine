@@ -1,5 +1,7 @@
 #pragma once
 
+#include <span>
+
 namespace cerberus
 {
 	enum class CommandPoolQueueType
@@ -29,7 +31,7 @@ namespace cerberus
 		std::vector<VkCommandBuffer> AllocateCommandBuffers(uint32_t count, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY) const;
 
 		void FreeCommandBuffer(VkCommandBuffer commandBuffer) const;
-		void FreeCommandBuffers(const std::vector<VkCommandBuffer>& commandBuffers) const;
+		void FreeCommandBuffers(std::span<const VkCommandBuffer> commandBuffers) const;
 		void FreeCommandBuffers(uint32_t count, const VkCommandBuffer* commandBuffers) const;
 
 		VkCommandPool GetVulkanCommandPool() const { return m_CommandPool; }

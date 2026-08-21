@@ -15,6 +15,14 @@ namespace cerberus
 		std::vector<SBTEntry> RayGenPrograms, MissPrograms, HitPrograms;
 	};
 
+	struct ShaderBindingTableRegions
+	{
+		VkStridedDeviceAddressRegionKHR RayGen{};
+		VkStridedDeviceAddressRegionKHR Miss{};
+		VkStridedDeviceAddressRegionKHR Hit{};
+		VkStridedDeviceAddressRegionKHR Callable{};
+	};
+
 	class ShaderBindingTable final
 	{
 	public:
@@ -22,6 +30,7 @@ namespace cerberus
 		~ShaderBindingTable();
 
 		Handle<GPUBuffer> GetGPUBuffer() const { return m_Buffer; }
+		const ShaderBindingTableRegions& GetRegions() const { return m_Regions; }
 	private:
 		void Invalidate();
 		void Release();
@@ -29,6 +38,7 @@ namespace cerberus
 	private:
 		ShaderBindingTableSpecification m_Spec;
 		Handle<GPUBuffer> m_Buffer;
+		ShaderBindingTableRegions m_Regions{};
 	};
 
 }

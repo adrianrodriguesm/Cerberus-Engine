@@ -73,10 +73,15 @@ namespace cerberus
 		allocInfo.descriptorPool = m_DescriptorPools[bufferIndex];
 		VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
 
-		VkDescriptorSet descriptorSet;
-		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet));
+		VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+		const VkResult allocationResult = vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet);
+		if (allocationResult != VK_SUCCESS)
+		{
+			VulkanCheckResult(allocationResult);
+			return VK_NULL_HANDLE;
+		}
 
-		m_AllocationCount[bufferIndex]++;
+		++m_AllocationCount[bufferIndex];
 
 		return descriptorSet;
 	}
@@ -188,68 +193,5 @@ namespace cerberus
 		}
 
 		return result;
-	}
-
-	DescriptorLibrary::DescriptorLibrary()
-	{
-		m_LibraryData.resize(Renderer::GetRendererConfig().FramesInFlight);
-	}
-	DescriptorLibrary::~DescriptorLibrary()
-	{
-		m_LibraryData.clear();
-	}
-
-	void DescriptorLibrary::AddDescriptor(uint32_t shaderHash, uint32_t set, VkDescriptorSet& descriptor)
-	{
-		auto& shaderMap = m_LibraryData[Renderer::GetCurrentFrameIndex()];
-
-		if (shaderMap.find(shaderHash) == shaderMap.end())
-		{
-			std::vector<VkDescriptorSet> descriptorSets(set + 1);
-			descriptorSets[set] = descriptor;
-			shaderMap[shaderHash] = descriptorSets;
-		}
-		else
-		{
-			auto& descriptorSets = shaderMap[shaderHash];
-
-			if (descriptorSets.size() <= set)
-				descriptorSets.resize(set + 1);
-
-			descriptorSets[set] = descriptor;
-		}
-	}
-	VkDescriptorSet DescriptorLibrary::GetDescriptor(uint32_t shaderHash, uint32_t set)
-	{
-		auto& shaderMap = m_LibraryData[Renderer::GetCurrentFrameIndex()];
-
-		CORE_ASSERT(shaderMap.find(shaderHash) != shaderMap.end(), "Shader not found!");
-		CORE_ASSERT(shaderMap[shaderHash].size() < set, "Set doen not exist!");
-		
-		return shaderMap[shaderHash][set];
-	}
-
-	void DescriptorBuilder::BeginBuilding(DescriptorAllocator* allocator, Ref<Shader> shader, uint32_t set)
-	{
-		m_WriteDescriptors.clear();
-		m_Allocator = allocator;
-		m_Shader = shader;
-		m_Set = set;
-	}
-	void DescriptorBuilder::SubmitWriteDescriptor(VkWriteDescriptorSet& writeDescriptor)
-	{
-		m_WriteDescriptors.push_back(writeDescriptor);
-	}
-	void DescriptorBuilder::EndBuilding(VkDescriptorSet& outDescriptor, bool allocate)
-	{
-		if (allocate)
-			outDescriptor = m_Allocator->Allocate(m_Shader->GetDescriptorSetLayout(m_Set));
-
-		for (auto& writeDescriptor : m_WriteDescriptors)
-			writeDescriptor.dstSet = outDescriptor;
-		
-
-		VkDevice device = RendererContext::GetCurrentDevice()->GetVulkanDevice();
-		vkUpdateDescriptorSets(device, (uint32_t)m_WriteDescriptors.size(), m_WriteDescriptors.data(), 0, nullptr);
 	}
 }

@@ -1,4 +1,6 @@
 #pragma once
+#include <memory>
+
 // Ignored the warnings inside the library
 #pragma warning(push, 0)
 #include <spdlog/spdlog.h>

@@ -9,7 +9,6 @@ namespace cerberus
 		StagingBuffer(uint32_t size, bool hostToDevice = true);
 		~StagingBuffer();
 		void CopyToBuffer(Handle<GPUBuffer> buffer, VkDeviceSize offset, VkDeviceSize size, const void* data);
-		//void CopyToImage();
 
 	private:
 		Handle<GPUBuffer> m_GPUBuffer;

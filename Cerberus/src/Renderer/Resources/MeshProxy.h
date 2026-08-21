@@ -4,6 +4,8 @@
 #include "Core/Handle.h"
 #include "Math/Matrix.h"
 #include "Renderer/Resources/MaterialProxy.h"
+
+#include <span>
 namespace cerberus
 {
 	class AccelerationStructure;
@@ -16,7 +18,6 @@ namespace cerberus
 		uint32_t MaterialIndex;
 		glm::mat4 Transform = math::MatFactory::CreateIdentityMat4();
 		Handle<AccelerationStructure> BLAS;
-		//std::vector<Handle<MeshInstanceProxy>> Instances;
 		SubmeshSourceProxy() = default;
 		SubmeshSourceProxy(uint32_t baseVertex, uint32_t baseIndex, uint32_t indexCount)
 			: BaseVertex(baseVertex), BaseIndex(baseIndex), IndexCount(indexCount)
@@ -40,7 +41,7 @@ namespace cerberus
 			other.IndexBuffer = nullptr;
 		}
 
-		MeshSourceProxy(const void* vertexData, uint32_t vertexSize, const void* indexData, uint32_t indexSize, const std::vector<Submesh> submeshes)
+		MeshSourceProxy(const void* vertexData, uint32_t vertexSize, const void* indexData, uint32_t indexSize, std::span<const Submesh> submeshes)
 		{
 			VertexBuffer = new cerberus::VertexBuffer(vertexData, vertexSize);
 			IndexBuffer = new cerberus::IndexBuffer(indexData, indexSize);

@@ -2,9 +2,12 @@
 #include "ResourceManager.h"
 #include "ResourceAllocator.h"
 #include "Core/Pool.h"
+#include "Renderer/ComputePipeline.h"
 #include "Renderer/DescriptorManager.h"
 #include "Renderer/DeferredResourceDeletionQueue.h"
 #include "Renderer/TextureAsset.h"
+#include "Renderer/Renderer.h"
+#include "Renderer/RenderQueueManager.h"
 namespace cerberus
 {
 	struct ResourceManagerData
@@ -23,6 +26,7 @@ namespace cerberus
 		Pool<RenderPass> RenderPasses;
 		Pool<Framebuffer> Framebuffers;
 		Pool<GraphicsPipeline> GraphicsPipelines;
+		Pool<ComputePipeline> ComputePipelines;
 		Pool<RayTracingPipeline> RayTracingPipelines;
 
 	};
@@ -46,6 +50,7 @@ namespace cerberus
 		s_RMData->RenderPasses.Clear();
 
 		s_RMData->GraphicsPipelines.Clear();
+		s_RMData->ComputePipelines.Clear();
 		s_RMData->RayTracingPipelines.Clear();
 
 		s_RMData->BindGroups.Clear();
@@ -91,13 +96,6 @@ namespace cerberus
 		return s_RMData->AccelerationStructures.Get(asHandle);
 	}
 
-	AccelerationStructure* ResourceManager::GetAccelerationStructureError(const Handle<AccelerationStructure> asHandle)
-	{
-		// Alias for GetAccelerationStructure, kept for binary compatibility with
-		// compiled objects that reference this symbol name.
-		return GetAccelerationStructure(asHandle);
-	}
-
 	void ResourceManager::DestroyAccelerationStructure(const Handle<AccelerationStructure> handle)
 	{
 
@@ -120,7 +118,7 @@ namespace cerberus
 		return s_RMData->GPUBuffers.Get(buffer);
 	}
 
-	Handle<MeshSourceProxy> ResourceManager::CreateMeshSourceProxy(const void* vertexData, uint32_t vertexSize, const void* indexData, uint32_t indexSize, const std::vector<Submesh>& submeshes)
+	Handle<MeshSourceProxy> ResourceManager::CreateMeshSourceProxy(const void* vertexData, uint32_t vertexSize, const void* indexData, uint32_t indexSize, std::span<const Submesh> submeshes)
 	{
 		return s_RMData->MeshSourceProxy.Emplace(vertexData, vertexSize, indexData, indexSize, submeshes);
 	}
@@ -180,42 +178,19 @@ namespace cerberus
 		return s_RMData->BindGroups.Get(handle);
 	}
 
-	const RendererConfiguration& ResourceManager::GetRendererConfig()
-	{
-		static RendererConfiguration config;
-		return config;
-	}
-
 	uint32_t ResourceManager::GetFramesInFlight()
 	{
-		return GetRendererConfig().FramesInFlight;
+		return Renderer::GetRendererConfig().FramesInFlight;
 	}
 
 	VkDescriptorSet ResourceManager::AllocateDescriptorSet(Handle<BindGroupLayout> handle, DescriptorAllocationLifetime lifetime)
 	{
 		BindGroupLayout* bindGroupLayout = ResourceManager::GetBindGroupLayout(handle);
 		if (!bindGroupLayout)
-			return nullptr;
+			return VK_NULL_HANDLE;
 
 		VkDescriptorSetLayout vkLayout = bindGroupLayout->GetVulkanDescriptorSetLayout();
 		return DescriptorManager::AllocateDescriptorSet(vkLayout, lifetime);
-	}
-
-	VkDescriptorSet ResourceManager::AllocateDescriptorSet(Handle<BindGroupLayout> handle, bool persistent /* = true */)
-	{
-		return AllocateDescriptorSet(
-			handle,
-			persistent ? DescriptorAllocationLifetime::Persistent : DescriptorAllocationLifetime::Transient);
-	}
-
-	VkDescriptorSet ResourceManager::AllocateTransientDescriptorSet(Handle<BindGroupLayout> handle)
-	{
-		return AllocateDescriptorSet(handle, DescriptorAllocationLifetime::Transient);
-	}
-
-	VkDescriptorSet ResourceManager::AllocatePersistentDescriptorSet(Handle<BindGroupLayout> handle)
-	{
-		return AllocateDescriptorSet(handle, DescriptorAllocationLifetime::Persistent);
 	}
 
 	Handle<Texture2D> ResourceManager::CreateTexture2D(const Ref<TextureAsset>& textureAsset, TextureColorSpace colorSpace)
@@ -337,6 +312,32 @@ namespace cerberus
 		return s_RMData->GraphicsPipelines.Get(handle);
 	}
 
+	Handle<ComputePipeline> ResourceManager::CreateComputePipeline(const Ref<Shader>& computeShader)
+	{
+		CORE_ASSERT(computeShader, "Cannot create a compute pipeline without a shader");
+
+		const Handle<ComputePipeline> handle = s_RMData->ComputePipelines.Emplace(computeShader);
+		RenderQueueManager::Submit([handle]()
+		{
+			// The generational lookup makes queued creation safe if the caller destroys
+			// the resource before this command reaches the render queue.
+			if (ComputePipeline* pipeline = ResourceManager::GetComputePipeline(handle))
+				pipeline->Invalidate();
+		});
+
+		return handle;
+	}
+
+	void ResourceManager::DestroyComputePipeline(const Handle<ComputePipeline> handle)
+	{
+		s_RMData->ComputePipelines.Remove(handle);
+	}
+
+	ComputePipeline* ResourceManager::GetComputePipeline(const Handle<ComputePipeline> handle)
+	{
+		return s_RMData->ComputePipelines.Get(handle);
+	}
+
 	Handle<RayTracingPipeline> ResourceManager::CreateRayTracingPipeline(const PipelineSpecification& pipelineSpec)
 	{
 		return s_RMData->RayTracingPipelines.Emplace(pipelineSpec);
@@ -352,9 +353,5 @@ namespace cerberus
 		return s_RMData->RayTracingPipelines.Get(handle);
 	}
 
-	void ResourceManager::ResetDescriptorPool()
-	{
-		DescriptorManager::ResetTransientFramePools();
-	}
 }
 

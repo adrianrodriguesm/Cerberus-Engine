@@ -174,7 +174,7 @@ namespace cerberus
 		BindGroupLayout* layout = ResourceManager::GetBindGroupLayout(m_BindGroupLayout);
 		const auto& writeDescriptors = layout->m_WriteDescriptors;
 
-		uint32_t framesInFlight = ResourceManager::GetRendererConfig().FramesInFlight;
+		uint32_t framesInFlight = ResourceManager::GetFramesInFlight();
 
 		m_WriteDescriptors = writeDescriptors;
 		m_Descriptors.resize(framesInFlight);
@@ -198,19 +198,6 @@ namespace cerberus
 			}
 		}
 
-		/** /
-		for (VkWriteDescriptorSet writeDescriptor : writeDescriptors[0])
-		{
-
-			std::vector<VkWriteDescriptorSet> entry;
-			entry.reserve(framesInFlight);
-
-			for (uint32_t frameIndex = 0; frameIndex < framesInFlight; frameIndex++)
-				entry.push_back(writeDescriptor);
-
-			m_WriteDescriptors[writeDescriptor.dstBinding] = entry;
-		}
-		/**/
 		if (m_Lifetime == DescriptorAllocationLifetime::Persistent)
 		{
 			for (uint32_t frameIndex = 0; frameIndex < framesInFlight; frameIndex++)
@@ -232,7 +219,7 @@ namespace cerberus
 
 	void BindGroup::Update()
 	{
-		uint32_t framesInFlight = ResourceManager::GetRendererConfig().FramesInFlight;
+		uint32_t framesInFlight = ResourceManager::GetFramesInFlight();
 		for (uint32_t frameIndex = 0; frameIndex < framesInFlight; frameIndex++)
 		{
 			Update(frameIndex);
@@ -249,7 +236,7 @@ namespace cerberus
 	{
 		CORE_ASSERT(uboSet, "BindGroup::SetUniformBuffer received null UniformBufferSet");
 
-		uint32_t framesInFlight = ResourceManager::GetRendererConfig().FramesInFlight;
+		uint32_t framesInFlight = ResourceManager::GetFramesInFlight();
 
 		bool foundBinding = false;
 
@@ -285,7 +272,7 @@ namespace cerberus
 	{
 		CORE_ASSERT(storageBufferSet, "BindGroup::SetStorageBuffer received null StorageBufferSet");
 
-		uint32_t framesInFlight = ResourceManager::GetRendererConfig().FramesInFlight;
+		uint32_t framesInFlight = ResourceManager::GetFramesInFlight();
 
 		bool foundBinding = false;
 
@@ -332,7 +319,7 @@ namespace cerberus
 			"BindGroup::SetImageView imageView is VK_NULL_HANDLE"
 		);
 
-		uint32_t framesInFlight = ResourceManager::GetRendererConfig().FramesInFlight;
+		uint32_t framesInFlight = ResourceManager::GetFramesInFlight();
 
 		bool foundBinding = false;
 
@@ -364,7 +351,7 @@ namespace cerberus
 	}
 
 	void BindGroup::SetImageViewArray(
-		const std::vector<Handle<ImageView>>& imageViewHandles,
+		std::span<const Handle<ImageView>> imageViewHandles,
 		const Handle<ImageView> fallbackImageViewHandle,
 		uint32_t bindingPoint)
 	{
@@ -375,7 +362,7 @@ namespace cerberus
 		const VkDescriptorImageInfo fallbackDescriptor = fallbackImageView->GetImageDescriptorInfo();
 		CORE_ASSERT(fallbackDescriptor.imageView != VK_NULL_HANDLE, "BindGroup::SetImageViewArray fallback imageView is VK_NULL_HANDLE");
 
-		const uint32_t framesInFlight = ResourceManager::GetRendererConfig().FramesInFlight;
+		const uint32_t framesInFlight = ResourceManager::GetFramesInFlight();
 		bool foundBinding = false;
 
 		for (uint32_t frameIndex = 0; frameIndex < framesInFlight; frameIndex++)
@@ -431,7 +418,7 @@ namespace cerberus
 
 		CORE_ASSERT(vulkanAS != VK_NULL_HANDLE, "BindGroup::SetAccelerationStructure received VK_NULL_HANDLE acceleration structure");
 
-		uint32_t framesInFlight = ResourceManager::GetRendererConfig().FramesInFlight;
+		uint32_t framesInFlight = ResourceManager::GetFramesInFlight();
 
 		bool foundBinding = false;
 
@@ -481,7 +468,6 @@ namespace cerberus
 			m_Descriptors[frameIndex] = ResourceManager::AllocateDescriptorSet(m_BindGroupLayout, m_Lifetime);
 
 			CORE_ASSERT(m_Descriptors[frameIndex], "Invalid descriptor set created!");
-			//m_DescriptorSets[frameIndex] = descriptorSet;
 			for (auto& writeDescriptor : m_WriteDescriptors[frameIndex])
 			{
 				writeDescriptor.dstSet = m_Descriptors[frameIndex];

@@ -75,6 +75,12 @@ namespace cerberus
 		vkGetPhysicalDeviceQueueFamilyProperties(m_PhysicalDevice, &queueFamilyCount, m_QueueFamilyProperties.data());
 		int requestedQueueTypes = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
 		m_QueueFamilyIndices = GetQueueFamilyIndices(requestedQueueTypes);
+		CORE_ASSERT(m_QueueFamilyIndices.Graphics >= 0, "The selected GPU has no graphics queue family");
+		const bool graphicsQueueSupportsCompute = m_QueueFamilyIndices.Graphics >= 0
+			&& (m_QueueFamilyProperties[m_QueueFamilyIndices.Graphics].queueFlags & VK_QUEUE_COMPUTE_BIT) != 0;
+		CORE_ASSERT(
+			graphicsQueueSupportsCompute,
+			"Cerberus requires a graphics queue family that also supports compute until cross-queue ownership tracking is implemented");
 
 		static constexpr float defaultQueuePriority = 1.0f;
 
@@ -142,6 +148,25 @@ namespace cerberus
 
 		QueueFamilyIndices indices;
 
+		// Immediate graphics and compute commands share one queue before the engine
+		// has explicit cross-queue ownership tracking. Prefer a family that supports
+		// every operation required by that path.
+		if (flags & VK_QUEUE_GRAPHICS_BIT)
+		{
+			VkQueueFlags requiredFlags = VK_QUEUE_GRAPHICS_BIT;
+			if (flags & VK_QUEUE_COMPUTE_BIT)
+				requiredFlags |= VK_QUEUE_COMPUTE_BIT;
+
+			for (uint32_t i = 0; i < m_QueueFamilyProperties.size(); i++)
+			{
+				if ((m_QueueFamilyProperties[i].queueFlags & requiredFlags) == requiredFlags)
+				{
+					indices.Graphics = i;
+					break;
+				}
+			}
+		}
+
 		// Dedicated queue for compute
 		// Try to find a queue family index that supports compute but not graphics
 		if (flags & VK_QUEUE_COMPUTE_BIT)
@@ -187,7 +212,7 @@ namespace cerberus
 					indices.Compute = i;
 			}
 
-			if (flags & VK_QUEUE_GRAPHICS_BIT)
+			if ((flags & VK_QUEUE_GRAPHICS_BIT) && indices.Graphics == -1)
 			{
 				if (m_QueueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
 					indices.Graphics = i;
@@ -286,14 +311,12 @@ namespace cerberus
 		enabledAccelerationStructureFeatures.accelerationStructure = VK_TRUE;
 		enabledAccelerationStructureFeatures.pNext = &enabledRayTracingPipelineFeatures;
 
-		/**/
 		// Provided by VK_EXT_host_query_reset
 		VkPhysicalDeviceHostQueryResetFeatures enabledHostQueryResetFeatures{};
 		enabledHostQueryResetFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES;
 		enabledHostQueryResetFeatures.hostQueryReset = VK_TRUE;
 		enabledHostQueryResetFeatures.pNext = &enabledAccelerationStructureFeatures;
 
-		/**/
 		void* deviceCreatepNextChain = &enabledHostQueryResetFeatures;
 
 		physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;

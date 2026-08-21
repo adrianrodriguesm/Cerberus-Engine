@@ -63,7 +63,7 @@ namespace cerberus
 		FreeCommandBuffers(1, &commandBuffer);
 	}
 
-	void CommandPool::FreeCommandBuffers(const std::vector<VkCommandBuffer>& commandBuffers) const
+	void CommandPool::FreeCommandBuffers(std::span<const VkCommandBuffer> commandBuffers) const
 	{
 		if (commandBuffers.empty())
 			return;

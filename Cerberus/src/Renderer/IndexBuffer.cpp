@@ -47,7 +47,7 @@ namespace cerberus
 
 		// Get a copy command buffer to tranfer the data 
 		// from the staging buffer to the vertex buffer
-		TransientCommandBuffer copyCmd = Renderer::BeginTransientCommandBuffer();
+		TransientCommandBuffer copyCmd = Renderer::GetTransientCommandExecutor().BeginGraphics();
 
 		// Region of data to copy from and to
 		VkBufferCopy copyRegion = {};

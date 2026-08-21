@@ -24,18 +24,8 @@ namespace cerberus
 		// and before any transient descriptor set is allocated or command buffer is recorded for that frame.
 		static void ResetTransientFramePools();
 
-		// Backwards-compatible alias. Prefer ResetTransientFramePools() in new code.
-		static void ResetFramePools();
-
 		static VkDescriptorSet AllocateDescriptorSet(VkDescriptorSetLayout layout, DescriptorAllocationLifetime lifetime);
-		static VkDescriptorSet AllocateDescriptorSet(VkDescriptorSetLayout layout, bool persistent = false);
-		static VkDescriptorSet AllocateTransientDescriptorSet(VkDescriptorSetLayout layout);
-		static VkDescriptorSet AllocatePersistentDescriptorSet(VkDescriptorSetLayout layout);
 		static VkDescriptorSetLayout CreateDescriptorSetLayout(VkDescriptorSetLayoutCreateInfo* info);
-
-		static DescriptorAllocator& GetTransientAllocator();
-		static DescriptorAllocator& GetPersistentAllocator();
-		static DescriptorLayoutCache& GetLayoutCache();
 
 		static bool IsInitialized();
 	};

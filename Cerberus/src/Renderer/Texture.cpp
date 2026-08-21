@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "Texture.h"
 #include "Renderer/Renderer.h"
-#include "Renderer/ComputePipeline.h"
+#include "Renderer/ComputeCommandList.h"
 #include "Renderer/ResourceManager.h"
 #include "Renderer/TextureAsset.h"
 #include "Renderer/RendererResources.h"
@@ -249,7 +249,7 @@ namespace cerberus
 		if (!m_ImageData.Data)
 		{
 			CORE_ASSERT(m_Properties.Storage, "Texture2D without source data must be a storage texture");
-			TransientCommandBuffer layoutCommandBuffer = Renderer::BeginTransientCommandBuffer();
+			TransientCommandBuffer layoutCommandBuffer = Renderer::GetTransientCommandExecutor().BeginGraphics();
 			VkImageSubresourceRange subresourceRange{};
 			subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			subresourceRange.levelCount = imageSpec.Mips;
@@ -290,7 +290,7 @@ namespace cerberus
 		allocator.UnmapMemory(stagingBufferAllocation);
 
 		// Get Copy/Transfer Command Buffer
-		TransientCommandBuffer copyCommandBuffer = Renderer::BeginTransientCommandBuffer();
+		TransientCommandBuffer copyCommandBuffer = Renderer::GetTransientCommandExecutor().BeginGraphics();
 
 		// Transition the texture image layout to transfer target, so we can safely copy our buffer data to it.
 		// Insert a memory dependency at the proper pipeline stages that will execute the image layout transition 
@@ -364,7 +364,7 @@ namespace cerberus
 		uint32_t width = image->GetWidth();
 		uint32_t height = image->GetHeight();
 		// Get a command buffer to blit the image between the mip levels
-		TransientCommandBuffer blitCmd = Renderer::BeginTransientCommandBuffer();
+		TransientCommandBuffer blitCmd = Renderer::GetTransientCommandExecutor().BeginGraphics();
 
 		for (uint32_t i = 1; i < mipLevels; i++)
 		{
@@ -496,13 +496,6 @@ namespace cerberus
 
 		m_ImageView = ResourceManager::CreateImageView(viewProp);
 		Invalidate(format, width, height);
-#if OLD_RENDERER
-		TextureCube* instance = this;
-		Renderer::Submit([instance]()
-		{
-			instance->Invalidate();
-		});
-#endif
 	}
 	TextureCube::~TextureCube()
 	{
@@ -535,7 +528,7 @@ namespace cerberus
 
 	void TextureCube::GenerateMips(bool readonly)
 	{
-		TransientCommandBuffer blitCmd = Renderer::BeginTransientCommandBuffer();
+		TransientCommandBuffer blitCmd = Renderer::GetTransientCommandExecutor().BeginGraphics();
 		uint32_t mipLevels = GetMipLevelCount();
 		Image* image = ResourceManager::GetImage(m_Image);
 		CORE_ASSERT(image, "TextureCube has an invalid image");
@@ -678,90 +671,6 @@ namespace cerberus
 
 	void TextureCube::Invalidate(ImageFormat format, const uint32_t width, const uint32_t height)
 	{
-		// Get Devices
-		auto device = RendererContext::GetCurrentDevice();
-		auto vulkanDevice = device->GetVulkanDevice();
-#if 0
-		// Release data if exits
-		Release();
-
-		VkFormat vulkanFormat = utils::VulkanImageFormat(m_Format);
-		uint32_t mipCount = GetMipLevelCount();
-		ResourceAllocator allocator("TextureCube");
-		/////////////////////////////////////////////////
-		////// Create Image
-		/////////////////////////////////////////////////
-		VkImageCreateInfo imageCreateInfo = {};
-		imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-		imageCreateInfo.format = vulkanFormat;
-		imageCreateInfo.extent.width = m_Width;
-		imageCreateInfo.extent.height = m_Height;
-		imageCreateInfo.extent.depth = 1;
-		imageCreateInfo.mipLevels = mipCount;
-		imageCreateInfo.arrayLayers = 6;
-		imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-		imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL; // texels are laid out in an implementation-dependent arrangement, for more efficient memory access
-		imageCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
-		imageCreateInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-		m_Info.MemoryAlloc = allocator.AllocateImage(imageCreateInfo, VMA_MEMORY_USAGE_GPU_ONLY, m_Info.Image);
-		/////////////////////////////////////////////////
-		////// Create Image View
-		/////////////////////////////////////////////////
-		//  Cube map is in Vulkan � a 2D image with 6 different layers interpreted 
-		//							as a cube through an image view.
-		VkImageViewCreateInfo imageViewCreateInfo = {};
-		imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
-		imageViewCreateInfo.format = vulkanFormat;
-		imageViewCreateInfo.components = { VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A };
-		imageViewCreateInfo.flags = 0;
-		// The subresource range describes the set of mip levels (and array layers) that can be accessed through this image view
-		// It's possible to create multiple image views for a single image referring to different (and/or overlapping) ranges of the image
-		imageViewCreateInfo.subresourceRange = {};
-		imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-		imageViewCreateInfo.subresourceRange.levelCount = mipCount;
-		imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
-		imageViewCreateInfo.subresourceRange.layerCount = 6;
-		imageViewCreateInfo.image = m_Info.Image;
-		VK_CHECK_RESULT(vkCreateImageView(vulkanDevice, &imageViewCreateInfo, nullptr, &m_Info.ImageView));
-		/////////////////////////////////////////////////
-		////// Create Texture Smampler
-		/////////////////////////////////////////////////
-		VkSamplerCreateInfo samplerCreateInfo{};
-		samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-		samplerCreateInfo.magFilter = utils::VulkanSamplerFilter(m_Properties.SamplerFilter);	// How to render when the image is magnified on screen
-		samplerCreateInfo.minFilter = utils::VulkanSamplerFilter(m_Properties.SamplerFilter);	// How to render when the image is minified on screen
-		samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-		samplerCreateInfo.addressModeU = utils::VulkanSamplerWrap(m_Properties.SamplerWrap);		// How to handle texture wrap in X (U) direction
-		samplerCreateInfo.addressModeV = utils::VulkanSamplerWrap(m_Properties.SamplerWrap);		// How to handle texture wrap in Y (V) direction
-		samplerCreateInfo.addressModeW = utils::VulkanSamplerWrap(m_Properties.SamplerWrap);		// How to handle texture wrap in Z (W) direction
-		samplerCreateInfo.unnormalizedCoordinates = VK_FALSE;													// Whether the coords should be normalize (0 to 1) (VK_FALSE = normalize coords)
-		samplerCreateInfo.mipLodBias = 0.0f;
-		samplerCreateInfo.compareOp = VK_COMPARE_OP_NEVER;
-		samplerCreateInfo.minLod = 0.0f;
-		// Set max level-of-detail to mip level count of the texture
-		samplerCreateInfo.maxLod = (float)mipCount;
-		samplerCreateInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;		// Border beyond texture (only work for texture clamp)
-		// Enable anisotropic filtering
-		// This feature is optional, so we must check if it's supported on the device
-		if (m_Properties.Anisotropy)
-		{
-			samplerCreateInfo.maxAnisotropy = Renderer::GetDeviceLimits().maxSamplerAnisotropy;		// Anisotropy sample level
-			samplerCreateInfo.anisotropyEnable = VK_TRUE;
-		}
-		else
-		{
-			samplerCreateInfo.maxAnisotropy = 1.f;		// Anisotropy sample level
-			samplerCreateInfo.anisotropyEnable = VK_FALSE;
-		}
-
-		VK_CHECK_RESULT(vkCreateSampler(vulkanDevice, &samplerCreateInfo, nullptr, &m_Info.Sampler));
-
-
-#endif
 		Image* image = ResourceManager::GetImage(m_Image);
 		ImageView* imageView = ResourceManager::GetImageView(m_ImageView);
 
@@ -788,12 +697,11 @@ namespace cerberus
 			VmaAllocation stagingBufferAllocation = allocator.AllocateBuffer(bufferCreateInfo, VMA_MEMORY_USAGE_CPU_TO_GPU, stagingBuffer);
 			// Copy data to staging buffer
 			uint8_t* destData = allocator.MapMemory<uint8_t>(stagingBufferAllocation);
-			//CORE_ASSERT(m_ImageData.Data, "Texture does not hold any data!");
 			memcpy(destData, m_ImageData.Data, size);
 			allocator.UnmapMemory(stagingBufferAllocation);
 
 			// Get Copy/Transfer Command Buffer
-			TransientCommandBuffer copyCommandBuffer = Renderer::BeginTransientCommandBuffer();
+			TransientCommandBuffer copyCommandBuffer = Renderer::GetTransientCommandExecutor().BeginGraphics();
 			// Transition the texture image layout to transfer target, so we can safely copy our buffer data to it.
 			// Insert a memory dependency at the proper pipeline stages that will execute the image layout transition 
 			utils::ImageLayoutSpecification layoutSpec;
@@ -843,9 +751,8 @@ namespace cerberus
 		}
 		else
 		{
-			/**/
 			// Get Copy/Transfer Command Buffer
-			TransientCommandBuffer copyCommandBuffer = Renderer::BeginTransientCommandBuffer();
+			TransientCommandBuffer copyCommandBuffer = Renderer::GetTransientCommandExecutor().BeginGraphics();
 			const VkImageLayout finalLayout = m_Properties.Storage
 				? VK_IMAGE_LAYOUT_GENERAL
 				: VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -865,18 +772,7 @@ namespace cerberus
 
 			image->SetImageLayout(layoutSpec);
 			copyCommandBuffer.SubmitAndWait();
-			/**/
 		}
-
-#if 0
-		// Update Descriptor
-		// Image Layout when use
-		m_DescriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-		// Image to bind to set
-		m_DescriptorImageInfo.imageView = m_Info.ImageView;
-		// Sampler to use for set
-		m_DescriptorImageInfo.sampler = m_Info.Sampler;
-#endif
 
 	}
 	//////////////////////////////////////////
@@ -993,14 +889,18 @@ namespace cerberus
 		bindGroup->SetImageView(texture->GetImageView(), outputBinding);
 		bindGroup->Update(0);
 
-		Ref<ComputePipeline> brdfPipeline = CreateRef<ComputePipeline>(shader);
+		Handle<ComputePipeline> brdfPipeline = ResourceManager::CreateComputePipeline(shader);
 		RenderQueueManager::ExecuteRenderQueue();
 
-		brdfPipeline->Begin();
+		TransientCommandBuffer commandBuffer = Renderer::GetTransientCommandExecutor().BeginCompute();
+		ComputeCommandList compute(commandBuffer.GetRecordingView());
+		compute.BindPipeline(brdfPipeline);
+		compute.BindDescriptorSets(bindGroupHandle);
 		const uint32_t workGroupCount = (brdfSize + 31u) / 32u;
-		brdfPipeline->Dispatch(workGroupCount, workGroupCount, 1, bindGroup->GetHandle(0));
-		brdfPipeline->End();
+		compute.Dispatch(workGroupCount, workGroupCount, 1);
+		commandBuffer.SubmitAndWait();
 
+		ResourceManager::DestroyComputePipeline(brdfPipeline);
 		ResourceManager::DestroyBindGroup(bindGroupHandle);
 		ResourceManager::DestroyBindGroupLayout(bindGroupLayout);
 		return brdfTexture;
