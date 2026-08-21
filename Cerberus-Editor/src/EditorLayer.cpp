@@ -2,6 +2,10 @@
 #include "EditorLayer.h"
 #include "Core/Application.h"
 #include <imgui/imgui.h>
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <utility>
 #include "ImGui/ImGuiUtils.h"
 #include "Panels/SceneHierarchyPanel.h"
 #include "Panels/ScenePropertiesPanel.h"
@@ -9,6 +13,67 @@
 #include "Panels/AssetEditor.h"
 namespace cerberus
 {
+	namespace
+	{
+		bool RayIntersectsBounds(const glm::vec3& rayOrigin, const glm::vec3& rayDirection,
+			const glm::vec3& boundsMin, const glm::vec3& boundsMax)
+		{
+			float nearDistance = 0.0f;
+			float farDistance = std::numeric_limits<float>::max();
+			constexpr float epsilon = 1.0e-8f;
+
+			for (uint32_t axis = 0; axis < 3; ++axis)
+			{
+				if (std::abs(rayDirection[axis]) < epsilon)
+				{
+					if (rayOrigin[axis] < boundsMin[axis] || rayOrigin[axis] > boundsMax[axis])
+						return false;
+					continue;
+				}
+
+				const float inverseDirection = 1.0f / rayDirection[axis];
+				float firstDistance = (boundsMin[axis] - rayOrigin[axis]) * inverseDirection;
+				float secondDistance = (boundsMax[axis] - rayOrigin[axis]) * inverseDirection;
+				if (firstDistance > secondDistance)
+					std::swap(firstDistance, secondDistance);
+
+				nearDistance = glm::max(nearDistance, firstDistance);
+				farDistance = glm::min(farDistance, secondDistance);
+				if (nearDistance > farDistance)
+					return false;
+			}
+
+			return farDistance >= 0.0f;
+		}
+
+		bool RayIntersectsTriangle(const glm::vec3& rayOrigin, const glm::vec3& rayDirection,
+			const glm::vec3& vertex0, const glm::vec3& vertex1, const glm::vec3& vertex2,
+			float& hitDistance)
+		{
+			constexpr float epsilon = 1.0e-7f;
+			const glm::vec3 edge1 = vertex1 - vertex0;
+			const glm::vec3 edge2 = vertex2 - vertex0;
+			const glm::vec3 perpendicular = glm::cross(rayDirection, edge2);
+			const float determinant = glm::dot(edge1, perpendicular);
+			if (std::abs(determinant) < epsilon)
+				return false;
+
+			const float inverseDeterminant = 1.0f / determinant;
+			const glm::vec3 vertexOffset = rayOrigin - vertex0;
+			const float barycentricU = glm::dot(vertexOffset, perpendicular) * inverseDeterminant;
+			if (barycentricU < 0.0f || barycentricU > 1.0f)
+				return false;
+
+			const glm::vec3 crossOffset = glm::cross(vertexOffset, edge1);
+			const float barycentricV = glm::dot(rayDirection, crossOffset) * inverseDeterminant;
+			if (barycentricV < 0.0f || barycentricU + barycentricV > 1.0f)
+				return false;
+
+			hitDistance = glm::dot(edge2, crossOffset) * inverseDeterminant;
+			return hitDistance >= 0.0f;
+		}
+	}
+
 	EditorLayer::EditorLayer()
 		: Layer("EditorLayer")
 	{
@@ -38,13 +103,26 @@ namespace cerberus
 			m_SceneRenderer->OnMaterialAssetChanged(std::dynamic_pointer_cast<MaterialAsset>(asset));
 		});
 
-		scenePropertiesPanel->SetMaterialTableChangedCallback([this](const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable)
+		scenePropertiesPanel->SetMaterialTableChangedCallback([this](RenderObjectID renderObjectID, const Ref<MaterialTable>& materialTable)
 		{
 			if (m_SceneRenderer)
-				m_SceneRenderer->UpdateMeshMaterials(mesh, materialTable);
+				m_SceneRenderer->UpdateMeshMaterials(renderObjectID, materialTable);
+		});
+		scenePropertiesPanel->SetAssetFocusedCallback([this, contentBrowserPanel](AssetHandle assetHandle)
+		{
+			auto& panels = m_EditorPanelManager->GetPanels();
+			auto contentBrowserIt = panels.find("ContentBrowserPanel");
+			if (contentBrowserIt != panels.end())
+				contentBrowserIt->second.IsOpen = true;
+
+			contentBrowserPanel->FocusAsset(assetHandle);
 		});
 
 		sceneHierarchyPanel->SetSelectionChangedCallback(m_SelectionChangedCallback);
+		sceneHierarchyPanel->SetEntityActivatedCallback([this](Entity entity)
+		{
+			FocusEntity(entity);
+		});
 		m_EditorPanelManager = CreateRef<EditorPanelManager>();
 		m_EditorPanelManager->AddPanel("ScenePropertiesPanel", { true, scenePropertiesPanel });
 		m_EditorPanelManager->AddPanel("SceneHierarchyPanel", { true, sceneHierarchyPanel });
@@ -94,6 +172,298 @@ namespace cerberus
 	{
 		m_SelectedEntity = entity;
 		m_EditorPanelManager->SetSelectionContext(entity);
+	}
+
+	void EditorLayer::DuplicateSelectedEntity()
+	{
+		if (!m_Scene || !m_SelectedEntity)
+			return;
+
+		Entity duplicateEntity = m_Scene->DuplicateEntity(m_SelectedEntity);
+		if (duplicateEntity)
+			SelectEntity(duplicateEntity);
+	}
+
+	void EditorLayer::FocusEntity(Entity entity)
+	{
+		if (!entity || !entity.HasComponent<TransformComponent>())
+			return;
+
+		auto& transformComponent = entity.GetComponent<TransformComponent>();
+		const glm::mat4 entityTransform = transformComponent.GetTransform();
+		glm::vec3 boundsMin(std::numeric_limits<float>::max());
+		glm::vec3 boundsMax(std::numeric_limits<float>::lowest());
+		bool hasBounds = false;
+
+		if (entity.HasComponent<MeshComponent>())
+		{
+			const auto& meshComponent = entity.GetComponent<MeshComponent>();
+			Ref<Mesh> mesh = AssetManager::GetAsset<Mesh>(meshComponent.MeshHandle);
+			Ref<MeshSource> meshSource = mesh ? mesh->GetMeshSource() : nullptr;
+			if (meshSource)
+			{
+				const auto& vertices = meshSource->GetVertices();
+				const auto& submeshes = meshSource->GetSubmeshes();
+				for (const Submesh& submesh : submeshes)
+				{
+					const size_t firstVertex = submesh.BaseVertex;
+					const size_t vertexEnd = std::min(firstVertex + submesh.VertexCount, vertices.size());
+					const glm::mat4 worldTransform = entityTransform * submesh.Transform;
+					for (size_t vertexIndex = firstVertex; vertexIndex < vertexEnd; ++vertexIndex)
+					{
+						const glm::vec3 worldPosition = glm::vec3(worldTransform * glm::vec4(vertices[vertexIndex].Position, 1.0f));
+						boundsMin = glm::min(boundsMin, worldPosition);
+						boundsMax = glm::max(boundsMax, worldPosition);
+						hasBounds = true;
+					}
+				}
+			}
+		}
+
+		glm::vec3 focusPoint = transformComponent.GetTranslation();
+		float focusRadius = 1.0f;
+		if (hasBounds)
+		{
+			focusPoint = (boundsMin + boundsMax) * 0.5f;
+			focusRadius = glm::max(glm::length(boundsMax - focusPoint), 0.1f);
+		}
+		else
+		{
+			const glm::vec3 scale = glm::abs(transformComponent.GetScale());
+			focusRadius = glm::max(glm::max(scale.x, scale.y), glm::max(scale.z, 0.1f));
+		}
+
+		m_Camera.SetFocusPoint(focusPoint, focusRadius);
+	}
+
+	bool EditorLayer::BuildViewportRay(const ImVec2& viewportPosition, const ImVec2& viewportSize, ViewportRay& ray) const
+	{
+		if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f)
+			return false;
+
+		const ImVec2 mousePosition = ImGui::GetMousePos();
+		const float viewportX = (mousePosition.x - viewportPosition.x) / viewportSize.x;
+		const float viewportY = (mousePosition.y - viewportPosition.y) / viewportSize.y;
+		if (viewportX < 0.0f || viewportX > 1.0f || viewportY < 0.0f || viewportY > 1.0f)
+			return false;
+
+		// GLM is configured for Vulkan's [0, 1] depth range. The viewport image
+		// is presented top-to-bottom, so screen Y must be flipped into NDC.
+		const glm::vec2 ndc(viewportX * 2.0f - 1.0f, 1.0f - viewportY * 2.0f);
+		const glm::mat4 inverseViewProjection = glm::inverse(m_Camera.GetViewProjectionMatrix());
+		glm::vec4 farPoint = inverseViewProjection * glm::vec4(ndc, 1.0f, 1.0f);
+		if (std::abs(farPoint.w) < 1.0e-8f)
+			return false;
+
+		farPoint /= farPoint.w;
+		ray.Origin = m_Camera.GetPosition();
+		const glm::vec3 direction = glm::vec3(farPoint) - ray.Origin;
+		if (glm::dot(direction, direction) < 1.0e-12f)
+			return false;
+
+		ray.Direction = glm::normalize(direction);
+		return true;
+	}
+
+	EditorLayer::MeshBounds EditorLayer::GetMeshBounds(const Ref<MeshSource>& meshSource)
+	{
+		if (!meshSource)
+			return {};
+
+		if (meshSource->Handle)
+		{
+			auto cachedBounds = m_MeshBoundsCache.find(meshSource->Handle);
+			if (cachedBounds != m_MeshBoundsCache.end())
+				return cachedBounds->second;
+		}
+
+		MeshBounds bounds;
+		bounds.Min = glm::vec3(std::numeric_limits<float>::max());
+		bounds.Max = glm::vec3(std::numeric_limits<float>::lowest());
+		const auto& vertices = meshSource->GetVertices();
+		std::vector<MeshBounds> submeshBounds;
+		submeshBounds.reserve(meshSource->GetSubmeshes().size());
+		for (const Submesh& submesh : meshSource->GetSubmeshes())
+		{
+			MeshBounds currentSubmeshBounds;
+			currentSubmeshBounds.Min = glm::vec3(std::numeric_limits<float>::max());
+			currentSubmeshBounds.Max = glm::vec3(std::numeric_limits<float>::lowest());
+			const size_t firstVertex = submesh.BaseVertex;
+			const size_t vertexEnd = std::min(firstVertex + static_cast<size_t>(submesh.VertexCount), vertices.size());
+			for (size_t vertexIndex = firstVertex; vertexIndex < vertexEnd; ++vertexIndex)
+			{
+				const glm::vec3 position = glm::vec3(submesh.Transform * glm::vec4(vertices[vertexIndex].Position, 1.0f));
+				bounds.Min = glm::min(bounds.Min, position);
+				bounds.Max = glm::max(bounds.Max, position);
+				bounds.Valid = true;
+				currentSubmeshBounds.Min = glm::min(currentSubmeshBounds.Min, position);
+				currentSubmeshBounds.Max = glm::max(currentSubmeshBounds.Max, position);
+				currentSubmeshBounds.Valid = true;
+			}
+			submeshBounds.emplace_back(currentSubmeshBounds);
+		}
+
+		if (meshSource->Handle)
+		{
+			m_MeshBoundsCache[meshSource->Handle] = bounds;
+			m_SubmeshBoundsCache[meshSource->Handle] = std::move(submeshBounds);
+		}
+		return bounds;
+	}
+
+	bool EditorLayer::RaycastScene(const ViewportRay& ray, ViewportHit& closestHit)
+	{
+		if (!m_Scene)
+			return false;
+
+		bool foundHit = false;
+		auto group = m_Scene->m_Registry.group<TransformComponent>(entt::get<MeshComponent>);
+		for (const entt::entity entityID : group)
+		{
+			const auto& [transformComponent, meshComponent] = group.get<TransformComponent, MeshComponent>(entityID);
+			Ref<Mesh> mesh = AssetManager::GetAsset<Mesh>(meshComponent.MeshHandle);
+			Ref<MeshSource> meshSource = mesh ? mesh->GetMeshSource() : nullptr;
+			if (!meshSource)
+				continue;
+
+			const glm::mat4 entityTransform = transformComponent.GetTransform();
+			if (std::abs(glm::determinant(glm::mat3(entityTransform))) < 1.0e-8f)
+				continue;
+
+			const glm::mat4 inverseEntityTransform = glm::inverse(entityTransform);
+			const glm::vec3 entityRayOrigin = glm::vec3(inverseEntityTransform * glm::vec4(ray.Origin, 1.0f));
+			const glm::vec3 entityRayDirection = glm::mat3(inverseEntityTransform) * ray.Direction;
+			const MeshBounds bounds = GetMeshBounds(meshSource);
+			if (!bounds.Valid || !RayIntersectsBounds(entityRayOrigin, entityRayDirection, bounds.Min, bounds.Max))
+				continue;
+
+			const auto& vertices = meshSource->GetVertices();
+			const auto& indices = meshSource->GetIndices();
+			const auto submeshBoundsIt = m_SubmeshBoundsCache.find(meshSource->Handle);
+			const auto& submeshes = meshSource->GetSubmeshes();
+			for (size_t submeshIndex = 0; submeshIndex < submeshes.size(); ++submeshIndex)
+			{
+				const Submesh& submesh = submeshes[submeshIndex];
+				if (submeshBoundsIt != m_SubmeshBoundsCache.end() && submeshIndex < submeshBoundsIt->second.size())
+				{
+					const MeshBounds& submeshBounds = submeshBoundsIt->second[submeshIndex];
+					if (!submeshBounds.Valid || !RayIntersectsBounds(
+						entityRayOrigin, entityRayDirection, submeshBounds.Min, submeshBounds.Max))
+						continue;
+				}
+
+				const glm::mat4 submeshWorldTransform = entityTransform * submesh.Transform;
+				if (std::abs(glm::determinant(glm::mat3(submeshWorldTransform))) < 1.0e-8f)
+					continue;
+
+				const glm::mat4 inverseSubmeshTransform = glm::inverse(submeshWorldTransform);
+				const glm::vec3 localRayOrigin = glm::vec3(inverseSubmeshTransform * glm::vec4(ray.Origin, 1.0f));
+				const glm::vec3 localRayDirection = glm::mat3(inverseSubmeshTransform) * ray.Direction;
+				const size_t firstTriangle = submesh.BaseIndex / 3;
+				const size_t triangleEnd = std::min(firstTriangle + static_cast<size_t>(submesh.IndexCount / 3), indices.size());
+
+				for (size_t triangleIndex = firstTriangle; triangleIndex < triangleEnd; ++triangleIndex)
+				{
+					const MeshSource::Index& triangle = indices[triangleIndex];
+					const size_t vertexIndex0 = static_cast<size_t>(submesh.BaseVertex) + triangle.Index0;
+					const size_t vertexIndex1 = static_cast<size_t>(submesh.BaseVertex) + triangle.Index1;
+					const size_t vertexIndex2 = static_cast<size_t>(submesh.BaseVertex) + triangle.Index2;
+					if (vertexIndex0 >= vertices.size() || vertexIndex1 >= vertices.size() || vertexIndex2 >= vertices.size())
+						continue;
+
+					float hitDistance = 0.0f;
+					if (!RayIntersectsTriangle(localRayOrigin, localRayDirection,
+						vertices[vertexIndex0].Position, vertices[vertexIndex1].Position, vertices[vertexIndex2].Position,
+						hitDistance) || hitDistance >= closestHit.Distance)
+						continue;
+
+					closestHit.HitEntity = Entity(entityID, m_Scene.get());
+					closestHit.Distance = hitDistance;
+					closestHit.Position = ray.Origin + ray.Direction * hitDistance;
+					closestHit.MaterialSlot = submesh.MaterialIndex;
+					foundHit = true;
+				}
+			}
+		}
+
+		return foundHit;
+	}
+
+	AssetHandle EditorLayer::ResolveDroppedMesh(AssetHandle assetHandle)
+	{
+		const AssetMetadata& metadata = AssetManager::GetMetadata(assetHandle);
+		if (!metadata.IsValid())
+			return AssetHandle(0);
+		if (metadata.Type == AssetType::Mesh)
+			return AssetManager::GetAsset<Mesh>(assetHandle) ? assetHandle : AssetHandle(0);
+		if (metadata.Type != AssetType::MeshSource)
+			return AssetHandle(0);
+
+		// Raw FBX/GLTF/OBJ assets are sources, while scene components reference
+		// reusable .cmesh assets. Create that lightweight wrapper once on demand.
+		const std::filesystem::path meshPath = metadata.FilePath.parent_path() / (metadata.FilePath.stem().string() + ".cmesh");
+		AssetHandle meshHandle = AssetManager::GetAssetHandleFromFilePath(meshPath);
+		if (AssetManager::IsAssetHandleValid(meshHandle))
+			return AssetManager::GetAsset<Mesh>(meshHandle) ? meshHandle : AssetHandle(0);
+
+		Ref<MeshSource> meshSource = AssetManager::GetAsset<MeshSource>(assetHandle);
+		if (!meshSource)
+			return AssetHandle(0);
+
+		Ref<Mesh> mesh = AssetManager::CreateNewAsset<Mesh>(
+			meshPath.filename().string(), meshPath.parent_path().string(), meshSource);
+		if (!mesh)
+			return AssetHandle(0);
+
+		ContentBrowserPanel::Get().Refresh();
+		return mesh->Handle;
+	}
+
+	Entity EditorLayer::CreateMeshEntityFromDrop(AssetHandle meshHandle, const ViewportRay& ray, const ViewportHit* surfaceHit)
+	{
+		Ref<Mesh> mesh = AssetManager::GetAsset<Mesh>(meshHandle);
+		if (!m_Scene || !mesh)
+			return {};
+
+		const AssetMetadata& metadata = AssetManager::GetMetadata(meshHandle);
+		const std::string entityName = metadata.IsValid() ? metadata.FilePath.stem().string() : "Mesh";
+		Entity entity = m_Scene->CreateEntity(entityName);
+		auto& transform = entity.GetComponent<TransformComponent>();
+		if (surfaceHit)
+			transform.SetTranslation(surfaceHit->Position);
+		else
+		{
+			const float cameraTargetDistance = glm::distance(m_Camera.GetPosition(), m_Camera.GetTarget());
+			const float placementDistance = glm::max(cameraTargetDistance, 5.0f);
+			transform.SetTranslation(ray.Origin + ray.Direction * placementDistance);
+		}
+		entity.AddComponent<MeshComponent>(meshHandle);
+		SelectEntity(entity);
+		return entity;
+	}
+
+	bool EditorLayer::ApplyMaterialFromDrop(AssetHandle materialHandle, const ViewportHit& hit)
+	{
+		Entity hitEntity = hit.HitEntity;
+		if (!hitEntity || !hitEntity.HasComponent<MeshComponent>() ||
+			!AssetManager::GetAsset<MaterialAsset>(materialHandle))
+			return false;
+
+		auto& meshComponent = hitEntity.GetComponent<MeshComponent>();
+		if (!meshComponent.MaterialTable)
+		{
+			Ref<Mesh> mesh = AssetManager::GetAsset<Mesh>(meshComponent.MeshHandle);
+			meshComponent.MaterialTable = mesh
+				? CreateRef<MaterialTable>(mesh->GetMaterialTable())
+				: CreateRef<MaterialTable>();
+		}
+
+		meshComponent.MaterialTable->SetMaterial(hit.MaterialSlot, materialHandle);
+		const RenderObjectID renderObjectID{ hitEntity.GetComponent<IDComponent>().ID };
+		if (m_SceneRenderer)
+			m_SceneRenderer->UpdateMeshMaterials(renderObjectID, meshComponent.MaterialTable);
+		SelectEntity(hitEntity);
+		return true;
 	}
 
 	void EditorLayer::NewScene()
@@ -189,6 +559,12 @@ namespace cerberus
 			}
 			break;
 		}
+		case Key::D:
+		{
+			if (control)
+				DuplicateSelectedEntity();
+			break;
+		}
 		// Gizmos
 		case Key::Q:
 			m_GizmoType = -1;
@@ -218,7 +594,7 @@ namespace cerberus
 				ImGui::Separator();
 				if (ImGui::MenuItem("Open Scene...", "Ctrl+O")) { OpenScene(); }
 				ImGui::Separator();
-				if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S")) { SaveScene(); }
+				if (ImGui::MenuItem("Save Scene As...", "Ctrl+Shift+S")) { SaveSceneAs(); }
 				ImGui::Separator();
 				ImGui::EndMenu();
 			}
@@ -255,23 +631,64 @@ namespace cerberus
 			Application::Get().BlockEvents(!(m_ViewportPanelMouseOver));
 
 			ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+			const ImVec2 viewportPosition = ImGui::GetCursorScreenPos();
 			m_SceneRenderer->SetViewportSize((uint32_t)viewportSize.x, (uint32_t)viewportSize.y);
 
 			m_Camera.SetViewportSize((uint32_t)viewportSize.x, (uint32_t)viewportSize.y);
 
 			// Render viewport image
 			ui::Image(m_SceneRenderer->GetFinalPassImage(), viewportSize, { 0, 1 }, { 1, 0 });
+			const bool viewportImageHovered = ImGui::IsItemHovered();
+			const bool viewportSelectionRequested = viewportImageHovered &&
+				ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::GetDragDropPayload() == nullptr;
+
+			// The payload remains an AssetHandle. Resolve it by metadata here so the
+			// Content Browser does not need to know anything about scene editing.
+			if (ImGui::BeginDragDropTarget())
+			{
+				if (const ImGuiPayload* data = ImGui::AcceptDragDropPayload("asset_payload"))
+				{
+					const AssetHandle assetHandle = *static_cast<const AssetHandle*>(data->Data);
+					const AssetMetadata& metadata = AssetManager::GetMetadata(assetHandle);
+
+					if (metadata.IsValid() && metadata.Type == AssetType::Scene)
+					{
+						Ref<Scene> scene = AssetManager::GetAsset<Scene>(assetHandle);
+						if (scene)
+							OpenScene(scene);
+					}
+					else
+					{
+						ViewportRay ray;
+						if (BuildViewportRay(viewportPosition, viewportSize, ray))
+						{
+							ViewportHit hit;
+							const bool hasSurfaceHit = RaycastScene(ray, hit);
+							if (metadata.Type == AssetType::Mesh || metadata.Type == AssetType::MeshSource)
+							{
+								const AssetHandle meshHandle = ResolveDroppedMesh(assetHandle);
+								if (meshHandle)
+									CreateMeshEntityFromDrop(meshHandle, ray, hasSurfaceHit ? &hit : nullptr);
+							}
+							else if (metadata.Type == AssetType::Material && hasSurfaceHit)
+							{
+								ApplyMaterialFromDrop(assetHandle, hit);
+							}
+						}
+					}
+				}
+				ImGui::EndDragDropTarget();
+			}
+
 			// ImGuizmo
 			if (m_SelectedEntity && m_GizmoType != -1)
 			{
 				ImGuizmo::SetOrthographic(false);
-				// 1 Call in order draw a gizmo to the window
-				ImGuizmo::SetDrawlist();
-				// 2 Set Viewport
-				float windowWidth = (float)ImGui::GetWindowWidth();
-				float windowHeight = (float)ImGui::GetWindowHeight();
-				ImVec2 windowPosition = ImGui::GetWindowPos();
-				ImGuizmo::SetRect(windowPosition.x, -windowPosition.y, windowWidth, windowHeight);
+				// ImGuizmo works in absolute ImGui screen coordinates. Match the
+				// rendered image exactly; the docked window includes tab/title regions
+				// that are not part of the SceneRenderer viewport.
+				ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
+				ImGuizmo::SetRect(viewportPosition.x, viewportPosition.y, viewportSize.x, viewportSize.y);
 				// 3 Draw Gizmo
 				// -- Entity Transfom
 				auto& tc = m_SelectedEntity.GetComponent<TransformComponent>();
@@ -304,17 +721,17 @@ namespace cerberus
 					tc.SetScale(scale);
 				}
 			}
-			// Drag scene into the viewport
-			if (ImGui::BeginDragDropTarget())
+
+			// Picking stays entirely in the editor. It runs only on a click and does
+			// not add an ID attachment, readback or pass to the renderer.
+			if (viewportSelectionRequested && !ImGuizmo::IsOver() && !ImGuizmo::IsUsing())
 			{
-				if (const ImGuiPayload* data = ImGui::AcceptDragDropPayload("asset_payload"))
-				{
-					AssetHandle assetHandle = *(AssetHandle*)data->Data;
-					Ref<Scene> scene = AssetManager::GetAsset<Scene>(assetHandle);
-					if (scene && scene->GetAssetType() == AssetType::Scene)
-						OpenScene(scene);
-				}
-				ImGui::EndDragDropTarget();
+				ViewportRay ray;
+				ViewportHit hit;
+				if (BuildViewportRay(viewportPosition, viewportSize, ray) && RaycastScene(ray, hit))
+					SelectEntity(hit.HitEntity);
+				else
+					SelectEntity({});
 			}
 		}
 

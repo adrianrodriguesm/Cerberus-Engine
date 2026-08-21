@@ -251,13 +251,18 @@ namespace cerberus
 		m_MeshRegister.LinearTextureRegistered.clear();
 	}
 
-	bool RenderScene::RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform)
+	bool RenderScene::RegisterMesh(
+		RenderObjectID renderObjectID,
+		const Ref<Mesh>& mesh,
+		const Ref<MaterialTable>& materialTable,
+		const glm::mat4& transform)
 	{
-		if (!mesh)
+		if (!renderObjectID || !mesh)
 			return false;
 
-		// If the mesh is already registered return false.
-		if (m_MeshRegister.MeshInstanceRegistered.find(mesh->Handle) != m_MeshRegister.MeshInstanceRegistered.end())
+		// Scene-object identity, rather than MeshHandle, owns instance state. This
+		// allows many entities to share one mesh asset and its BLAS.
+		if (m_MeshRegister.RegisteredMeshInstances.find(renderObjectID) != m_MeshRegister.RegisteredMeshInstances.end())
 			return false;
 
 		Ref<MeshSource> meshSource = mesh->GetMeshSource();
@@ -282,7 +287,7 @@ namespace cerberus
 
 			m_MeshRegister.MeshSourceRegistered[meshSourceAssetHandle] = meshProxyHandle;
 			m_MeshRegister.ASRegisterInfo.BLASToBuild.push_back(meshProxyHandle);
-			m_MeshRegister.InstancePerMeshSourceRegistered[meshSourceAssetHandle] = {};
+			m_MeshRegister.MeshSourceReferenceCounts[meshSourceAssetHandle] = 0;
 
 			MeshSourceProxy* meshSourceProxy = ResourceManager::GetMeshSourceProxy(meshProxyHandle);
 			CORE_ASSERT(meshSourceProxy, "Invalid MeshSourceProxy");
@@ -299,13 +304,20 @@ namespace cerberus
 			meshProxyHandle = m_MeshRegister.MeshSourceRegistered[meshSourceAssetHandle];
 		}
 
-		m_MeshRegister.InstancePerMeshSourceRegistered[meshSourceAssetHandle].push_back(mesh->Handle);
-
 		MeshSourceProxy* meshSourceProxy = ResourceManager::GetMeshSourceProxy(meshProxyHandle);
 		CORE_ASSERT(meshSourceProxy, "Invalid MeshSourceProxy");
 
 		const auto& submeshesProxy = meshSourceProxy->Submeshes;
-		auto& meshInstanceProxies = m_MeshRegister.MeshInstanceRegistered[mesh->Handle];
+		auto [registeredIt, inserted] = m_MeshRegister.RegisteredMeshInstances.emplace(
+			renderObjectID,
+			MeshRegister::RegisteredMeshInstance{});
+		CORE_ASSERT(inserted, "RenderObjectID was registered more than once");
+
+		MeshRegister::RegisteredMeshInstance& registeredInstance = registeredIt->second;
+		registeredInstance.MeshAssetHandle = mesh->Handle;
+		registeredInstance.MeshSourceAssetHandle = meshSourceAssetHandle;
+		registeredInstance.SubmeshInstances.reserve(submeshesProxy.size());
+		m_MeshRegister.MeshSourceReferenceCounts[meshSourceAssetHandle]++;
 
 		m_MeshRegister.ASRegisterInfo.UpdateTLAS = true;
 		m_MeshRegister.ASRegisterInfo.TLASNeedsSafeUpdate = true;
@@ -327,7 +339,7 @@ namespace cerberus
 
 			meshInstance->WorldTransform = transform * submeshesProxy[submeshIndex].Transform;
 
-			meshInstanceProxies.push_back(meshInstanceHandle);
+			registeredInstance.SubmeshInstances.push_back(meshInstanceHandle);
 			m_MeshRegister.MeshInstanceMap[meshProxyHandle][submeshIndex].push_back(meshInstanceHandle);
 			m_MeshRegister.MeshInstanceCount++;
 		}
@@ -335,20 +347,25 @@ namespace cerberus
 		return true;
 	}
 
-	bool RenderScene::UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable)
+	bool RenderScene::UpdateMeshMaterials(RenderObjectID renderObjectID, const Ref<MaterialTable>& materialTable)
 	{
-		if (!mesh)
+		if (!renderObjectID)
 			return false;
 
-		auto registeredMesh = m_MeshRegister.MeshInstanceRegistered.find(mesh->Handle);
-		if (registeredMesh == m_MeshRegister.MeshInstanceRegistered.end())
+		auto registeredMesh = m_MeshRegister.RegisteredMeshInstances.find(renderObjectID);
+		if (registeredMesh == m_MeshRegister.RegisteredMeshInstances.end())
+			return false;
+
+		Ref<Mesh> mesh = AssetManager::GetAsset<Mesh>(registeredMesh->second.MeshAssetHandle);
+		if (!mesh)
 			return false;
 
 		const Ref<MeshSource> meshSource = mesh->GetMeshSource();
 		if (!meshSource)
 			return false;
 
-		for (Handle<MeshInstanceProxy> meshInstanceHandle : registeredMesh->second)
+		const Ref<MaterialTable> effectiveMaterialTable = materialTable ? materialTable : mesh->GetMaterialTable();
+		for (Handle<MeshInstanceProxy> meshInstanceHandle : registeredMesh->second.SubmeshInstances)
 		{
 			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
 			if (!meshInstance)
@@ -359,7 +376,7 @@ namespace cerberus
 				continue;
 
 			const uint32_t materialSlot = meshSourceProxy->Submeshes[meshInstance->SubmeshIndex].MaterialIndex;
-			const Ref<MaterialAsset> materialAsset = ResolveMaterialAsset(meshSource, materialTable, materialSlot);
+			const Ref<MaterialAsset> materialAsset = ResolveMaterialAsset(meshSource, effectiveMaterialTable, materialSlot);
 			const uint32_t materialProxyIndex = RegisterMaterialProxy(materialAsset);
 			meshInstance->MaterialProxyIndex = materialProxyIndex;
 
@@ -375,59 +392,53 @@ namespace cerberus
 		return true;
 	}
 
-	bool RenderScene::UnregisterMesh(const Ref<Mesh>& mesh)
+	bool RenderScene::UnregisterMesh(RenderObjectID renderObjectID)
 	{
-		if (!mesh)
+		if (!renderObjectID)
+			return false;
+
+		auto registeredIt = m_MeshRegister.RegisteredMeshInstances.find(renderObjectID);
+		if (registeredIt == m_MeshRegister.RegisteredMeshInstances.end())
 			return false;
 
 		m_MeshRegister.ASRegisterInfo.UpdateTLAS = true;
 		m_MeshRegister.ASRegisterInfo.TLASNeedsSafeUpdate = true;
 
-		auto registeredIt = m_MeshRegister.MeshInstanceRegistered.find(mesh->Handle);
-		if (registeredIt == m_MeshRegister.MeshInstanceRegistered.end())
-			return false;
+		MeshRegister::RegisteredMeshInstance registeredInstance = std::move(registeredIt->second);
+		m_MeshRegister.RegisteredMeshInstances.erase(registeredIt);
 
-		std::vector<Handle<MeshInstanceProxy>> meshInstanceProxyList = registeredIt->second;
-		m_MeshRegister.MeshInstanceRegistered.erase(registeredIt);
+		auto meshSourceIt = m_MeshRegister.MeshSourceRegistered.find(registeredInstance.MeshSourceAssetHandle);
+		CORE_ASSERT(meshSourceIt != m_MeshRegister.MeshSourceRegistered.end(), "Registered mesh instance has no MeshSourceProxy");
+		const Handle<MeshSourceProxy> meshSourceHandle = meshSourceIt->second;
 
-		Ref<MeshSource> meshSourceAsset = mesh->GetMeshSource();
-		CORE_ASSERT(meshSourceAsset, "Invalid MeshSource");
-
-		auto instanceListIt = m_MeshRegister.InstancePerMeshSourceRegistered.find(meshSourceAsset->Handle);
-		if (instanceListIt == m_MeshRegister.InstancePerMeshSourceRegistered.end())
-			return true;
-
-		auto& instanceList = instanceListIt->second;
-		instanceList.erase(std::remove(instanceList.begin(), instanceList.end(), mesh->Handle), instanceList.end());
-
-		Handle<MeshSourceProxy> meshSourceHandle = m_MeshRegister.MeshSourceRegistered[meshSourceAsset->Handle];
-
-		for (Handle<MeshInstanceProxy> meshInstanceHandle : meshInstanceProxyList)
+		for (Handle<MeshInstanceProxy> meshInstanceHandle : registeredInstance.SubmeshInstances)
 		{
 			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
 			if (meshInstance)
 			{
-				auto& instancesPerSubmesh = m_MeshRegister.MeshInstanceMap[meshSourceHandle][meshInstance->SubmeshIndex];
-				for (uint32_t index = 0; index < instancesPerSubmesh.size(); index++)
+				auto& instancesPerSubmesh = m_MeshRegister.MeshInstanceMap.at(meshSourceHandle).at(meshInstance->SubmeshIndex);
+				const auto instanceIt = std::find(instancesPerSubmesh.begin(), instancesPerSubmesh.end(), meshInstanceHandle);
+				if (instanceIt != instancesPerSubmesh.end())
 				{
-					Handle<MeshInstanceProxy> currentMeshInstance = instancesPerSubmesh[index];
-					if (meshInstanceHandle == currentMeshInstance)
-					{
-						instancesPerSubmesh.erase(instancesPerSubmesh.begin() + index);
-						m_MeshRegister.MeshInstanceCount--;
-						break;
-					}
+					instancesPerSubmesh.erase(instanceIt);
+					CORE_ASSERT(m_MeshRegister.MeshInstanceCount > 0, "MeshInstanceCount underflow");
+					m_MeshRegister.MeshInstanceCount--;
 				}
 			}
 
 			ResourceManager::DestroyMeshInstanceProxy(meshInstanceHandle);
 		}
 
-		if (instanceList.empty())
+		auto referenceCountIt = m_MeshRegister.MeshSourceReferenceCounts.find(registeredInstance.MeshSourceAssetHandle);
+		CORE_ASSERT(referenceCountIt != m_MeshRegister.MeshSourceReferenceCounts.end(), "Registered mesh source has no reference count");
+		CORE_ASSERT(referenceCountIt->second > 0, "MeshSource reference count underflow");
+		referenceCountIt->second--;
+
+		if (referenceCountIt->second == 0)
 		{
 			m_MeshRegister.MeshInstanceMap.erase(meshSourceHandle);
-			m_MeshRegister.InstancePerMeshSourceRegistered.erase(meshSourceAsset->Handle);
-			m_MeshRegister.MeshSourceRegistered.erase(meshSourceAsset->Handle);
+			m_MeshRegister.MeshSourceReferenceCounts.erase(referenceCountIt);
+			m_MeshRegister.MeshSourceRegistered.erase(registeredInstance.MeshSourceAssetHandle);
 
 			if (MeshSourceProxy* meshSourceProxy = ResourceManager::GetMeshSourceProxy(meshSourceHandle))
 			{
@@ -451,35 +462,37 @@ namespace cerberus
 		return true;
 	}
 
-	void RenderScene::UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform)
+	void RenderScene::UpdateMeshTransform(RenderObjectID renderObjectID, const glm::mat4& transform)
 	{
-		if (!IsRegistered(mesh))
+		auto registeredIt = m_MeshRegister.RegisteredMeshInstances.find(renderObjectID);
+		if (registeredIt == m_MeshRegister.RegisteredMeshInstances.end())
 			return;
 
 		m_MeshRegister.ASRegisterInfo.UpdateTLAS = true;
 		m_MeshRegister.ASRegisterInfo.TLASNeedsSafeUpdate = true;
 
-		std::vector<Handle<MeshInstanceProxy>> meshInstances = m_MeshRegister.MeshInstanceRegistered[mesh->Handle];
-		Handle<MeshSourceProxy> meshSourceHandle = m_MeshRegister.MeshSourceRegistered[mesh->GetMeshSource()->Handle];
+		const MeshRegister::RegisteredMeshInstance& registeredInstance = registeredIt->second;
+		const Handle<MeshSourceProxy> meshSourceHandle = m_MeshRegister.MeshSourceRegistered.at(registeredInstance.MeshSourceAssetHandle);
 		MeshSourceProxy* meshSourceProxy = ResourceManager::GetMeshSourceProxy(meshSourceHandle);
 		CORE_ASSERT(meshSourceProxy, "Invalid MeshSourceProxy");
 
-		for (uint32_t submeshIndex = 0; submeshIndex < meshSourceProxy->Submeshes.size(); submeshIndex++)
+		for (Handle<MeshInstanceProxy> meshInstanceHandle : registeredInstance.SubmeshInstances)
 		{
-			const SubmeshSourceProxy& submeshProxy = meshSourceProxy->Submeshes[submeshIndex];
-			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstances[submeshIndex]);
+			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
 			CORE_ASSERT(meshInstance, "Invalid MeshInstanceProxy");
+			CORE_ASSERT(meshInstance->SubmeshIndex < meshSourceProxy->Submeshes.size(), "MeshInstanceProxy references an invalid submesh");
 
+			const SubmeshSourceProxy& submeshProxy = meshSourceProxy->Submeshes[meshInstance->SubmeshIndex];
 			meshInstance->WorldTransform = transform * submeshProxy.Transform;
 		}
 	}
 
-	bool RenderScene::IsRegistered(const Ref<Mesh>& mesh) const
+	bool RenderScene::IsRegistered(RenderObjectID renderObjectID) const
 	{
-		if (!mesh)
+		if (!renderObjectID)
 			return false;
 
-		return m_MeshRegister.MeshInstanceRegistered.find(mesh->Handle) != m_MeshRegister.MeshInstanceRegistered.end();
+		return m_MeshRegister.RegisteredMeshInstances.find(renderObjectID) != m_MeshRegister.RegisteredMeshInstances.end();
 	}
 
 	bool RenderScene::PrepareRayTracing()
@@ -518,7 +531,7 @@ namespace cerberus
 			return;
 
 		NV_CORE_INFO("RT MeshInstanceCount: {}", m_MeshRegister.MeshInstanceCount);
-		NV_CORE_INFO("RT MeshInstanceRegistered: {}", m_MeshRegister.MeshInstanceRegistered.size());
+		NV_CORE_INFO("RT RegisteredMeshInstances: {}", m_MeshRegister.RegisteredMeshInstances.size());
 		NV_CORE_INFO("RT TLAS valid before build: {}", asInfo.TLAS.IsValid());
 		NV_CORE_INFO("RT UpdateTLAS: {}", asInfo.UpdateTLAS);
 
@@ -551,12 +564,12 @@ namespace cerberus
 		m_RayTracingInstances.clear();
 		m_RayTracingInstances.reserve(m_MeshRegister.MeshInstanceCount);
 
-		for (const auto& [meshAssetHandle, meshInstances] : m_MeshRegister.MeshInstanceRegistered)
+		for (const auto& [renderObjectID, registeredInstance] : m_MeshRegister.RegisteredMeshInstances)
 		{
-			(void)meshAssetHandle;
-			for (uint32_t i = 0; i < meshInstances.size(); i++)
+			(void)renderObjectID;
+			for (Handle<MeshInstanceProxy> meshInstanceHandle : registeredInstance.SubmeshInstances)
 			{
-				MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstances[i]);
+				MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
 				CORE_ASSERT(meshInstance, "Invalid MeshInstanceProxy while building TLAS instance data");
 
 				const MaterialProxy* materialProxy = GetMaterialProxy(meshInstance->MaterialProxyIndex);
@@ -589,7 +602,7 @@ namespace cerberus
 				instanceData.FirstIndex = submesh.BaseIndex;
 				instanceData.BaseVertex = submesh.BaseVertex;
 
-				asBuilder.SubmitMeshInstance(meshInstances[i], instanceCustomIndex);
+				asBuilder.SubmitMeshInstance(meshInstanceHandle, instanceCustomIndex);
 				submittedTLASInstances++;
 			}
 		}
@@ -647,10 +660,10 @@ namespace cerberus
 	void RenderScene::DestroyAllMeshProxies()
 	{
 		// Destroy all instance proxies first.
-		for (auto& [meshHandle, meshInstances] : m_MeshRegister.MeshInstanceRegistered)
+		for (auto& [renderObjectID, registeredInstance] : m_MeshRegister.RegisteredMeshInstances)
 		{
-			(void)meshHandle;
-			for (Handle<MeshInstanceProxy> meshInstance : meshInstances)
+			(void)renderObjectID;
+			for (Handle<MeshInstanceProxy> meshInstance : registeredInstance.SubmeshInstances)
 			{
 				if (meshInstance.IsValid())
 					ResourceManager::DestroyMeshInstanceProxy(meshInstance);
@@ -677,9 +690,9 @@ namespace cerberus
 				ResourceManager::DestroyMeshSourceProxy(meshSourceProxyHandle);
 		}
 
-		m_MeshRegister.MeshInstanceRegistered.clear();
+		m_MeshRegister.RegisteredMeshInstances.clear();
 		m_MeshRegister.MeshSourceRegistered.clear();
-		m_MeshRegister.InstancePerMeshSourceRegistered.clear();
+		m_MeshRegister.MeshSourceReferenceCounts.clear();
 		ClearMaterialProxies();
 		m_RayTracingInstances.clear();
 		m_MeshRegister.MeshInstanceMap.clear();
@@ -703,7 +716,7 @@ namespace cerberus
 			asInfo.BLASToBuild.empty() &&
 			asInfo.PendingBLASToDestroy.empty() &&
 			asInfo.PendingMeshSourcesToDestroy.empty() &&
-			m_MeshRegister.MeshInstanceRegistered.empty() &&
+			m_MeshRegister.RegisteredMeshInstances.empty() &&
 			m_MeshRegister.MeshSourceRegistered.empty() &&
 			m_MeshRegister.MaterialProxies.empty() &&
 			m_MeshRegister.GPUTextures.empty() &&

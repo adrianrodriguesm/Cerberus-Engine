@@ -767,10 +767,14 @@ namespace cerberus
 		CreateRTImages();
 	}
 
-	bool PathTracerSceneRenderer::RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform)
+	bool PathTracerSceneRenderer::RegisterMesh(
+		RenderObjectID renderObjectID,
+		const Ref<Mesh>& mesh,
+		const Ref<MaterialTable>& materialTable,
+		const glm::mat4& transform)
 	{
 		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
-		const bool registered = m_RenderScene->RegisterMesh(mesh, materialTable, transform);
+		const bool registered = m_RenderScene->RegisterMesh(renderObjectID, mesh, materialTable, transform);
 		if (registered)
 			ResetAccumulation();
 		return registered;
@@ -814,35 +818,35 @@ namespace cerberus
 		FlushRenderPasses();
 	}
 
-	bool PathTracerSceneRenderer::IsRegistered(const Ref<Mesh>& mesh)
+	bool PathTracerSceneRenderer::IsRegistered(RenderObjectID renderObjectID)
 	{
 		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
-		return m_RenderScene->IsRegistered(mesh);
+		return m_RenderScene->IsRegistered(renderObjectID);
 	}
 
-	bool PathTracerSceneRenderer::UnregisterMesh(const Ref<Mesh>& mesh)
+	bool PathTracerSceneRenderer::UnregisterMesh(RenderObjectID renderObjectID)
 	{
 		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
-		const bool unregistered = m_RenderScene->UnregisterMesh(mesh);
+		const bool unregistered = m_RenderScene->UnregisterMesh(renderObjectID);
 		if (unregistered)
 			ResetAccumulation();
 		return unregistered;
 	}
 
-	void PathTracerSceneRenderer::UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform)
+	void PathTracerSceneRenderer::UpdateMeshTransform(RenderObjectID renderObjectID, const glm::mat4& transform)
 	{
 		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
-		if (!m_RenderScene->IsRegistered(mesh))
+		if (!m_RenderScene->IsRegistered(renderObjectID))
 			return;
 
-		m_RenderScene->UpdateMeshTransform(mesh, transform);
+		m_RenderScene->UpdateMeshTransform(renderObjectID, transform);
 		ResetAccumulation();
 	}
 
-	bool PathTracerSceneRenderer::UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable)
+	bool PathTracerSceneRenderer::UpdateMeshMaterials(RenderObjectID renderObjectID, const Ref<MaterialTable>& materialTable)
 	{
 		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
-		const bool updated = m_RenderScene->UpdateMeshMaterials(mesh, materialTable);
+		const bool updated = m_RenderScene->UpdateMeshMaterials(renderObjectID, materialTable);
 		if (updated)
 			ResetAccumulation();
 		return updated;

@@ -12,6 +12,7 @@ namespace cerberus
 		virtual void SetSceneContext(const Ref<Scene>& scene) override;
 		virtual void SetSelectionContext(const Entity& entity) override;
 		void SetSelectionChangedCallback(const std::function<void(Entity)>& func) { m_SelectionChangedCallback = func; }
+		void SetEntityActivatedCallback(const std::function<void(Entity)>& func) { m_EntityActivatedCallback = func; }
 		void SetEntityDeletedCallback(const std::function<void(Entity)>& func) { m_EntityDeletedCallback = func; }
 		virtual void OnImGuiRender(bool& isOpen) override;
 	private:
@@ -20,9 +21,11 @@ namespace cerberus
 	private:
 		Ref<Scene> m_SceneContext;
 		Entity m_SelectionContext;
+		Entity m_EntityToDuplicate;
+		Entity m_EntityToDelete;
 
 		bool m_IsWindow;
 
-		std::function<void(Entity)> m_SelectionChangedCallback, m_EntityDeletedCallback;
+		std::function<void(Entity)> m_SelectionChangedCallback, m_EntityActivatedCallback, m_EntityDeletedCallback;
 	};
 }

@@ -1,3 +1,5 @@
 MeshSourceImporter:
-  - SubmeshIndex: 0
-    MaterialHandle: 10469688837712265183
+  Version: 2
+  Materials:
+    - MaterialSlot: 0
+      MaterialHandle: 10469688837712265183

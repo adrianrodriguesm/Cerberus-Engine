@@ -26,7 +26,7 @@ namespace cerberus
 
 		const glm::vec3& GetPosition() const { return m_Position; }
 		glm::vec3 GetDirection() const;
-		void SetFocusPoint(const glm::vec3 focusPoint);
+		void SetFocusPoint(const glm::vec3& focusPoint, float focusRadius = 1.0f);
 		float GetPitch() const { return m_Pitch; }
 		float GetYaw() const { return m_Yaw; }
 		float GetNearPlane() const { return m_NearClip; }

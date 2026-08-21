@@ -3,10 +3,33 @@
 
 #include "Panels/EditorPanel.h"
 #include "ImGui/ImGuizmo.h"
+#include <limits>
+#include <unordered_map>
 namespace cerberus
 {
 	class EditorLayer : public Layer
 	{
+		struct ViewportRay
+		{
+			glm::vec3 Origin = glm::vec3(0.0f);
+			glm::vec3 Direction = glm::vec3(0.0f, 0.0f, -1.0f);
+		};
+
+		struct ViewportHit
+		{
+			Entity HitEntity;
+			glm::vec3 Position = glm::vec3(0.0f);
+			float Distance = std::numeric_limits<float>::max();
+			uint32_t MaterialSlot = 0;
+		};
+
+		struct MeshBounds
+		{
+			glm::vec3 Min = glm::vec3(0.0f);
+			glm::vec3 Max = glm::vec3(0.0f);
+			bool Valid = false;
+		};
+
 	public:
 		EditorLayer();
 		~EditorLayer() = default;
@@ -17,6 +40,8 @@ namespace cerberus
 		virtual void OnUpdate(Timestep ts) override;
 
 		void SelectEntity(const Entity& entity);
+		void DuplicateSelectedEntity();
+		void FocusEntity(Entity entity);
 
 		void NewScene();
 		void OpenScene();
@@ -32,6 +57,13 @@ namespace cerberus
 		void UI_DockSpace();
 
 	private:
+		bool BuildViewportRay(const ImVec2& viewportPosition, const ImVec2& viewportSize, ViewportRay& ray) const;
+		bool RaycastScene(const ViewportRay& ray, ViewportHit& closestHit);
+		MeshBounds GetMeshBounds(const Ref<MeshSource>& meshSource);
+		AssetHandle ResolveDroppedMesh(AssetHandle assetHandle);
+		Entity CreateMeshEntityFromDrop(AssetHandle meshHandle, const ViewportRay& ray, const ViewportHit* surfaceHit);
+		bool ApplyMaterialFromDrop(AssetHandle materialHandle, const ViewportHit& hit);
+
 		Ref<Scene> m_Scene;
 		Entity m_SelectedEntity;
 
@@ -44,5 +76,7 @@ namespace cerberus
 		Ref<EditorPanelManager> m_EditorPanelManager;
 		FlyingCamera m_Camera;
 		std::vector<Entity> m_Entities;
+		std::unordered_map<AssetHandle, MeshBounds> m_MeshBoundsCache;
+		std::unordered_map<AssetHandle, std::vector<MeshBounds>> m_SubmeshBoundsCache;
 	};
 }

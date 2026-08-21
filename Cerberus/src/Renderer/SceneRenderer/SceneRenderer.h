@@ -8,6 +8,7 @@
 #include "Renderer/ComputePipeline.h"
 #include "Renderer/Shadow.h"
 #include "Renderer/Image.h"
+#include "Renderer/RenderObjectID.h"
 #include <span>
 namespace cerberus
 {
@@ -38,11 +39,11 @@ namespace cerberus
 		virtual void SetViewportSize(uint32_t width, uint32_t height) = 0;
 		virtual void SetSceneContext(const Ref<Scene>& scene) = 0;
 
-		virtual bool IsRegistered(const Ref<Mesh>& mesh) = 0;
-		virtual bool RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) { return false; }
-		virtual bool UnregisterMesh(const Ref<Mesh>& mesh) { return false; }
-		virtual void UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform) {}
-		virtual bool UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable) { return false; }
+		virtual bool IsRegistered(RenderObjectID renderObjectID) = 0;
+		virtual bool RegisterMesh(RenderObjectID renderObjectID, const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) { return false; }
+		virtual bool UnregisterMesh(RenderObjectID renderObjectID) { return false; }
+		virtual void UpdateMeshTransform(RenderObjectID renderObjectID, const glm::mat4& transform) {}
+		virtual bool UpdateMeshMaterials(RenderObjectID renderObjectID, const Ref<MaterialTable>& materialTable) { return false; }
 		virtual void OnMaterialAssetChanged(const Ref<MaterialAsset>& materialAsset) {}
 		virtual void SetSkyLight(const Ref<EnvironmentMap>& environment, float intensity, uint32_t sampleLOD) {}
 		virtual void SetDirectionalLights(std::span<const DirectionalLight> directionalLights) {}

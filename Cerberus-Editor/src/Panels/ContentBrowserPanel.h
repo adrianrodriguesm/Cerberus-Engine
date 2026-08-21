@@ -68,6 +68,7 @@ namespace cerberus
 
 		ContentBrowserItemList& GetCurrentItems() { return m_CurrentItemList; }
 		void Refresh();
+		bool FocusAsset(AssetHandle assetHandle);
 
 		static ContentBrowserPanel& Get() { return *s_Instance; }
 	private:
@@ -110,6 +111,8 @@ namespace cerberus
 		ContentBrowserItemList m_CurrentItemList;
 		std::unordered_map<std::string, Handle<Texture2D>> m_IconMap;
 		bool m_IsAnyItemHovered;
+		AssetHandle m_PendingScrollToAsset = 0;
+		bool m_RequestWindowFocus = false;
 	private:
 		friend class ContentBrowserItem;
 		friend class ContentBrowserDirectory;

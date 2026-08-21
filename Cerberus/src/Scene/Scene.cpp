@@ -19,11 +19,8 @@ namespace cerberus
 	{
 		if (m_MeshToRemoved.size() > 0)
 		{
-			for (const auto assetHandle : m_MeshToRemoved)
-			{
-				Ref<Mesh> mesh = AssetManager::GetAsset<Mesh>(assetHandle);
-				sceneRenderer->UnregisterMesh(mesh);
-			}
+			for (RenderObjectID renderObjectID : m_MeshToRemoved)
+				sceneRenderer->UnregisterMesh(renderObjectID);
 			m_MeshToRemoved.clear();
 		}
 		m_LightEnvironment = {};
@@ -85,16 +82,21 @@ namespace cerberus
 			for (auto& entity : group)
 			{
 				const auto& [transform, mesh] = group.get<TransformComponent, MeshComponent>(entity);
+				const RenderObjectID renderObjectID{ m_Registry.get<IDComponent>(entity).ID };
 				if (!mesh.m_Registered)
 				{
-					bool registered = sceneRenderer->RegisterMesh(AssetManager::GetAsset<Mesh>(mesh.MeshHandle), mesh.MaterialTable, transform.GetTransform());
+					bool registered = sceneRenderer->RegisterMesh(
+						renderObjectID,
+						AssetManager::GetAsset<Mesh>(mesh.MeshHandle),
+						mesh.MaterialTable,
+						transform.GetTransform());
 					mesh.m_Registered = registered;
 					transform.m_TransformStateDirty = false;
 					//sceneRenderer->SubmitMesh(AssetManager::GetAsset<Mesh>(mesh.MeshHandle), mesh.MaterialTable, transform.GetTransform());
 				}
 				else if (transform.IsTransformDirty())
 				{
-					sceneRenderer->UpdateMeshTransform(AssetManager::GetAsset<Mesh>(mesh.MeshHandle), transform.GetTransform());
+					sceneRenderer->UpdateMeshTransform(renderObjectID, transform.GetTransform());
 					transform.m_TransformStateDirty = false;
 				}
 
@@ -121,12 +123,48 @@ namespace cerberus
 		return entity;
 	}
 
+	Entity Scene::DuplicateEntity(Entity sourceEntity)
+	{
+		if (!sourceEntity)
+			return {};
+
+		// A Scene currently supports a single SkyLight. Refuse the operation
+		// instead of creating a duplicate that would fail during Scene::OnUpdate.
+		if (sourceEntity.HasComponent<SkyLightComponent>())
+		{
+			NV_CORE_WARN("SkyLight is a singleton Scene component and cannot be duplicated");
+			return {};
+		}
+
+		const std::string sourceTag = sourceEntity.HasComponent<TagComponent>()
+			? sourceEntity.GetComponent<TagComponent>().Tag
+			: "Entity";
+		Entity duplicateEntity = CreateEntity(sourceTag + " Copy");
+
+		if (sourceEntity.HasComponent<TransformComponent>())
+		{
+			auto& duplicateTransform = duplicateEntity.GetComponent<TransformComponent>();
+			duplicateTransform = sourceEntity.GetComponent<TransformComponent>();
+			duplicateTransform.MarkTransformAsDirty();
+		}
+
+		// IDComponent and TagComponent are intentionally not copied. CreateEntity
+		// already generated a fresh UUID/RenderObjectID and the duplicate tag above.
+		if (sourceEntity.HasComponent<MeshComponent>())
+			duplicateEntity.AddComponent<MeshComponent>(sourceEntity.GetComponent<MeshComponent>());
+
+		if (sourceEntity.HasComponent<DirectionalLightComponent>())
+			duplicateEntity.AddComponent<DirectionalLightComponent>(sourceEntity.GetComponent<DirectionalLightComponent>());
+
+		return duplicateEntity;
+	}
+
 	void Scene::DestroyEntity(Entity entity)
 	{
 		if (entity.HasComponent<MeshComponent>())
 		{
-			auto& component = entity.GetComponent<MeshComponent>();
-			m_MeshToRemoved.push_back(component.MeshHandle);
+			const RenderObjectID renderObjectID{ entity.GetComponent<IDComponent>().ID };
+			m_MeshToRemoved.push_back(renderObjectID);
 		}
 		m_Registry.destroy(entity);
 	}

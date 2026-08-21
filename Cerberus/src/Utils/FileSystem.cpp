@@ -171,10 +171,51 @@ namespace cerberus
 		return std::filesystem::absolute(std::filesystem::current_path() / path);
 	}
 
+	std::filesystem::path FileSystem::ResolveProjectPath(const std::filesystem::path& filepath)
+	{
+		if (filepath.empty())
+			return {};
+
+		const std::string normalized = NormalizeSlashes(filepath.string());
+		if (IsVirtualPath(normalized))
+			return ResolvePath(normalized);
+
+		const std::filesystem::path path(normalized);
+		if (path.is_absolute())
+			return path.lexically_normal();
+
+		return (GetProjectRoot() / path).lexically_normal();
+	}
+
 	std::filesystem::path FileSystem::GetRelativePathFromAbsolute(const std::filesystem::path absolutePath)
 	{
-		std::filesystem::path currentPath = std::filesystem::current_path();
-		return std::filesystem::relative(absolutePath, currentPath);
+		std::error_code error;
+		const std::filesystem::path absolute = std::filesystem::weakly_canonical(
+			std::filesystem::absolute(absolutePath), error);
+		const std::filesystem::path resolvedAbsolute = error
+			? std::filesystem::absolute(absolutePath).lexically_normal()
+			: absolute;
+
+		error.clear();
+		const std::filesystem::path projectRoot = std::filesystem::weakly_canonical(GetProjectRoot(), error);
+		const std::filesystem::path resolvedProjectRoot = error
+			? std::filesystem::absolute(GetProjectRoot()).lexically_normal()
+			: projectRoot;
+
+		error.clear();
+		const std::filesystem::path projectRelative = std::filesystem::relative(
+			resolvedAbsolute, resolvedProjectRoot, error);
+		if (!error && !projectRelative.empty())
+		{
+			const auto firstComponent = projectRelative.begin();
+			if (firstComponent == projectRelative.end() || *firstComponent != std::filesystem::path(".."))
+				return projectRelative.lexically_normal();
+		}
+
+		error.clear();
+		const std::filesystem::path currentRelative = std::filesystem::relative(
+			resolvedAbsolute, std::filesystem::current_path(), error);
+		return error ? resolvedAbsolute : currentRelative.lexically_normal();
 	}
 	std::string FileSystem::GetProjectPath()
 	{

@@ -14,6 +14,8 @@ namespace cerberus
 	{
 		m_SceneContext = sceneContext;
 		m_SelectionContext = {};
+		m_EntityToDuplicate = {};
+		m_EntityToDelete = {};
 	}
 	void SceneHierarchyPanel::SetSelectionContext(const Entity& entity)
 	{
@@ -106,12 +108,32 @@ namespace cerberus
 					}
 					ImGui::EndPopup();
 				}
+				m_SceneContext->m_Registry.each([&](const auto& entityID)
+				{
+					Entity entity = { entityID , m_SceneContext.get() };
+					DrawEntityNode(entity);
+				});
+
+				// Registry mutations are deferred until iteration is complete so EnTT
+				// storage cannot be invalidated while drawing the hierarchy.
+				if (m_EntityToDuplicate)
+				{
+					Entity sourceEntity = m_EntityToDuplicate;
+					m_EntityToDuplicate = {};
+					Entity duplicateEntity = m_SceneContext->DuplicateEntity(sourceEntity);
+					if (duplicateEntity)
+						SetSelected(duplicateEntity);
+				}
+
+				if (m_EntityToDelete)
+				{
+					Entity entityToDelete = m_EntityToDelete;
+					m_EntityToDelete = {};
+					m_SceneContext->DestroyEntity(entityToDelete);
+					if (entityToDelete == m_SelectionContext)
+						SetSelected({});
+				}
 			}
-			m_SceneContext->m_Registry.each([&](const auto& entityID)
-			{
-				Entity entity = { entityID , m_SceneContext.get() };
-				DrawEntityNode(entity);
-			});
 		}
 		ImGui::End();
 	}
@@ -128,12 +150,21 @@ namespace cerberus
 		auto& tag = entity.GetComponent<TagComponent>().Tag;
 		ImGuiTreeNodeFlags flags = ((m_SelectionContext == entity) ? ImGuiTreeNodeFlags_Selected : 0) | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
 		bool opened = ImGui::TreeNodeEx((void*)((uint64_t)(uint32_t)entity), flags, tag.c_str());
-		if (ImGui::IsItemClicked())
+		if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+		{
 			SetSelected(entity);
+			if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && m_EntityActivatedCallback)
+				m_EntityActivatedCallback(entity);
+		}
 
 		bool entityDeleted = false;
+		bool entityDuplicated = false;
 		if (ImGui::BeginPopupContextItem())
 		{
+			if (ImGui::MenuItem("Duplicate Entity", "Ctrl+D"))
+				entityDuplicated = true;
+
+			ImGui::Separator();
 			if (ImGui::MenuItem("Delete Entity"))
 				entityDeleted = true;
 
@@ -142,13 +173,12 @@ namespace cerberus
 
 		if (opened)
 			ImGui::TreePop();
+
+		if (entityDuplicated)
+			m_EntityToDuplicate = entity;
 		
 
 		if (entityDeleted)
-		{
-			m_SceneContext->DestroyEntity(entity);
-			if (entity == m_SelectionContext)
-				SetSelected({});
-		}
+			m_EntityToDelete = entity;
 	}
 }

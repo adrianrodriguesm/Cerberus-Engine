@@ -109,8 +109,40 @@ namespace cerberus
 		AssetHandle MeshHandle = 0;
 		Ref<MaterialTable> MaterialTable;
 
-		MeshComponent() = default;
-		MeshComponent(const MeshComponent& other) = default;
+		MeshComponent()
+			: MaterialTable(CreateRef<cerberus::MaterialTable>()),
+			  m_Registered(false), m_RenderStateCreated(false), m_RenderStateDirty(true)
+		{
+		}
+
+		MeshComponent(const MeshComponent& other)
+			: MeshHandle(other.MeshHandle),
+			  MaterialTable(other.MaterialTable
+				  ? CreateRef<cerberus::MaterialTable>(other.MaterialTable)
+				  : CreateRef<cerberus::MaterialTable>()),
+			  m_Registered(false), m_RenderStateCreated(false), m_RenderStateDirty(true)
+		{
+		}
+
+		// Preserve renderer state when EnTT relocates component storage. Explicit
+		// copies represent a new logical component and intentionally reset it.
+		MeshComponent(MeshComponent&& other) noexcept = default;
+		MeshComponent& operator=(MeshComponent&& other) noexcept = default;
+
+		MeshComponent& operator=(const MeshComponent& other)
+		{
+			if (this == &other)
+				return *this;
+
+			MeshHandle = other.MeshHandle;
+			MaterialTable = other.MaterialTable
+				? CreateRef<cerberus::MaterialTable>(other.MaterialTable)
+				: CreateRef<cerberus::MaterialTable>();
+			m_Registered = false;
+			m_RenderStateCreated = false;
+			m_RenderStateDirty = true;
+			return *this;
+		}
 
 		MeshComponent(const AssetHandle& meshHandle)
 			: MeshHandle(meshHandle), m_Registered(false), m_RenderStateCreated(false), m_RenderStateDirty(true)
@@ -163,7 +195,7 @@ namespace cerberus
 	{
 		AssetHandle EnvironmentHandle;
 		float Intensity = 1.f;
-		uint32_t SampleLOD = 0;
+		uint32_t SampleLOD = 1;
 
 		SkyLightComponent() = default;
 		SkyLightComponent(const SkyLightComponent& other) = default;

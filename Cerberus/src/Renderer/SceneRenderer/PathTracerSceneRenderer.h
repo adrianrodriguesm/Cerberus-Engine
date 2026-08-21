@@ -28,15 +28,15 @@ namespace cerberus
 
 		virtual void Render(const SceneRendererCamera& sceneRendererCamera) override;
 
-		virtual bool RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) override;
-		virtual bool UnregisterMesh(const Ref<Mesh>& mesh) override;
-		virtual void UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform) override;
-		virtual bool UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable) override;
+		virtual bool RegisterMesh(RenderObjectID renderObjectID, const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) override;
+		virtual bool UnregisterMesh(RenderObjectID renderObjectID) override;
+		virtual void UpdateMeshTransform(RenderObjectID renderObjectID, const glm::mat4& transform) override;
+		virtual bool UpdateMeshMaterials(RenderObjectID renderObjectID, const Ref<MaterialTable>& materialTable) override;
 		virtual void OnMaterialAssetChanged(const Ref<MaterialAsset>& materialAsset) override;
 		virtual void SetSkyLight(const Ref<EnvironmentMap>& environment, float intensity, uint32_t sampleLOD) override;
 		virtual void SetDirectionalLights(std::span<const DirectionalLight> directionalLights) override;
 
-		virtual bool IsRegistered(const Ref<Mesh>& mesh) override;
+		virtual bool IsRegistered(RenderObjectID renderObjectID) override;
 
 		virtual void OnImGuiRender() override;
 

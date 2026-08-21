@@ -362,6 +362,9 @@ Assets:
   - Handle: 8117248752684548504
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_15 (02).cmaterial
     Type: Material
+  - Handle: 8124064055642612827
+    FilePath: Resources/Materials/DiffuseMat Blue.cmaterial
+    Type: Material
   - Handle: 8216204498673315095
     FilePath: Resources/Meshes/Source/Default/Torus.fbx
     Type: MeshSource
@@ -611,6 +614,9 @@ Assets:
   - Handle: 12927779455363604961
     FilePath: Resources/Meshes/cerberusMaterials.cmesh
     Type: Mesh
+  - Handle: 12993531669711063834
+    FilePath: Resources/Materials/Emissive.cmaterial
+    Type: Material
   - Handle: 13045788452574008455
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_25 (14).cmaterial
     Type: Material
@@ -680,6 +686,9 @@ Assets:
   - Handle: 14180229998694413389
     FilePath: Resources/Editor/Material-Icon.png
     Type: Texture
+  - Handle: 14247841347131106388
+    FilePath: Resources/Materials/DiffuseMat Red.cmaterial
+    Type: Material
   - Handle: 14558541244077374761
     FilePath: Resources/Meshes/Source/Sponza/13982482287905699490.jpg
     Type: Texture
@@ -730,6 +739,9 @@ Assets:
     Type: Texture
   - Handle: 15549171724285142261
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_10 (02).cmaterial
+    Type: Material
+  - Handle: 15577882130069487548
+    FilePath: Resources/Materials/Defaults/Sphere/DiffuseMat.cmaterial
     Type: Material
   - Handle: 15686737584590339245
     FilePath: Resources/Materials/Defaults/Sponza/Sponza_25 (29).cmaterial

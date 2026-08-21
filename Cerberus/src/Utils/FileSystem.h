@@ -28,6 +28,9 @@ namespace cerberus
 		//   project://Shaders/PBR.glsl
 		// Legacy paths are kept working by searching the project root first and then the engine root.
 		static std::filesystem::path ResolvePath(const std::string& filepath);
+		// Resolves project-owned files for both reads and writes. Unlike ResolvePath,
+		// this does not require the destination to exist already.
+		static std::filesystem::path ResolveProjectPath(const std::filesystem::path& filepath);
 		static std::filesystem::path ResolveFileSystemPath(const std::string& filepath);
 		static bool IsVirtualPath(const std::string& filepath);
 

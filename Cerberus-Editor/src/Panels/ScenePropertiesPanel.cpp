@@ -251,7 +251,8 @@ namespace cerberus
 			ui::EndPropertyGrid();
 		});
 
-		DrawComponent<MeshComponent>("MESH", entity, [this](auto& component)
+		const RenderObjectID renderObjectID{ entity.GetComponent<IDComponent>().ID };
+		DrawComponent<MeshComponent>("MESH", entity, [this, renderObjectID](auto& component)
 		{
 			ui::BeginPropertyGrid();
 			auto& meshHandle = component.MeshHandle;
@@ -271,6 +272,11 @@ namespace cerberus
 				ui::PropertyAssetReferenceSettings settings;
 				settings.AdvanceToNextColumn = false;
 				settings.WidthOffset = ImGui::GetStyle().ItemSpacing.x + 28.0f;
+				settings.OnClick = [this](AssetHandle materialHandle)
+				{
+					if (m_AssetFocusedCallback)
+						m_AssetFocusedCallback(materialHandle);
+				};
 				for (size_t i = 0; i < materialCount; i++)
 				{
 					std::string label = fmt::format("[Material {0}]", i);
@@ -295,7 +301,7 @@ namespace cerberus
 					}
 
 					if ((materialChanged || materialCleared) && m_MaterialTableChangedCallback)
-						m_MaterialTableChangedCallback(mesh, component.MaterialTable);
+						m_MaterialTableChangedCallback(renderObjectID, component.MaterialTable);
 
 					ImGui::NextColumn();
 					

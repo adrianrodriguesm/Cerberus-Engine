@@ -117,11 +117,18 @@ namespace cerberus
 		m_Target = m_Position + direction;
 
 	}
-	void FlyingCamera::SetFocusPoint(const glm::vec3 focusPoint)
+	void FlyingCamera::SetFocusPoint(const glm::vec3& focusPoint, float focusRadius)
 	{
-		m_NewTarget = focusPoint;
-		m_Distance = glm::distance(focusPoint, m_Position);
+		const float halfVerticalFOV = glm::radians(m_FOV) * 0.5f;
+		const float halfHorizontalFOV = atanf(tanf(halfVerticalFOV) * m_AspectRatio);
+		const float limitingHalfFOV = glm::max(glm::min(halfVerticalFOV, halfHorizontalFOV), glm::radians(1.0f));
 
+		focusRadius = glm::max(focusRadius, 0.1f);
+		m_Distance = glm::max((focusRadius / tanf(limitingHalfFOV)) * 1.25f, m_NearClip * 2.0f);
+		m_NewTarget = focusPoint;
+		m_Target = focusPoint;
+		m_Position = focusPoint - GetDirection() * m_Distance;
+		UpdateView();
 	}
 
 	glm::vec3 FlyingCamera::GetDirection() const

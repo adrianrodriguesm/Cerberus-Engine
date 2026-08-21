@@ -3,6 +3,7 @@
 #include "Renderer/Image.h"
 #include "ImGui/ImGuiUtils.h"
 #include <glm/gtc/type_ptr.hpp>
+#include <functional>
 #include "Asset/AssetManager.h"
 namespace cerberus::ui
 {
@@ -673,6 +674,7 @@ namespace cerberus::ui
 		bool AdvanceToNextColumn = true;
 		bool NoItemSpacing = false; // After label
 		float WidthOffset = 0.0f;
+		std::function<void(AssetHandle)> OnClick;
 	};
 
 	template<typename TAssetType, typename Fn>
@@ -712,7 +714,12 @@ namespace cerberus::ui
 					buttonText = "Missing";
 			}
 			if (ImGui::Button(fmt::format("{}##{}", buttonText, s_Counter++).c_str(), { width, itemHeight }))
-				ImGui::OpenPopup("AssetSearchPopup");
+			{
+				if (settings.OnClick && AssetManager::IsAssetHandleValid(outHandle))
+					settings.OnClick(outHandle);
+				else
+					ImGui::OpenPopup("AssetSearchPopup");
+			}
 
 			ImGui::GetStyle().ButtonTextAlign = originalButtonTextAlign;
 

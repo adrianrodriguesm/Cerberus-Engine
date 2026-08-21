@@ -246,8 +246,20 @@ namespace cerberus
 
 	void SceneSerializer::Serialize(const AssetMetadata& metadata, const Ref<Asset>& asset)
 	{
-		auto& filepath = metadata.FilePath;
 		Ref<Scene> scene = std::dynamic_pointer_cast<Scene>(asset);
+		if (!scene)
+		{
+			NV_CORE_ERROR("Cannot serialize a null or non-Scene asset");
+			return;
+		}
+
+		const std::filesystem::path filepath = FileSystem::ResolveProjectPath(metadata.FilePath);
+		if (filepath.empty())
+		{
+			NV_CORE_ERROR("Cannot serialize scene '{0}': invalid asset path", scene->m_Name);
+			return;
+		}
+
 		YAML::Emitter out;
 		out << YAML::BeginMap;
 		out << YAML::Key << "Scene" << YAML::Value << scene->m_Name;
@@ -263,14 +275,38 @@ namespace cerberus
 		out << YAML::EndSeq;
 		out << YAML::EndMap;
 
-		std::ofstream fout(filepath);
+		std::error_code directoryError;
+		if (filepath.has_parent_path())
+			std::filesystem::create_directories(filepath.parent_path(), directoryError);
+		if (directoryError)
+		{
+			NV_CORE_ERROR("Cannot create scene directory '{0}': {1}",
+				filepath.parent_path().string(), directoryError.message());
+			return;
+		}
+
+		std::ofstream fout(filepath, std::ios::out | std::ios::trunc);
+		if (!fout.is_open())
+		{
+			NV_CORE_ERROR("Cannot open scene '{0}' for serialization", filepath.string());
+			return;
+		}
+
 		fout << out.c_str();
+		fout.flush();
+		if (!fout.good())
+		{
+			NV_CORE_ERROR("Failed to serialize scene '{0}'", filepath.string());
+			return;
+		}
+
+		NV_CORE_INFO("Serialized scene '{0}' to '{1}'", scene->m_Name, filepath.string());
 	}
 
 	bool SceneSerializer::TryToLoadData(const AssetMetadata& metadata, Ref<Asset>& asset)
 	{
-		const auto& filepath = metadata.FilePath.string();
-		YAML::Node data = YAML::LoadFile(filepath);
+		const std::filesystem::path filepath = FileSystem::ResolveProjectPath(metadata.FilePath);
+		YAML::Node data = YAML::LoadFile(filepath.string());
 		if (!data["Scene"])
 			return false;
 
@@ -294,6 +330,7 @@ namespace cerberus
 				NV_CORE_TRACE("Deserialized entity with ID = {0}, name = {1}", uuid, name);
 
 				Entity deserializedEntity = scene->CreateEntity(name);
+				deserializedEntity.GetComponent<IDComponent>().ID = UUID(uuid);
 
 				auto transformComponent = entity["TransformComponent"];
 				if (transformComponent)
@@ -332,20 +369,34 @@ namespace cerberus
 				{
 					auto& slc = deserializedEntity.AddComponent<SkyLightComponent>();
 
-					AssetHandle assetHandle = skyLightComponent["AssetHandle"].as<AssetHandle>();
+					const AssetHandle assetHandle = skyLightComponent["AssetHandle"]
+						? skyLightComponent["AssetHandle"].as<AssetHandle>()
+						: AssetHandle(0);
 					slc.EnvironmentHandle = AssetManager::IsAssetHandleValid(assetHandle)
 						? assetHandle
 						: AssetHandle(0);
-					slc.Intensity = skyLightComponent["Intensity"].as<float>();
-					slc.SampleLOD = skyLightComponent["SampleLOD"].as<uint32_t>();
+					// Intensity was named Multiplier in early scene files. Keep that
+					// compatibility while always writing the canonical Intensity key.
+					if (skyLightComponent["Intensity"])
+						slc.Intensity = skyLightComponent["Intensity"].as<float>();
+					else if (skyLightComponent["Multiplier"])
+						slc.Intensity = skyLightComponent["Multiplier"].as<float>();
+
+					if (skyLightComponent["SampleLOD"])
+						slc.SampleLOD = skyLightComponent["SampleLOD"].as<uint32_t>();
 				}
 
 				auto directionalLightComponent = entity["DirectionalLightComponent"];
 				if (directionalLightComponent)
 				{
 					auto& dlc = deserializedEntity.AddComponent<DirectionalLightComponent>();
-					dlc.Intensity = directionalLightComponent["Intensity"].as<float>();
-					dlc.Radiance = directionalLightComponent["Radiance"].as<glm::vec3>();
+					if (directionalLightComponent["Intensity"])
+						dlc.Intensity = directionalLightComponent["Intensity"].as<float>();
+					else if (directionalLightComponent["Multiplier"])
+						dlc.Intensity = directionalLightComponent["Multiplier"].as<float>();
+
+					if (directionalLightComponent["Radiance"])
+						dlc.Radiance = directionalLightComponent["Radiance"].as<glm::vec3>();
 				}
 			}
 		}

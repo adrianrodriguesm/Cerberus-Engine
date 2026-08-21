@@ -5,6 +5,7 @@
 #include <glm/glm.hpp>
 #include "Asset/Asset.h"
 #include "Components/Components.h"
+#include "Renderer/RenderObjectID.h"
 namespace cerberus
 {
 	struct SceneRendererCamera;
@@ -14,6 +15,7 @@ namespace cerberus
 	class SceneHierarchyPanel;
 	class ScenePropertiesPanel;
 	class SceneSerializer;
+	class EditorLayer;
 
 	class RegisterContext
 	{
@@ -46,6 +48,7 @@ namespace cerberus
 		void SetViewport(uint32_t width, uint32_t height);
 
 		Entity CreateEntity(const std::string& tagName = "Entity");
+		Entity DuplicateEntity(Entity sourceEntity);
 		void DestroyEntity(Entity entity);
 
 		void SetName(const std::string& name) { m_Name = name; }
@@ -62,13 +65,15 @@ namespace cerberus
 		LightEnvironment m_LightEnvironment;
 		std::vector<Entity> m_DirtyTransform;
 
-		std::vector<AssetHandle> m_MeshToRemoved;
+		std::vector<RenderObjectID> m_MeshToRemoved;
 
 		friend class Entity;
 		friend class ForwardSceneRenderer;
 		friend class SceneSerializer;
 		friend class SceneHierarchyPanel;
 		friend class ScenePropertiesPanel;
+		// Editor-only scene queries (viewport picking) stay outside the renderer.
+		friend class EditorLayer;
 	};
 }
 

@@ -6,6 +6,7 @@
 #include "Renderer/Resources/MaterialProxy.h"
 #include "Renderer/Material.h"
 #include "Renderer/Mesh.h"
+#include "Renderer/RenderObjectID.h"
 #include "Scene/SceneEnvironment.h"
 
 #include <array>
@@ -64,14 +65,14 @@ namespace cerberus
 		RenderScene() = default;
 		~RenderScene();
 
-		bool RegisterMesh(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform);
-		bool UnregisterMesh(const Ref<Mesh>& mesh);
-		void UpdateMeshTransform(const Ref<Mesh>& mesh, const glm::mat4& transform);
-		bool UpdateMeshMaterials(const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable);
+		bool RegisterMesh(RenderObjectID renderObjectID, const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform);
+		bool UnregisterMesh(RenderObjectID renderObjectID);
+		void UpdateMeshTransform(RenderObjectID renderObjectID, const glm::mat4& transform);
+		bool UpdateMeshMaterials(RenderObjectID renderObjectID, const Ref<MaterialTable>& materialTable);
 		bool UpdateMaterialProxy(const Ref<MaterialAsset>& materialAsset);
 		void SetSkyLight(const Ref<EnvironmentMap>& environment, float intensity, uint32_t sampleLOD);
 		bool SetDirectionalLights(std::span<const DirectionalLight> directionalLights);
-		bool IsRegistered(const Ref<Mesh>& mesh) const;
+		bool IsRegistered(RenderObjectID renderObjectID) const;
 
 		// Builds pending BLAS and builds/updates TLAS when dirty.
 		// Returns true when a valid TLAS is available for tracing.
@@ -115,6 +116,13 @@ namespace cerberus
 	private:
 		struct MeshRegister
 		{
+			struct RegisteredMeshInstance
+			{
+				MeshHandle MeshAssetHandle = 0;
+				MeshSourceHandle MeshSourceAssetHandle = 0;
+				std::vector<Handle<MeshInstanceProxy>> SubmeshInstances;
+			};
+
 			struct AccelerationStructureInfo
 			{
 				std::vector<Handle<MeshSourceProxy>> BLASToBuild;
@@ -133,9 +141,11 @@ namespace cerberus
 				Handle<AccelerationStructure> TLAS;
 			} ASRegisterInfo;
 
-			std::unordered_map<MeshHandle, std::vector<Handle<MeshInstanceProxy>>> MeshInstanceRegistered;
+			// One entry per logical Scene object. Multiple RenderObjectIDs may share
+			// the same Mesh/MeshSource assets without sharing transform state.
+			std::unordered_map<RenderObjectID, RegisteredMeshInstance> RegisteredMeshInstances;
 			std::unordered_map<MeshSourceHandle, Handle<MeshSourceProxy>> MeshSourceRegistered;
-			std::unordered_map<MeshHandle, std::vector<MeshHandle>> InstancePerMeshSourceRegistered;
+			std::unordered_map<MeshSourceHandle, uint32_t> MeshSourceReferenceCounts;
 
 			// MaterialAsset handle -> RenderScene-local MaterialProxy table index.
 			// The default material is stored separately because it is a renderer resource and

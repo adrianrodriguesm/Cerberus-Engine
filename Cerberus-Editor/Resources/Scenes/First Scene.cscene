@@ -1,5 +1,16 @@
 Scene: First Scene
 Entities:
+  - Entity: 4837348124439365352
+    TagComponent:
+      Tag: Cube
+    TransformComponent:
+      Translation: [9.00707245, 0.672205329, 0.627028465]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 3441989012872340998
   - Entity: 15322133620228630608
     TagComponent:
       Tag: Sky Light
@@ -9,7 +20,7 @@ Entities:
       Scale: [1, 1, 1]
     SkyLightComponent:
       AssetHandle: 12120527172450138203
-      Intensity: 1
+      Intensity: 2.20000005
       SampleLOD: 1
   - Entity: 13002030392834927472
     TagComponent:
@@ -20,7 +31,7 @@ Entities:
       Scale: [1, 1, 1]
     DirectionalLightComponent:
       Radiance: [1, 1, 1]
-      Intensity: 1
+      Intensity: 3.42499995
   - Entity: 11660497299307709605
     TagComponent:
       Tag: Sponza
@@ -78,3 +89,25 @@ Entities:
       AssetHandle: 11825681029947774227
       MaterialTable:
         0: 13778239963461093945
+  - Entity: 6161878571366855362
+    TagComponent:
+      Tag: Sphere Red
+    TransformComponent:
+      Translation: [7.02342987, 0.737622976, 0.729131818]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 2331242398901356657
+    TagComponent:
+      Tag: Sphere Blue
+    TransformComponent:
+      Translation: [6.00706673, 0.811627388, 0.659687638]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827

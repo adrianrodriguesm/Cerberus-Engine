@@ -1,12 +1,14 @@
 #pragma once
 #include "EditorPanel.h"
+#include "Renderer/RenderObjectID.h"
 
 namespace cerberus
 {
 	class ScenePropertiesPanel : public EditorPanel
 	{
 	public:
-		using MaterialTableChangedCallback = std::function<void(const Ref<Mesh>&, const Ref<MaterialTable>&)>;
+		using MaterialTableChangedCallback = std::function<void(RenderObjectID, const Ref<MaterialTable>&)>;
+		using AssetFocusedCallback = std::function<void(AssetHandle)>;
 
 		ScenePropertiesPanel() = default;
 		ScenePropertiesPanel(const Ref<Scene>& sceneContext);
@@ -17,6 +19,7 @@ namespace cerberus
 
 		virtual void SetSelectionContext(const Entity& selectionContext) override;
 		void SetMaterialTableChangedCallback(MaterialTableChangedCallback callback) { m_MaterialTableChangedCallback = std::move(callback); }
+		void SetAssetFocusedCallback(AssetFocusedCallback callback) { m_AssetFocusedCallback = std::move(callback); }
 
 	private:
 		void DrawEntityComponents(Entity entity);
@@ -24,5 +27,6 @@ namespace cerberus
 		Ref<Scene> m_SceneContext;
 		Entity m_SelectionContext;
 		MaterialTableChangedCallback m_MaterialTableChangedCallback;
+		AssetFocusedCallback m_AssetFocusedCallback;
 	};
 }

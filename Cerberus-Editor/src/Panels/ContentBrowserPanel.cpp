@@ -95,6 +95,12 @@ namespace cerberus
 
 	void ContentBrowserPanel::OnImGuiRender(bool& isOpen)
 	{
+		if (m_RequestWindowFocus)
+		{
+			ImGui::SetNextWindowFocus();
+			m_RequestWindowFocus = false;
+		}
+
 		if (!ImGui::Begin("Content Browser", &isOpen, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar))
 		{
 			ImGui::End();
@@ -178,6 +184,40 @@ namespace cerberus
 
 		ChangeDirectory(m_CurrentDirectory);
 	}
+
+	bool ContentBrowserPanel::FocusAsset(AssetHandle assetHandle)
+	{
+		if (!AssetManager::IsAssetHandleValid(assetHandle))
+			return false;
+
+		const AssetMetadata& metadata = AssetManager::GetMetadata(assetHandle);
+		if (!metadata.IsValid())
+			return false;
+
+		Ref<DirectoryInfo> assetDirectory = GetDirectoryInfo(metadata.FilePath.parent_path());
+		if (!assetDirectory)
+		{
+			Refresh();
+			assetDirectory = GetDirectoryInfo(metadata.FilePath.parent_path());
+		}
+
+		if (!assetDirectory)
+		{
+			NV_CORE_WARN("[ContentBrowserPanel] Failed to reveal asset '{0}'", metadata.FilePath);
+			return false;
+		}
+
+		ChangeDirectory(assetDirectory);
+		const size_t itemIndex = m_CurrentItemList.FindItem(assetHandle);
+		if (itemIndex == ContentBrowserItemList::InvalidItem)
+			return false;
+
+		ClearSelections();
+		m_CurrentItemList[itemIndex]->SetSelected(true);
+		m_PendingScrollToAsset = assetHandle;
+		m_RequestWindowFocus = true;
+		return true;
+	}
 	void ContentBrowserPanel::UpdateInput()
 	{
 		if(!ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows))
@@ -216,6 +256,11 @@ namespace cerberus
 		{
 			item->OnRenderBegin();
 			CBItemActionResult actionResult = item->OnRender(s_ThumbnailSize);
+			if (m_PendingScrollToAsset == item->GetID())
+			{
+				ImGui::SetScrollHereY(0.5f);
+				m_PendingScrollToAsset = 0;
+			}
 			item->OnRenderEnd();
 			// Execute action
 			{
@@ -476,6 +521,7 @@ namespace cerberus
 		if (!directory)
 			return;
 
+		m_PendingScrollToAsset = 0;
 		m_CurrentItemList.Items.clear();
 		// Fill the directories
 		for (auto& [subdirHandle, subdir] : directory->SubDirectories)
