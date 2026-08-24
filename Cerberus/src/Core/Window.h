@@ -1,7 +1,9 @@
 #pragma once
-#include <Renderer/Swapchain.h>
 #include "Events/Event.h"
-#include "Renderer/RendererContext.h"
+
+#include "Renderer/Core/RendererContext.h"
+#include "Renderer/RHI/Swapchain.h"
+
 namespace cerberus 
 {
 	struct WindowSpecification

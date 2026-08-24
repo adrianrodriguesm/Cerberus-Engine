@@ -3,9 +3,9 @@
 #include "ImGui/ImGuiUI.h"
 #include "Utils/FileSystem.h"
 #include "Asset/AssetManager.h"
-#include "Renderer/RendererResources.h"
-#include "Renderer/ResourceManager.h"
-#include "Renderer/TextureAsset.h"
+#include "Renderer/Core/RendererResources.h"
+#include "Renderer/RHI/ResourceManager.h"
+#include "Asset/Assets/TextureAsset.h"
 namespace cerberus
 {
 	static std::filesystem::path s_MeshAssetPath = "Resources/Meshes";

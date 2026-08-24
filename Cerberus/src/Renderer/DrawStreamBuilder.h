@@ -1,9 +1,9 @@
 #pragma once
-#include "Renderer/Resources/BindGroup.h"
-#include "Renderer/Resources/MeshProxy.h"
-#include "Renderer/Shader.h"
-#include "Renderer/Framebuffer.h"
-#include "Renderer/Pipeline.h"
+#include "Renderer/Descriptor/BindGroup.h"
+#include "Renderer/Scene/Proxies/MeshProxy.h"
+#include "Renderer/Shader/Shader.h"
+#include "Renderer/RHI/Framebuffer.h"
+#include "Renderer/RHI/Pipeline/Pipeline.h"
 #include <cstring>
 #include <span>
 #include <type_traits>

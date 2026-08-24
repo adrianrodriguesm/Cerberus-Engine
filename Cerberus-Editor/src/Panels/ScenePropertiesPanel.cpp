@@ -3,8 +3,8 @@
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>
 #include "ImGui/ImGuiUI.h"
-#include "Renderer/Renderer.h"
-#include "Renderer/ResourceManager.h"
+#include "Renderer/Core/Renderer.h"
+#include "Renderer/RHI/ResourceManager.h"
 #include "Utils/FileDialogs.h"
 #include "Utils/FileSystem.h"
 namespace cerberus

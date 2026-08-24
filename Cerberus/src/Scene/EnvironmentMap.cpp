@@ -1,6 +1,6 @@
 #include "pch.h"
 #include "EnvironmentMap.h"
-#include "Renderer/ResourceManager.h"
+#include "Renderer/RHI/ResourceManager.h"
 
 namespace cerberus
 {

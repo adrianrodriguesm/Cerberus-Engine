@@ -5,7 +5,7 @@
 #include <glm/glm.hpp>
 #include "Asset/Asset.h"
 #include "Components/Components.h"
-#include "Renderer/RenderObjectID.h"
+#include "Renderer/Core/RenderObjectID.h"
 #include "Renderer/SceneRenderer/SceneRendererType.h"
 namespace cerberus
 {

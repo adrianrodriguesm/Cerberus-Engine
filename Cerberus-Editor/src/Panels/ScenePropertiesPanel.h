@@ -1,6 +1,6 @@
 #pragma once
 #include "EditorPanel.h"
-#include "Renderer/RenderObjectID.h"
+#include "Renderer/Core/RenderObjectID.h"
 
 namespace cerberus
 {

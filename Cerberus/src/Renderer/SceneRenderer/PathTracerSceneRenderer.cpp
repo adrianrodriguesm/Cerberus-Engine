@@ -1,16 +1,16 @@
 #include "pch.h"
 #include "PathTracerSceneRenderer.h"
-#include "Renderer/Renderer.h"
-#include "Renderer/RendererResources.h"
+#include "Renderer/Core/Renderer.h"
+#include "Renderer/Core/RendererResources.h"
 #include "Asset/AssetManager.h"
 #include "Math/Matrix.h"
-#include "Renderer/ResourceManager.h"
-#include "Renderer/RenderQueueManager.h"
-#include "Renderer/RendererContext.h"
-#include "Renderer/RayTracingCommandList.h"
+#include "Renderer/RHI/ResourceManager.h"
+#include "Renderer/Core/RenderQueueManager.h"
+#include "Renderer/Core/RendererContext.h"
+#include "Renderer/RHI/Command/RayTracingCommandList.h"
 #include "ImGui/ImGuiUI.h"
 #include "Utils/StringUtils.h"
-#include "Renderer/ShaderCompiler.h"
+#include "Renderer/Shader/ShaderCompiler.h"
 
 #include <cmath>
 #include <limits>

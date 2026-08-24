@@ -1,7 +1,7 @@
 #pragma once
 #include "ImGui/ImGuiColors.h"
 #include <imgui/imgui_internal.h>
-#include "Renderer/Texture.h"
+#include "Renderer/RHI/Texture.h"
 
 namespace cerberus::ui
 {

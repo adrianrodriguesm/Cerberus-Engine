@@ -1,9 +1,9 @@
 #pragma once
 #include "Scene/Scene.h"
-#include "Renderer/Mesh.h"
-#include "Renderer/Camera.h"
-#include "Renderer/Image.h"
-#include "Renderer/RenderObjectID.h"
+#include "Asset/Assets/MeshAsset.h"
+#include "Renderer/Scene/Camera.h"
+#include "Renderer/RHI/Image.h"
+#include "Renderer/Core/RenderObjectID.h"
 #include <span>
 namespace cerberus
 {

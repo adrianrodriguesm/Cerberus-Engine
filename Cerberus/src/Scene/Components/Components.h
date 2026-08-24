@@ -4,7 +4,7 @@
 #include "Asset/Asset.h"
 #include "Asset/AssetManager.h"
 #include "Scene/EnvironmentMap.h"
-#include "Renderer/Mesh.h"
+#include "Asset/Assets/MeshAsset.h"
 namespace cerberus
 {
 	class Scene;

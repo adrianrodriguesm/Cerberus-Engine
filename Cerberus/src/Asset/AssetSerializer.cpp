@@ -2,12 +2,12 @@
 #include "Utils/SerializationUtils.h"
 #include "Asset/AssetSerializer.h"
 #include "Asset/AssetManager.h"
-#include "Renderer/RendererResources.h"
+#include "Renderer/Core/RendererResources.h"
 #include "Scene/Entity.h"
 #include "Utils/FileSystem.h"
 #include "Asset/AssetImporter.h"
-#include "Renderer/TextureAsset.h"
-#include "Renderer/Renderer.h"
+#include "Asset/Assets/TextureAsset.h"
+#include "Renderer/Core/Renderer.h"
 #include <fstream>
 namespace cerberus
 {

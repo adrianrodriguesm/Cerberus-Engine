@@ -5,8 +5,8 @@
 #include "Utils/StringUtils.h"
 #include "Core/Input.h"
 #include "Utils/FileDialogs.h"
-#include "Renderer/ResourceManager.h"
-#include "Renderer/TextureAsset.h"
+#include "Renderer/RHI/ResourceManager.h"
+#include "Asset/Assets/TextureAsset.h"
 namespace cerberus
 {
 	ContentBrowserPanel* ContentBrowserPanel::s_Instance;

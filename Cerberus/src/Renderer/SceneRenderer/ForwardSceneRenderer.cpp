@@ -2,12 +2,12 @@
 #include "ForwardSceneRenderer.h"
 
 #include "ImGui/ImGuiUI.h"
-#include "Renderer/GraphicsCommandList.h"
-#include "Renderer/RenderQueueManager.h"
-#include "Renderer/Renderer.h"
-#include "Renderer/RendererResources.h"
-#include "Renderer/ResourceAllocator.h"
-#include "Renderer/ResourceManager.h"
+#include "Renderer/RHI/Command/GraphicsCommandList.h"
+#include "Renderer/Core/RenderQueueManager.h"
+#include "Renderer/Core/Renderer.h"
+#include "Renderer/Core/RendererResources.h"
+#include "Renderer/Memory/ResourceAllocator.h"
+#include "Renderer/RHI/ResourceManager.h"
 #include "Utils/StringUtils.h"
 
 #include <algorithm>

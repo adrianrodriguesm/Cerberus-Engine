@@ -1,12 +1,12 @@
 #pragma once
 
 #include "Renderer/SceneRenderer/SceneRenderer.h"
-#include "Renderer/Framebuffer.h"
-#include "Renderer/Pipeline.h"
-#include "Renderer/RenderScene.h"
-#include "Renderer/Resources/BindGroup.h"
-#include "Renderer/StorageBufferSet.h"
-#include "Renderer/UniformBufferSet.h"
+#include "Renderer/RHI/Framebuffer.h"
+#include "Renderer/RHI/Pipeline/Pipeline.h"
+#include "Renderer/Scene/RenderScene.h"
+#include "Renderer/Descriptor/BindGroup.h"
+#include "Renderer/RHI/Buffers/StorageBufferSet.h"
+#include "Renderer/RHI/Buffers/UniformBufferSet.h"
 
 namespace cerberus
 {

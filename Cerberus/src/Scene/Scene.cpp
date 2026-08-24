@@ -2,8 +2,8 @@
 #include "Scene.h"
 #include "Renderer/SceneRenderer/SceneRenderer.h"
 #include "Scene/Entity.h"
-#include "Renderer/RendererResources.h"
-#include "Renderer/RenderQueueManager.h"
+#include "Renderer/Core/RendererResources.h"
+#include "Renderer/Core/RenderQueueManager.h"
 #include "Asset/AssetManager.h"
 namespace cerberus
 {

@@ -1,6 +1,6 @@
 #pragma once
 #include "Asset/Asset.h"
-#include "Renderer/Texture.h"
+#include "Renderer/RHI/Texture.h"
 #include <imgui/imgui.h>
 #define MAX_INPUT_BUFFER_LENGTH 128
 

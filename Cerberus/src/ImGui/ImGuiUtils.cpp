@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "ImGui/ImGuiUtils.h"
 #include "backends/imgui_impl_vulkan_textures.h"
-#include "Renderer/ResourceManager.h"
+#include "Renderer/RHI/ResourceManager.h"
 
 namespace cerberus::ui
 {

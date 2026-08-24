@@ -1,5 +1,5 @@
 #pragma once
-#include "Renderer/Camera.h"
+#include "Renderer/Scene/Camera.h"
 #include "Core/Timestep.h"
 #include "Events/MouseEvent.h"
 namespace cerberus

@@ -1,6 +1,6 @@
 #pragma once
-#include "Renderer/Texture.h"
-#include "Renderer/Image.h"
+#include "Renderer/RHI/Texture.h"
+#include "Renderer/RHI/Image.h"
 #include "ImGui/ImGuiUtils.h"
 #include <glm/gtc/type_ptr.hpp>
 #include <functional>

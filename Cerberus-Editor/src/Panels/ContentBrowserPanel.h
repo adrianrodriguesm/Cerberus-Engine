@@ -1,6 +1,6 @@
 #pragma once
 #include "EditorPanel.h"
-#include "Renderer/Texture.h"
+#include "Renderer/RHI/Texture.h"
 #include "ContentBrowser/ContentBrowserItem.h"
 namespace cerberus
 {

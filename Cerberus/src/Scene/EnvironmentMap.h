@@ -1,5 +1,5 @@
 #pragma once
-#include "Renderer/Texture.h"
+#include "Renderer/RHI/Texture.h"
 #include "Asset/Asset.h"
 #include "Core/Handle.h"
 namespace cerberus
