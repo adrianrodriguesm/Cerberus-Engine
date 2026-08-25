@@ -23,8 +23,6 @@ namespace cerberus
 		Pool<Texture2D> Textures2D;
 		Pool<TextureCube> TexturesCube;
 		Pool<RenderTargetTexture> RenderTargets;
-		Pool<RenderPass> RenderPasses;
-		Pool<Framebuffer> Framebuffers;
 		Pool<GraphicsPipeline> GraphicsPipelines;
 		Pool<ComputePipeline> ComputePipelines;
 		Pool<RayTracingPipeline> RayTracingPipelines;
@@ -46,9 +44,6 @@ namespace cerberus
 		NV_CORE_WARN("ResourceManager shutdown: clearing live resources");
 
 		// High-level / dependent objects first.
-		s_RMData->Framebuffers.Clear();
-		s_RMData->RenderPasses.Clear();
-
 		s_RMData->GraphicsPipelines.Clear();
 		s_RMData->ComputePipelines.Clear();
 		s_RMData->RayTracingPipelines.Clear();
@@ -264,37 +259,6 @@ namespace cerberus
 	ImageView* ResourceManager::GetImageView(const Handle<ImageView> handle)
 	{
 		return s_RMData->ImageViews.Get(handle);
-	}
-
-	Handle<RenderPass> ResourceManager::CreateRenderPass(const RenderPassSpecification& renderSpec)
-	{
-		return s_RMData->RenderPasses.Emplace(renderSpec);
-	}
-	
-	void ResourceManager::DestroyRenderPass(const Handle<RenderPass> handle)
-	{
-		s_RMData->RenderPasses.Remove(handle);
-	}
-	
-	RenderPass* ResourceManager::GetRenderPass(const Handle<RenderPass> handle)
-	{
-		return s_RMData->RenderPasses.Get(handle);
-	}
-
-
-	Handle<Framebuffer> ResourceManager::CreateFramebuffer(const FramebufferSpecification& framebufferSpec)
-	{
-		return s_RMData->Framebuffers.Emplace(framebufferSpec);
-	}
-
-	void ResourceManager::DestroyFramebuffer(const Handle<Framebuffer> handle)
-	{
-		s_RMData->Framebuffers.Remove(handle);
-	}
-
-	Framebuffer* ResourceManager::GetFramebuffer(const Handle<Framebuffer> handle)
-	{
-		return s_RMData->Framebuffers.Get(handle);
 	}
 
 	Handle<GraphicsPipeline> ResourceManager::CreateGraphicsPipeline(const PipelineSpecification& pipelineSpec)

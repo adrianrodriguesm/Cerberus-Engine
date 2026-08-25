@@ -32,92 +32,204 @@ namespace cerberus
 	{
 	}
 
-	void GraphicsCommandList::BeginRendering(
-		Handle<RenderPass> renderPassHandle,
-		Handle<Framebuffer> framebufferHandle,
-		bool explicitClear)
+	namespace
 	{
-		Framebuffer* framebuffer = ResourceManager::GetFramebuffer(framebufferHandle);
-		RenderPass* renderPass = ResourceManager::GetRenderPass(renderPassHandle);
-		CORE_ASSERT(framebuffer, "BeginRendering received an invalid framebuffer");
-		CORE_ASSERT(renderPass, "BeginRendering received an invalid render pass");
-
-		const uint32_t width = framebuffer->GetWidth();
-		const uint32_t height = framebuffer->GetHeight();
-		const std::vector<VkClearValue>& clearValues = framebuffer->GetVulkanClearValues();
-
-		VkRenderPassBeginInfo beginInfo{};
-		beginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		beginInfo.renderPass = renderPass->GetHandle();
-		beginInfo.framebuffer = framebuffer->GetHandle();
-		beginInfo.renderArea.offset = { 0, 0 };
-		beginInfo.renderArea.extent = { width, height };
-		beginInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-		beginInfo.pClearValues = clearValues.data();
-
-		vkCmdBeginRenderPass(GetNative(), &beginInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-		if (explicitClear)
+		VkAttachmentLoadOp VulkanLoadOp(LOAD_OP loadOp)
 		{
-			const uint32_t colorAttachmentCount = static_cast<uint32_t>(framebuffer->GetColorAttachmentCount());
-			const uint32_t attachmentCount = colorAttachmentCount + (framebuffer->HasDepthAttachment() ? 1u : 0u);
-			CORE_ASSERT(clearValues.size() == attachmentCount, "Framebuffer clear values do not match its attachments");
-
-			std::vector<VkClearAttachment> attachments(attachmentCount);
-			for (uint32_t attachmentIndex = 0; attachmentIndex < colorAttachmentCount; ++attachmentIndex)
+			switch (loadOp)
 			{
-				attachments[attachmentIndex].aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-				attachments[attachmentIndex].colorAttachment = attachmentIndex;
-				attachments[attachmentIndex].clearValue = clearValues[attachmentIndex];
+			case LOAD_OP::CLEAR:		return VK_ATTACHMENT_LOAD_OP_CLEAR;
+			case LOAD_OP::LOAD:			return VK_ATTACHMENT_LOAD_OP_LOAD;
+			case LOAD_OP::DONT_CARE:	return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			case LOAD_OP::NONE:			return VK_ATTACHMENT_LOAD_OP_NONE_EXT;
 			}
-
-			if (framebuffer->HasDepthAttachment())
-			{
-				RenderTargetTexture* depthTarget = ResourceManager::GetRenderTarget(framebuffer->GetDepthTarget());
-				CORE_ASSERT(depthTarget, "Framebuffer has an invalid depth attachment");
-				attachments[colorAttachmentCount].aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-				const VkFormat depthFormat = depthTarget->GetFormat() == ImageFormat::DEPTH32F
-					? VK_FORMAT_D32_SFLOAT
-					: RendererContext::GetCurrentDevice()->GetPhysicalDevice()->GetDepthFormat();
-				if (depthFormat == VK_FORMAT_D16_UNORM_S8_UINT
-					|| depthFormat == VK_FORMAT_D24_UNORM_S8_UINT
-					|| depthFormat == VK_FORMAT_D32_SFLOAT_S8_UINT)
-					attachments[colorAttachmentCount].aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-				attachments[colorAttachmentCount].clearValue = clearValues[colorAttachmentCount];
-			}
-
-			VkClearRect clearRect{};
-			clearRect.rect.offset = { 0, 0 };
-			clearRect.rect.extent = { width, height };
-			clearRect.baseArrayLayer = 0;
-			clearRect.layerCount = 1;
-
-			vkCmdClearAttachments(
-				GetNative(),
-				attachmentCount,
-				attachments.data(),
-				1,
-				&clearRect);
+			CORE_ASSERT(false, "Load operation does not exist!");
+			return VK_ATTACHMENT_LOAD_OP_NONE_EXT;
 		}
+
+		VkAttachmentStoreOp VulkanStoreOp(STORE_OP storeOp)
+		{
+			switch (storeOp)
+			{
+			case STORE_OP::STORE:		return VK_ATTACHMENT_STORE_OP_STORE;
+			case STORE_OP::DONT_CARE:	return VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			case STORE_OP::NONE:		return VK_ATTACHMENT_STORE_OP_NONE;
+			}
+			CORE_ASSERT(false, "Store operation does not exist!");
+			return VK_ATTACHMENT_STORE_OP_NONE;
+		}
+
+		VkImageSubresourceRange ColorSubresourceRange()
+		{
+			VkImageSubresourceRange range{};
+			range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			range.baseMipLevel = 0;
+			range.levelCount = 1;
+			range.baseArrayLayer = 0;
+			range.layerCount = 1;
+			return range;
+		}
+
+		VkImageSubresourceRange DepthSubresourceRange()
+		{
+			VkImageSubresourceRange range{};
+			range.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+			range.baseMipLevel = 0;
+			range.levelCount = 1;
+			range.baseArrayLayer = 0;
+			range.layerCount = 1;
+			return range;
+		}
+	}
+
+	void GraphicsCommandList::BeginRendering(const RenderingInfo& renderingInfo)
+	{
+		CORE_ASSERT(renderingInfo.Width > 0 && renderingInfo.Height > 0, "BeginRendering received an empty render area");
+
+		m_ActiveColorAttachments.clear();
+		m_ActiveDepthAttachment.reset();
+
+		// The legacy VkRenderPass provided initial/final layout transitions via
+		// subpass dependencies. Dynamic Rendering has no equivalent, so every
+		// attachment is transitioned explicitly here and in EndRendering.
+		std::vector<VkRenderingAttachmentInfo> colorAttachments;
+		colorAttachments.reserve(renderingInfo.ColorAttachments.size());
+		for (const RenderingAttachmentInfo& colorAttachmentInfo : renderingInfo.ColorAttachments)
+		{
+			RenderTargetTexture* target = ResourceManager::GetRenderTarget(colorAttachmentInfo.Target);
+			CORE_ASSERT(target, "BeginRendering received an invalid color attachment");
+			Image* image = ResourceManager::GetImage(target->GetImage());
+			CORE_ASSERT(image, "Color attachment render target has no image");
+			ImageView* imageView = ResourceManager::GetImageView(target->GetImageView());
+			CORE_ASSERT(imageView, "Color attachment render target has no image view");
+
+			image->InsertImageMemoryBarrier(
+				*this,
+				0,
+				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+				ColorSubresourceRange());
+
+			VkRenderingAttachmentInfo& attachment = colorAttachments.emplace_back();
+			attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+			attachment.imageView = imageView->GetHandle();
+			attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			attachment.resolveMode = VK_RESOLVE_MODE_NONE;
+			attachment.loadOp = VulkanLoadOp(colorAttachmentInfo.LoadOp);
+			attachment.storeOp = VulkanStoreOp(colorAttachmentInfo.StoreOp);
+			const glm::vec4 clearColor = target->GetClearColor();
+			attachment.clearValue.color = { { clearColor.r, clearColor.g, clearColor.b, clearColor.a } };
+
+			m_ActiveColorAttachments.push_back(colorAttachmentInfo.Target);
+		}
+
+		VkRenderingAttachmentInfo depthAttachment{};
+		const bool hasDepthAttachment = renderingInfo.DepthAttachment.has_value();
+		if (hasDepthAttachment)
+		{
+			const RenderingAttachmentInfo& depthAttachmentInfo = *renderingInfo.DepthAttachment;
+			RenderTargetTexture* target = ResourceManager::GetRenderTarget(depthAttachmentInfo.Target);
+			CORE_ASSERT(target, "BeginRendering received an invalid depth attachment");
+			Image* image = ResourceManager::GetImage(target->GetImage());
+			CORE_ASSERT(image, "Depth attachment render target has no image");
+			ImageView* imageView = ResourceManager::GetImageView(target->GetImageView());
+			CORE_ASSERT(imageView, "Depth attachment render target has no image view");
+
+			image->InsertImageMemoryBarrier(
+				*this,
+				0,
+				VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+				DepthSubresourceRange());
+
+			depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+			depthAttachment.imageView = imageView->GetHandle();
+			depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			depthAttachment.resolveMode = VK_RESOLVE_MODE_NONE;
+			depthAttachment.loadOp = VulkanLoadOp(depthAttachmentInfo.LoadOp);
+			depthAttachment.storeOp = VulkanStoreOp(depthAttachmentInfo.StoreOp);
+			// Matches the depth clear the Framebuffer wrapper used unconditionally.
+			depthAttachment.clearValue.depthStencil = { 1.0f, 0 };
+
+			m_ActiveDepthAttachment = depthAttachmentInfo.Target;
+		}
+
+		VkRenderingInfo vulkanRenderingInfo{};
+		vulkanRenderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+		vulkanRenderingInfo.renderArea.offset = { 0, 0 };
+		vulkanRenderingInfo.renderArea.extent = { renderingInfo.Width, renderingInfo.Height };
+		vulkanRenderingInfo.layerCount = 1;
+		vulkanRenderingInfo.colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size());
+		vulkanRenderingInfo.pColorAttachments = colorAttachments.data();
+		vulkanRenderingInfo.pDepthAttachment = hasDepthAttachment ? &depthAttachment : nullptr;
+
+		vkCmdBeginRendering(GetNative(), &vulkanRenderingInfo);
 
 		VkViewport viewport{};
 		viewport.x = 0.0f;
 		viewport.y = 0.0f;
-		viewport.width = static_cast<float>(width);
-		viewport.height = static_cast<float>(height);
+		viewport.width = static_cast<float>(renderingInfo.Width);
+		viewport.height = static_cast<float>(renderingInfo.Height);
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0f;
 		SetViewport(viewport);
 
 		VkRect2D scissor{};
 		scissor.offset = { 0, 0 };
-		scissor.extent = { width, height };
+		scissor.extent = { renderingInfo.Width, renderingInfo.Height };
 		SetScissor(scissor);
 	}
 
 	void GraphicsCommandList::EndRendering()
 	{
-		vkCmdEndRenderPass(GetNative());
+		vkCmdEndRendering(GetNative());
+
+		// The legacy VkRenderPass exposed attachments that were sampled elsewhere
+		// (e.g. the editor viewport) in VK_IMAGE_LAYOUT_*_READ_ONLY_OPTIMAL as its
+		// finalLayout. Reproduce that here, driven by the same RenderTargetTexture
+		// ShaderResource flag that already controls whether a sampler exists for it.
+		for (Handle<RenderTargetTexture> colorAttachment : m_ActiveColorAttachments)
+		{
+			RenderTargetTexture* target = ResourceManager::GetRenderTarget(colorAttachment);
+			if (!target || !target->IsShaderResource())
+				continue;
+
+			Image* image = ResourceManager::GetImage(target->GetImage());
+			CORE_ASSERT(image, "Color attachment render target has no image");
+			image->InsertImageMemoryBarrier(
+				*this,
+				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+				VK_ACCESS_SHADER_READ_BIT,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				ColorSubresourceRange());
+		}
+
+		if (m_ActiveDepthAttachment.has_value())
+		{
+			RenderTargetTexture* target = ResourceManager::GetRenderTarget(*m_ActiveDepthAttachment);
+			if (target && target->IsShaderResource())
+			{
+				Image* image = ResourceManager::GetImage(target->GetImage());
+				CORE_ASSERT(image, "Depth attachment render target has no image");
+				image->InsertImageMemoryBarrier(
+					*this,
+					VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+					VK_ACCESS_SHADER_READ_BIT,
+					VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+					VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+					VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+					DepthSubresourceRange());
+			}
+		}
+
+		m_ActiveColorAttachments.clear();
+		m_ActiveDepthAttachment.reset();
 	}
 
 	void GraphicsCommandList::BindGraphicsPipeline(Handle<GraphicsPipeline> pipelineHandle)

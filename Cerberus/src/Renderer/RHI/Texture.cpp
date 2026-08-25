@@ -56,25 +56,7 @@ namespace cerberus
 
 	namespace utils
 	{
-
-		inline VkFormat VulkanImageFormat(ImageFormat format)
-		{
-			switch (format)
-			{
-			case ImageFormat::RED32F:          return VK_FORMAT_R32_SFLOAT;
-			case ImageFormat::RG16F:		   return VK_FORMAT_R16G16_SFLOAT;
-			case ImageFormat::RG32F:		   return VK_FORMAT_R32G32_SFLOAT;
-			case ImageFormat::RGBA:            return VK_FORMAT_R8G8B8A8_UNORM;
-			case ImageFormat::SRGBA:            return VK_FORMAT_R8G8B8A8_SRGB;
-			case ImageFormat::RGBA16F:         return VK_FORMAT_R16G16B16A16_SFLOAT;
-			case ImageFormat::RGBA32F:         return VK_FORMAT_R32G32B32A32_SFLOAT;
-			case ImageFormat::DEPTH32F:        return VK_FORMAT_D32_SFLOAT;
-			case ImageFormat::DEPTH24STENCIL8: return RendererContext::GetCurrentDevice()->GetPhysicalDevice()->GetDepthFormat();
-			}
-			CORE_ASSERT(false, "Image format does not exits!");
-			return VK_FORMAT_UNDEFINED;
-		}
-
+		// VulkanImageFormat is declared in Image.h and defined once in Image.cpp.
 
 		static VkSamplerAddressMode VulkanSamplerWrap(SamplerWrap wrap)
 		{

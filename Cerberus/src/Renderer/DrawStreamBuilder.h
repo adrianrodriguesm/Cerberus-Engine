@@ -2,7 +2,6 @@
 #include "Renderer/Descriptor/BindGroup.h"
 #include "Renderer/Scene/Proxies/MeshProxy.h"
 #include "Renderer/Shader/Shader.h"
-#include "Renderer/RHI/Framebuffer.h"
 #include "Renderer/RHI/Pipeline/Pipeline.h"
 #include <cstring>
 #include <span>
@@ -17,7 +16,6 @@ namespace cerberus
 	{
 		Handle<GraphicsPipeline> GraphicsPipeline;
 		Handle<RayTracingPipeline> RayTracingPipeline;
-		Handle<Framebuffer> Framebuffer;
 
 		Handle<BindGroup> BindGroup0;
 		Handle<BindGroup> BindGroup1;
@@ -25,8 +23,6 @@ namespace cerberus
 		uint32_t DrawOffset = 0;
 		uint32_t DrawCount = 0;
 		uint32_t MaterialBindGroupSet = 3;
-
-		bool ExplicitClear = false;
 	};
 
 	enum DrawStreamFlags : uint16_t

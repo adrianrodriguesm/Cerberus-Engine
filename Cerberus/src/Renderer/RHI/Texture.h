@@ -156,7 +156,10 @@ namespace cerberus
 		void Release();
 		void Resize(uint32_t width, uint32_t height);
 
+		Handle<Image> GetImage() const { return m_Image; }
 		Handle<ImageView> GetImageView() const { return m_ImageView; }
+
+		bool IsShaderResource() const { return m_Properties.ShaderResource; }
 
 		glm::vec4 GetClearColor() const { return m_Properties.ClearColor; }
 

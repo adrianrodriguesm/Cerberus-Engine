@@ -43,6 +43,14 @@ namespace cerberus
 		DEPTH = DEPTH24STENCIL8,
 	};
 
+	namespace utils
+	{
+		// Single canonical ImageFormat -> VkFormat converter. Defined in Image.cpp;
+		// callers that need the native format (pipeline formats, attachment info)
+		// include this header instead of keeping a private copy.
+		VkFormat VulkanImageFormat(ImageFormat format);
+	}
+
 	struct ImageSpecification
 	{
 		ImageFormat Format = ImageFormat::RGBA;

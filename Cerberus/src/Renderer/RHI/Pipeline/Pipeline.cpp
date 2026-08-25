@@ -228,55 +228,43 @@ namespace cerberus
 		// -- BLENDING -- (Blending fragments together)
 		// Blending decides how to blend a new colour being written to a fragment, with the old value
 		// We need one blend attachment state per color attachment (even if blending is not used)
-		RenderPass* renderPass = ResourceManager::GetRenderPass(m_Specification.RenderPass);
-		// Blend Attachment State (How blending is handled)
-		const auto& renderTargetInfo = renderPass->GetSpecification().Attachments;
 		std::vector<VkPipelineColorBlendAttachmentState> blendAttachmentStates;
-		blendAttachmentStates.reserve(renderTargetInfo.size());
-		// Only use one attachment
-		if (renderPass->GetSpecification().Blend)
+		blendAttachmentStates.reserve(m_Specification.ColorAttachments.size());
+		for (const PipelineColorAttachment& colorAttachment : m_Specification.ColorAttachments)
 		{
-			for (size_t i = 0; i < renderTargetInfo.size(); i++)
+			VkPipelineColorBlendAttachmentState& blendState = blendAttachmentStates.emplace_back();
+			BlendMode blendMode = colorAttachment.BlendMode;
+			blendState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT		// Colors to apply blending to (in this case apply to all the colors)
+				| VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+			blendState.blendEnable = colorAttachment.BlendEnabled ? VK_TRUE : VK_FALSE;
+			// Choose the src and dst blend factor
+			switch (blendMode)
 			{
-				
-				const auto& renderTarget = renderTargetInfo[i];
-				if (utils::IsDepthFormat(renderTarget.Format))
-					continue;
-
-				VkPipelineColorBlendAttachmentState& blendState = blendAttachmentStates.emplace_back();
-				BlendMode blendMode = renderTarget.BlendMode;
-				blendState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT		// Colors to apply blending to (in this case apply to all the colors)
-					| VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-				blendState.blendEnable = renderTarget.BlendEnabled ? VK_TRUE : VK_FALSE;
-				// Choose the src and dst blend factor
-				switch (blendMode)
-				{
-				case BlendMode::OneZero:
-					blendState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-					blendState.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-					break;
-				case BlendMode::SrcAlphaOneMinusSrcAlpha:
-					// Blending uses equation: (srcColorBlendFactor * new color) colorBlendOp (dstColorBlendFactor * old color)
-					blendState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-					blendState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-					break;
-				case BlendMode::Zero_SrcColor:
-					blendState.srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-					blendState.dstColorBlendFactor = VK_BLEND_FACTOR_SRC_COLOR;
-					break;
-				default:
-					CORE_ASSERT(false, "Blend mode not implemented!");
-					break;
-				}
-				blendState.colorBlendOp = VK_BLEND_OP_ADD;
-				// Summarised: (VK_BLEND_FACTOR_SRC_ALPHA * new color) + (VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA * old color)
-				//			   (new color alpha * new color) + ((1 - new color alpha) * old color)	
-				//			   (srcBlendFactor * new color) + (dstBlendFactor * old color)	
-				blendState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-				blendState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-				blendState.alphaBlendOp = VK_BLEND_OP_ADD;
-				// Summarised: (1 * new alpha) + (0 * old alpha) = new alpha
+			case BlendMode::OneZero:
+				blendState.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+				blendState.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+				break;
+			case BlendMode::SrcAlphaOneMinusSrcAlpha:
+				// Blending uses equation: (srcColorBlendFactor * new color) colorBlendOp (dstColorBlendFactor * old color)
+				blendState.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+				blendState.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+				break;
+			case BlendMode::Zero_SrcColor:
+				blendState.srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+				blendState.dstColorBlendFactor = VK_BLEND_FACTOR_SRC_COLOR;
+				break;
+			default:
+				CORE_ASSERT(false, "Blend mode not implemented!");
+				break;
 			}
+			blendState.colorBlendOp = VK_BLEND_OP_ADD;
+			// Summarised: (VK_BLEND_FACTOR_SRC_ALPHA * new color) + (VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA * old color)
+			//			   (new color alpha * new color) + ((1 - new color alpha) * old color)
+			//			   (srcBlendFactor * new color) + (dstBlendFactor * old color)
+			blendState.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+			blendState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+			blendState.alphaBlendOp = VK_BLEND_OP_ADD;
+			// Summarised: (1 * new alpha) + (0 * old alpha) = new alpha
 		}
 		VkPipelineColorBlendStateCreateInfo colorBlendingCreateInfo = {};
 		colorBlendingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -318,9 +306,28 @@ namespace cerberus
 		depthStencilState.stencilTestEnable = VK_FALSE;					// Enable Stencil Test
 		depthStencilState.front = depthStencilState.back;
 
+		// -- DYNAMIC RENDERING -- (replaces render-pass compatibility)
+		// The pipeline no longer targets a VkRenderPass/subpass; it instead
+		// declares the attachment formats it is compatible with, chained via
+		// VkGraphicsPipelineCreateInfo::pNext.
+		std::vector<VkFormat> colorAttachmentFormats;
+		colorAttachmentFormats.reserve(m_Specification.ColorAttachments.size());
+		for (const PipelineColorAttachment& colorAttachment : m_Specification.ColorAttachments)
+			colorAttachmentFormats.push_back(utils::VulkanImageFormat(colorAttachment.Format));
+
+		const bool hasDepthAttachment = m_Specification.DepthAttachmentFormat != ImageFormat::None;
+		VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo = {};
+		pipelineRenderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+		pipelineRenderingCreateInfo.colorAttachmentCount = static_cast<uint32_t>(colorAttachmentFormats.size());
+		pipelineRenderingCreateInfo.pColorAttachmentFormats = colorAttachmentFormats.data();
+		pipelineRenderingCreateInfo.depthAttachmentFormat = hasDepthAttachment
+			? utils::VulkanImageFormat(m_Specification.DepthAttachmentFormat)
+			: VK_FORMAT_UNDEFINED;
+
 		// -- GRAPHICS PIPELINE CREATION --
 		VkGraphicsPipelineCreateInfo pipelineCreateInfo = {};
 		pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+		pipelineCreateInfo.pNext = &pipelineRenderingCreateInfo;
 		pipelineCreateInfo.stageCount = 2;													// Number of shader stages
 		const auto& pipelineShaderStageInfo = m_Specification.Shader->GetPipelineShaderModules();
 		pipelineCreateInfo.pStages = pipelineShaderStageInfo.data();						// List of shader stages
@@ -333,8 +340,8 @@ namespace cerberus
 		pipelineCreateInfo.pColorBlendState = &colorBlendingCreateInfo;
 		pipelineCreateInfo.pDepthStencilState = &depthStencilState;
 		pipelineCreateInfo.layout = m_PipelineLayout;											// Pipeline Layout pipeline should use
-		pipelineCreateInfo.renderPass = renderPass->GetHandle();								// Render pass description the pipeline is compatible with
-		pipelineCreateInfo.subpass = 0;															// Subpass of render pass to use with pipeline
+		pipelineCreateInfo.renderPass = VK_NULL_HANDLE;										// Dynamic Rendering: no render-pass/subpass compatibility
+		pipelineCreateInfo.subpass = 0;
 
 		// Pipeline Derivatives : Can create multiple pipelines that derive from one another for optimization
 		pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;	// Existing pipeline to derive from...

@@ -2,6 +2,7 @@
 
 #include "Renderer/RHI/Command/CommandList.h"
 #include "Renderer/DrawStreamBuilder.h"
+#include "Renderer/RHI/RenderingInfo.h"
 
 namespace cerberus
 {
@@ -13,10 +14,14 @@ namespace cerberus
 			CommandBufferView commandBuffer,
 			RendererFrameStatistics* statistics = nullptr);
 
-		void BeginRendering(
-			Handle<RenderPass> renderPass,
-			Handle<Framebuffer> framebuffer,
-			bool explicitClear = false);
+		// Opens one Dynamic Rendering scope (vkCmdBeginRendering). Transitions every
+		// attachment into its attachment-optimal layout first. A logical pass (Sky,
+		// Forward, ...) does not need its own scope; several passes may record
+		// between one BeginRendering/EndRendering pair.
+		void BeginRendering(const RenderingInfo& renderingInfo);
+		// Closes the scope (vkCmdEndRendering) and transitions every attachment
+		// whose RenderTargetTexture is a shader resource into a shader-read layout,
+		// mirroring the finalLayout behaviour the legacy VkRenderPass used to provide.
 		void EndRendering();
 
 		void BindGraphicsPipeline(Handle<GraphicsPipeline> pipeline);
@@ -60,5 +65,10 @@ namespace cerberus
 
 	private:
 		VkPipelineLayout m_BoundPipelineLayout = VK_NULL_HANDLE;
+
+		// Attachments of the currently open rendering scope, kept only to drive the
+		// post-render layout transition performed by EndRendering.
+		std::vector<Handle<RenderTargetTexture>> m_ActiveColorAttachments;
+		std::optional<Handle<RenderTargetTexture>> m_ActiveDepthAttachment;
 	};
 }

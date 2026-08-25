@@ -10,7 +10,7 @@ namespace cerberus
 {
 	namespace utils
 	{
-		inline VkFormat VulkanImageFormat(ImageFormat format)
+		VkFormat VulkanImageFormat(ImageFormat format)
 		{
 			switch (format)
 			{

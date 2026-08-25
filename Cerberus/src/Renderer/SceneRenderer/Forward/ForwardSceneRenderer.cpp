@@ -111,24 +111,9 @@ namespace cerberus
 
 		RenderQueueManager::ExecuteRenderQueue();
 
-		RenderPassSpecification renderPassSpecification;
-		renderPassSpecification.DebugName = "Forward";
-		// Pipeline currently uses this flag to emit one color blend attachment
-		// state per color target. The attachment itself keeps blending disabled.
-		renderPassSpecification.Blend = true;
-		renderPassSpecification.Attachments = {
-			{ "Forward Color", ImageFormat::RGBA16F, LOAD_OP::CLEAR, STORE_OP::STORE, BlendMode::OneZero, false, true },
-			{ "Forward Depth", ImageFormat::DEPTH32F, LOAD_OP::CLEAR, STORE_OP::STORE, BlendMode::None, false, true }
-		};
-		m_RenderPass = ResourceManager::CreateRenderPass(renderPassSpecification);
-
-		FramebufferSpecification framebufferSpecification;
-		framebufferSpecification.DebugName = "Forward";
-		framebufferSpecification.RenderPass = m_RenderPass;
-		framebufferSpecification.Width = m_ViewportResolution.x;
-		framebufferSpecification.Height = m_ViewportResolution.y;
-		framebufferSpecification.IsResizable = true;
-
+		// Dynamic Rendering has no framebuffer/render-pass object: SceneColor and
+		// SceneDepth are owned directly by the renderer through ResourceManager,
+		// so a future pass (e.g. PreDepth) can reference the same SceneDepth target.
 		RenderTargetProperties colorTarget;
 		colorTarget.DebugName = "Forward Color";
 		colorTarget.Format = ImageFormat::RGBA16F;
@@ -137,6 +122,7 @@ namespace cerberus
 		colorTarget.Resizable = true;
 		colorTarget.ShaderResource = true;
 		colorTarget.ClearColor = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+		m_SceneColor = ResourceManager::CreateRenderTarget(colorTarget);
 
 		RenderTargetProperties depthTarget;
 		depthTarget.DebugName = "Forward Depth";
@@ -145,13 +131,17 @@ namespace cerberus
 		depthTarget.Height = m_ViewportResolution.y;
 		depthTarget.Resizable = true;
 		depthTarget.ShaderResource = false;
-		framebufferSpecification.RenderTargetsInfo = { colorTarget, depthTarget };
-		m_Framebuffer = ResourceManager::CreateFramebuffer(framebufferSpecification);
+		m_SceneDepth = ResourceManager::CreateRenderTarget(depthTarget);
 
 		PipelineSpecification skyPipelineSpecification;
 		skyPipelineSpecification.DebugName = "Forward Sky";
 		skyPipelineSpecification.Shader = shaderLibrary.Get("ForwardSky");
-		skyPipelineSpecification.RenderPass = m_RenderPass;
+		skyPipelineSpecification.ColorAttachments = { { ImageFormat::RGBA16F, BlendMode::OneZero, false } };
+		// Dynamic Rendering requires every pipeline drawn inside a rendering scope
+		// to declare the same depth format as the scope's bound depth attachment
+		// (VUID-vkCmdDraw-pDepthAttachment-06181), even when that pipeline itself
+		// has depth test/write disabled and never touches the depth buffer.
+		skyPipelineSpecification.DepthAttachmentFormat = ImageFormat::DEPTH32F;
 		skyPipelineSpecification.CullMode = CullMode::None;
 		skyPipelineSpecification.DepthTest = false;
 		skyPipelineSpecification.DepthWrite = false;
@@ -160,7 +150,8 @@ namespace cerberus
 		PipelineSpecification geometryPipelineSpecification;
 		geometryPipelineSpecification.DebugName = "Forward Geometry";
 		geometryPipelineSpecification.Shader = shaderLibrary.Get("ForwardPBR");
-		geometryPipelineSpecification.RenderPass = m_RenderPass;
+		geometryPipelineSpecification.ColorAttachments = { { ImageFormat::RGBA16F, BlendMode::OneZero, false } };
+		geometryPipelineSpecification.DepthAttachmentFormat = ImageFormat::DEPTH32F;
 		geometryPipelineSpecification.CullMode = CullMode::Back;
 		geometryPipelineSpecification.DepthOperator = DepthCompareOperator::LessOrEqual;
 		geometryPipelineSpecification.DepthTest = true;
@@ -254,10 +245,10 @@ namespace cerberus
 			ResourceManager::DestroyGraphicsPipeline(m_GeometryPipeline);
 		if (m_SkyPipeline.IsValid())
 			ResourceManager::DestroyGraphicsPipeline(m_SkyPipeline);
-		if (m_Framebuffer.IsValid())
-			ResourceManager::DestroyFramebuffer(m_Framebuffer);
-		if (m_RenderPass.IsValid())
-			ResourceManager::DestroyRenderPass(m_RenderPass);
+		if (m_SceneColor.IsValid())
+			ResourceManager::DestroyRenderTarget(m_SceneColor);
+		if (m_SceneDepth.IsValid())
+			ResourceManager::DestroyRenderTarget(m_SceneDepth);
 
 		m_CameraBufferSet.reset();
 		m_LightingBufferSet.reset();
@@ -269,8 +260,8 @@ namespace cerberus
 		m_SkyBindGroupLayout = {};
 		m_GeometryPipeline = {};
 		m_SkyPipeline = {};
-		m_Framebuffer = {};
-		m_RenderPass = {};
+		m_SceneColor = {};
+		m_SceneDepth = {};
 
 		auto& shaderLibrary = RendererResources::GetShaderLibrary();
 		shaderLibrary.Unload("ForwardPBR");
@@ -283,9 +274,14 @@ namespace cerberus
 			return;
 
 		m_ViewportResolution = { width, height };
-		Framebuffer* framebuffer = ResourceManager::GetFramebuffer(m_Framebuffer);
-		CORE_ASSERT(framebuffer, "Forward framebuffer is invalid");
-		framebuffer->Resize(width, height);
+
+		RenderTargetTexture* sceneColor = ResourceManager::GetRenderTarget(m_SceneColor);
+		CORE_ASSERT(sceneColor, "Forward SceneColor is invalid");
+		sceneColor->Resize(width, height);
+
+		RenderTargetTexture* sceneDepth = ResourceManager::GetRenderTarget(m_SceneDepth);
+		CORE_ASSERT(sceneDepth, "Forward SceneDepth is invalid");
+		sceneDepth->Resize(width, height);
 	}
 
 	bool ForwardSceneRenderer::IsRegistered(RenderObjectID renderObjectID)
@@ -457,17 +453,24 @@ namespace cerberus
 		GraphicsCommandList graphics(
 			commandBuffer->GetRecordingView(frameIndex),
 			&Renderer::GetFrameStatistics());
-		graphics.BeginRendering(m_RenderPass, m_Framebuffer);
-		graphics.DrawFullscreen(m_SkyPipeline, m_SkyBindGroup);
 
-		DrawArea geometryDrawArea;
-		geometryDrawArea.GraphicsPipeline = m_GeometryPipeline;
-		geometryDrawArea.Framebuffer = m_Framebuffer;
-		geometryDrawArea.BindGroup0 = m_GeometryBindGroup;
-		graphics.RenderMeshInstances(
-			geometryDrawArea,
-			m_RenderScene->GetRasterMeshInstances(),
-			m_RenderScene->GetMaterialProxies());
+		// SkyPass and ForwardPass are separate logical passes that intentionally
+		// share one Dynamic Rendering scope; there is no dependency between them
+		// that requires a scope boundary.
+		RenderingInfo renderingInfo;
+		renderingInfo.ColorAttachments = { { m_SceneColor, LOAD_OP::CLEAR, STORE_OP::STORE } };
+		renderingInfo.DepthAttachment = RenderingAttachmentInfo{ m_SceneDepth, LOAD_OP::CLEAR, STORE_OP::STORE };
+		renderingInfo.Width = m_ViewportResolution.x;
+		renderingInfo.Height = m_ViewportResolution.y;
+		graphics.BeginRendering(renderingInfo);
+
+		RenderSkyPass(graphics, SkyPassResources{ m_SkyPipeline, m_SkyBindGroup });
+
+		RenderForwardPass(
+			graphics,
+			ForwardPassResources{ m_GeometryPipeline, m_GeometryBindGroup },
+			ForwardPassParameters{ m_RenderScene->GetRasterMeshInstances(), m_RenderScene->GetMaterialProxies() });
+
 		graphics.EndRendering();
 
 		commandBuffer->EndRenderThread();
@@ -498,11 +501,7 @@ namespace cerberus
 
 	Handle<ImageView> ForwardSceneRenderer::GetFinalPassImage() const
 	{
-		Framebuffer* framebuffer = ResourceManager::GetFramebuffer(m_Framebuffer);
-		if (!framebuffer || framebuffer->GetColorAttachmentCount() == 0)
-			return {};
-
-		RenderTargetTexture* colorTarget = ResourceManager::GetRenderTarget(framebuffer->GetColorTarget());
-		return colorTarget ? colorTarget->GetImageView() : Handle<ImageView>{};
+		RenderTargetTexture* sceneColor = ResourceManager::GetRenderTarget(m_SceneColor);
+		return sceneColor ? sceneColor->GetImageView() : Handle<ImageView>{};
 	}
 }

@@ -1,9 +1,30 @@
 #pragma once
 #include "Renderer/RHI/Buffers/VertexBuffer.h"
 #include "Renderer/Shader/Shader.h"
-#include "Renderer/RHI/RenderPass.h"
+#include "Renderer/RHI/Image.h"
+
+#include <vector>
 namespace cerberus
 {
+	enum class BlendMode : uint8_t
+	{
+		None = 0,
+		OneZero,
+		SrcAlphaOneMinusSrcAlpha,	// Swapchain blend mode too
+		Zero_SrcColor
+	};
+
+	// One VkPipelineColorBlendAttachmentState's worth of description. Dynamic
+	// Rendering pipelines describe the formats/blend state of the attachments
+	// they will be used with directly; they are no longer compiled against a
+	// RenderPass object.
+	struct PipelineColorAttachment
+	{
+		ImageFormat Format = ImageFormat::RGBA;
+		BlendMode BlendMode = BlendMode::SrcAlphaOneMinusSrcAlpha;
+		bool BlendEnabled = true;
+	};
+
 	enum class PrimitiveTopology
 	{
 		None = 0,
@@ -40,7 +61,10 @@ namespace cerberus
 		Ref<Shader> Shader;
 		VertexBufferLayout Layout;
 
-		Handle<RenderPass> RenderPass;
+		// Formats/blend state of the attachments this pipeline will render into,
+		// chained into VkGraphicsPipelineCreateInfo via VkPipelineRenderingCreateInfo.
+		std::vector<PipelineColorAttachment> ColorAttachments;
+		ImageFormat DepthAttachmentFormat = ImageFormat::None;
 
 		PrimitiveTopology Topology = PrimitiveTopology::Triangles;
 		DepthCompareOperator DepthOperator = DepthCompareOperator::LessOrEqual;

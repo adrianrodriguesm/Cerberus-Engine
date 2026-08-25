@@ -282,14 +282,23 @@ namespace cerberus
 		VkPhysicalDeviceDescriptorIndexingFeatures supportedDescriptorIndexingFeatures{};
 		supportedDescriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
 
+		// The instance requests VK_API_VERSION_1_3, but that alone does not enable
+		// any 1.3 feature; Dynamic Rendering must be queried and opted into explicitly.
+		VkPhysicalDeviceVulkan13Features supportedVulkan13Features{};
+		supportedVulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+		supportedVulkan13Features.pNext = &supportedDescriptorIndexingFeatures;
+
 		VkPhysicalDeviceFeatures2 supportedDeviceFeatures{};
 		supportedDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-		supportedDeviceFeatures.pNext = &supportedDescriptorIndexingFeatures;
+		supportedDeviceFeatures.pNext = &supportedVulkan13Features;
 		vkGetPhysicalDeviceFeatures2(m_PhysicalDevice->GetVulkanPhysicalDevice(), &supportedDeviceFeatures);
 
 		CORE_ASSERT(
 			supportedDescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing,
 			"The selected GPU does not support non-uniform sampled-image array indexing required by the RT texture table");
+		CORE_ASSERT(
+			supportedVulkan13Features.dynamicRendering == VK_TRUE,
+			"The selected GPU does not support Vulkan 1.3 Dynamic Rendering");
 
 		VkPhysicalDeviceDescriptorIndexingFeatures enabledDescriptorIndexingFeatures{};
 		enabledDescriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
@@ -317,7 +326,16 @@ namespace cerberus
 		enabledHostQueryResetFeatures.hostQueryReset = VK_TRUE;
 		enabledHostQueryResetFeatures.pNext = &enabledAccelerationStructureFeatures;
 
-		void* deviceCreatepNextChain = &enabledHostQueryResetFeatures;
+		// Core Vulkan 1.3 feature: no extension string required, only this feature
+		// struct. Kept as the new head of the chain so every previously enabled
+		// feature (host query reset, acceleration structures, RT pipeline,
+		// descriptor indexing, buffer device address) stays enabled unchanged.
+		VkPhysicalDeviceVulkan13Features enabledVulkan13Features{};
+		enabledVulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+		enabledVulkan13Features.dynamicRendering = VK_TRUE;
+		enabledVulkan13Features.pNext = &enabledHostQueryResetFeatures;
+
+		void* deviceCreatepNextChain = &enabledVulkan13Features;
 
 		physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 		physicalDeviceFeatures2.features = deviceFeatures;

@@ -8,8 +8,6 @@
 #include "Renderer/Descriptor/BindGroup.h"
 #include "Renderer/RHI/Texture.h"
 #include "Renderer/RHI/Image.h"
-#include "Renderer/RHI/RenderPass.h"
-#include "Renderer/RHI/Framebuffer.h"
 #include "Renderer/RHI/Pipeline/Pipeline.h"
 
 #include <span>
@@ -76,15 +74,6 @@ namespace cerberus
 		static Handle<ImageView> CreateImageView(const ImageViewProperties& imgViewProp);
 		static void DestroyImageView(const Handle<ImageView> handle);
 		static ImageView* GetImageView(const Handle<ImageView> handle);
-
-		static Handle<RenderPass> CreateRenderPass(const RenderPassSpecification& renderSpec);
-		static void DestroyRenderPass(const Handle<RenderPass> handle);
-		static RenderPass* GetRenderPass(const Handle<RenderPass> handle);
-
-
-		static Handle<Framebuffer> CreateFramebuffer(const FramebufferSpecification& framebufferSpec);
-		static void DestroyFramebuffer(const Handle<Framebuffer> handle);
-		static Framebuffer* GetFramebuffer(const Handle<Framebuffer> handle);
 
 		static Handle<GraphicsPipeline> CreateGraphicsPipeline(const PipelineSpecification& pipelineSpec);
 		static void DestroyGraphicsPipeline(const Handle<GraphicsPipeline> handle);

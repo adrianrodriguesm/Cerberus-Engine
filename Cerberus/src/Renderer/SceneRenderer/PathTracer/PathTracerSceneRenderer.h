@@ -2,7 +2,6 @@
 
 #include "Renderer/SceneRenderer/SceneRenderer.h"
 #include "Renderer/Descriptor/BindGroup.h"
-#include "Renderer/RHI/Framebuffer.h"
 #include "Renderer/RHI/Pipeline/Pipeline.h"
 #include "Renderer/Scene/RenderScene.h"
 #include "Renderer/RayTracing/ShaderBindingTable.h"

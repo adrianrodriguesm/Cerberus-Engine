@@ -1,12 +1,14 @@
 #pragma once
 
 #include "Renderer/Descriptor/BindGroup.h"
-#include "Renderer/RHI/Framebuffer.h"
+#include "Renderer/RHI/RenderingInfo.h"
 #include "Renderer/RHI/Pipeline/Pipeline.h"
 #include "Renderer/RHI/Buffers/StorageBufferSet.h"
 #include "Renderer/RHI/Buffers/UniformBufferSet.h"
 #include "Renderer/Scene/RenderScene.h"
 #include "Renderer/SceneRenderer/SceneRenderer.h"
+#include "Renderer/SceneRenderer/Forward/Passes/ForwardPass.h"
+#include "Renderer/SceneRenderer/Forward/Passes/SkyPass.h"
 
 namespace cerberus
 {
@@ -76,8 +78,11 @@ namespace cerberus
 		SceneRendererCamera m_SceneRendererCamera{};
 		Scope<RenderScene> m_RenderScene;
 
-		Handle<RenderPass> m_RenderPass;
-		Handle<Framebuffer> m_Framebuffer;
+		// Dynamic Rendering has no framebuffer object; the SceneRenderer owns its
+		// render targets directly so future passes (e.g. a PreDepth pass) can
+		// reference the same SceneDepth target.
+		Handle<RenderTargetTexture> m_SceneColor;
+		Handle<RenderTargetTexture> m_SceneDepth;
 		Handle<GraphicsPipeline> m_SkyPipeline;
 		Handle<GraphicsPipeline> m_GeometryPipeline;
 
