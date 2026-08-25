@@ -759,6 +759,8 @@ namespace cerberus
 				ui::EndTreeNode();
 			}
 
+			if (CommandBuffer* commandBuffer = Renderer::GetMainCommandBuffer(m_Specification.SwapChainTarget))
+				m_RenderGraph.OnImGuiRender(*commandBuffer);
 		}
 		ImGui::End();
 	}

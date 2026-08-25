@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "RenderGraph.h"
 
+#include "ImGui/ImGuiUI.h"
 #include "Renderer/RHI/Command/CommandBuffer.h"
 #include "Renderer/RHI/Command/ComputeCommandList.h"
 #include "Renderer/RHI/Command/GraphicsCommandList.h"
@@ -10,6 +11,8 @@
 #include "Renderer/RHI/Texture.h"
 
 #include <algorithm>
+#include <cstdio>
+#include <utility>
 
 namespace cerberus
 {
@@ -104,6 +107,75 @@ namespace cerberus
 				access.Before.Stage,
 				resolved.DstStage,
 				SubresourceRangeFor(resource.IsDepthFormat));
+		}
+
+		const char* AccessKindName(RGAccessKind kind)
+		{
+			switch (kind)
+			{
+			case RGAccessKind::ReadTexture:            return "Read";
+			case RGAccessKind::WriteColorAttachment:   return "WriteColor";
+			case RGAccessKind::WriteDepthAttachment:   return "WriteDepth";
+			case RGAccessKind::ReadWriteStorageImage:  return "ReadWriteStorage";
+			}
+			return "Unknown";
+		}
+
+		// Renders a Vk*Flags bitmask as the names of the bits RenderGraph.cpp
+		// actually produces (see ResolveAccess/ImportRenderTarget/ImportImage),
+		// falling back to raw hex for anything else so an unrecognized bit is
+		// still visible rather than silently dropped.
+		template<typename FlagsType>
+		std::string DescribeFlags(FlagsType flags, std::span<const std::pair<FlagsType, const char*>> known)
+		{
+			if (flags == 0)
+				return "None";
+
+			std::string result;
+			for (const auto& [bit, name] : known)
+			{
+				if (flags & bit)
+				{
+					if (!result.empty())
+						result += "|";
+					result += name;
+					flags &= ~bit;
+				}
+			}
+			if (flags != 0)
+			{
+				char buffer[24];
+				snprintf(buffer, sizeof(buffer), "0x%x", static_cast<unsigned int>(flags));
+				if (!result.empty())
+					result += "|";
+				result += buffer;
+			}
+			return result;
+		}
+
+		std::string DescribeAccessFlags(VkAccessFlags flags)
+		{
+			static constexpr std::pair<VkAccessFlags, const char*> known[] = {
+				{ VK_ACCESS_SHADER_READ_BIT, "ShaderRead" },
+				{ VK_ACCESS_SHADER_WRITE_BIT, "ShaderWrite" },
+				{ VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, "ColorAttachmentWrite" },
+				{ VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, "DepthStencilAttachmentWrite" },
+			};
+			return DescribeFlags<VkAccessFlags>(flags, known);
+		}
+
+		std::string DescribeStageFlags(VkPipelineStageFlags flags)
+		{
+			static constexpr std::pair<VkPipelineStageFlags, const char*> known[] = {
+				{ VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, "TopOfPipe" },
+				{ VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, "FragmentShader" },
+				{ VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, "ColorAttachmentOutput" },
+				{ VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, "EarlyFragmentTests" },
+				{ VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, "LateFragmentTests" },
+				{ VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, "RayTracingShader" },
+				{ VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, "ComputeShader" },
+			};
+			return DescribeFlags<VkPipelineStageFlags>(flags, known);
 		}
 	}
 
@@ -277,13 +349,66 @@ namespace cerberus
 			}
 		}
 
-		// Kahn's algorithm, ties broken by registration order so passes with no
-		// cross-dependency (e.g. the shadow cascades, each writing a different
-		// target) keep the order the SceneRenderer registered them in.
+		// A pass is a root if it writes anything -- which today always means
+		// writing an imported (externally-owned) resource, since increment 1
+		// has no graph-created transient resource a write could target
+		// instead. A future transient resource would need its own default
+		// here; until then, "writes anything" and "writes an imported
+		// resource" are the same rule.
+		std::vector<bool> kept(passCount, m_PassCullingEnabled ? false : true);
+		if (m_PassCullingEnabled)
+		{
+			std::vector<uint32_t> toVisit;
+			for (uint32_t passIndex = 0; passIndex < passCount; ++passIndex)
+			{
+				for (const RGResourceAccess& access : m_Passes[passIndex].Accesses)
+				{
+					if (access.Kind != RGAccessKind::ReadTexture)
+					{
+						kept[passIndex] = true;
+						toVisit.push_back(passIndex);
+						break;
+					}
+				}
+			}
+
+			// Reachability: DependsOnPasses already points from a pass to what
+			// it needs, so a forward walk from the roots through that edge set
+			// gives exactly the closure of passes required to produce every
+			// root's output. Anything not reached is unreachable from anything
+			// the graph is actually required to produce this frame, and gets
+			// culled.
+			while (!toVisit.empty())
+			{
+				const uint32_t passIndex = toVisit.back();
+				toVisit.pop_back();
+				for (uint32_t dependency : m_Passes[passIndex].DependsOnPasses)
+				{
+					if (!kept[dependency])
+					{
+						kept[dependency] = true;
+						toVisit.push_back(dependency);
+					}
+				}
+			}
+		}
+
+		for (uint32_t passIndex = 0; passIndex < passCount; ++passIndex)
+			m_Passes[passIndex].Culled = !kept[passIndex];
+
+		// Kahn's algorithm over the surviving (non-culled) passes, ties broken
+		// by registration order so passes with no cross-dependency (e.g. the
+		// shadow cascades, each writing a different target) keep the order the
+		// SceneRenderer registered them in. The kept set is dependency-closed
+		// by construction, so a kept pass's dependencies are never culled --
+		// no extra filtering needed on the edges themselves.
 		std::vector<uint32_t> inDegree(passCount, 0);
 		std::vector<std::vector<uint32_t>> dependents(passCount);
 		for (uint32_t passIndex = 0; passIndex < passCount; ++passIndex)
 		{
+			if (m_Passes[passIndex].Culled)
+				continue;
+
 			std::vector<uint32_t>& deps = m_Passes[passIndex].DependsOnPasses;
 			std::sort(deps.begin(), deps.end());
 			deps.erase(std::unique(deps.begin(), deps.end()), deps.end());
@@ -294,7 +419,7 @@ namespace cerberus
 
 		std::vector<uint32_t> ready;
 		for (uint32_t passIndex = 0; passIndex < passCount; ++passIndex)
-			if (inDegree[passIndex] == 0)
+			if (!m_Passes[passIndex].Culled && inDegree[passIndex] == 0)
 				ready.push_back(passIndex);
 
 		m_ExecutionOrder.clear();
@@ -313,8 +438,45 @@ namespace cerberus
 			}
 		}
 
-		CORE_ASSERT(m_ExecutionOrder.size() == passCount,
+		const uint32_t keptCount = static_cast<uint32_t>(std::count(kept.begin(), kept.end(), true));
+		CORE_ASSERT(m_ExecutionOrder.size() == keptCount,
 			"RenderGraph::Compile found a resource-dependency cycle");
+
+		// Mark consecutive graphics passes that share their full attachment
+		// set (same color + depth resources) as mergeable, so Execute() folds
+		// the whole run into one Dynamic Rendering scope instead of one per
+		// pass. A pass with no attachments (or a non-graphics pass) never
+		// merges. Equality of attachment signatures is transitive, so a run
+		// longer than two passes merges correctly from these pairwise checks
+		// alone. Skipped entirely when the debug panel's "Enable scope
+		// merging" toggle is off -- every Pass::MergesWithPrevious stays at
+		// its default false, so Execute() opens one scope per pass.
+		if (m_ScopeMergingEnabled)
+		{
+			auto attachmentSignature = [this](uint32_t passIndex)
+			{
+				std::vector<uint32_t> signature;
+				for (const RGResourceAccess& access : m_Passes[passIndex].Accesses)
+				{
+					if (access.Kind == RGAccessKind::WriteColorAttachment || access.Kind == RGAccessKind::WriteDepthAttachment)
+						signature.push_back(access.Resource.Index);
+				}
+				std::sort(signature.begin(), signature.end());
+				return signature;
+			};
+
+			for (uint32_t orderIndex = 1; orderIndex < m_ExecutionOrder.size(); ++orderIndex)
+			{
+				const uint32_t passIndex = m_ExecutionOrder[orderIndex];
+				const uint32_t previousPassIndex = m_ExecutionOrder[orderIndex - 1];
+				if (m_Passes[passIndex].Type != Pass::Type::Graphics || m_Passes[previousPassIndex].Type != Pass::Type::Graphics)
+					continue;
+
+				const std::vector<uint32_t> signature = attachmentSignature(passIndex);
+				if (!signature.empty() && signature == attachmentSignature(previousPassIndex))
+					m_Passes[passIndex].MergesWithPrevious = true;
+			}
+		}
 
 		// Walk resources in compiled order to resolve each access's exact
 		// Before/After synchronization scope from real history, instead of a
@@ -373,32 +535,54 @@ namespace cerberus
 		RayTracingCommandList rayTracing(commandBuffer.GetRecordingView(frameIndex), statistics);
 		ComputeCommandList compute(commandBuffer.GetRecordingView(frameIndex), statistics);
 
-		for (uint32_t passIndex : m_ExecutionOrder)
+		// A group is one pass, or a run of consecutive graphics passes sharing
+		// one Dynamic Rendering scope (Pass::MergesWithPrevious, set by
+		// Compile()). A barrier cannot legally target an image that is
+		// currently bound as an active Dynamic Rendering attachment, so every
+		// group member's barriers are recorded up front, before the group's
+		// (possibly shared) scope opens.
+		for (uint32_t orderIndex = 0; orderIndex < m_ExecutionOrder.size(); )
 		{
-			Pass& pass = m_Passes[passIndex];
+			uint32_t groupEnd = orderIndex + 1;
+			while (groupEnd < m_ExecutionOrder.size() && m_Passes[m_ExecutionOrder[groupEnd]].MergesWithPrevious)
+				++groupEnd;
 
-			// Barriers are plain vkCmdPipelineBarrier calls against the shared
-			// command buffer; which typed wrapper issues them does not matter.
-			for (const RGResourceAccess& access : pass.Accesses)
-				InsertBarrier(m_Resources[access.Resource.Index], access, graphics);
+			for (uint32_t member = orderIndex; member < groupEnd; ++member)
+			{
+				for (const RGResourceAccess& access : m_Passes[m_ExecutionOrder[member]].Accesses)
+					InsertBarrier(m_Resources[access.Resource.Index], access, graphics);
+			}
 
-			switch (pass.Type)
+			if (m_Passes[m_ExecutionOrder[orderIndex]].Type == Pass::Type::Graphics)
 			{
-			case Pass::Type::Graphics:
-			{
+				// Build one RenderingInfo for the whole group: a resource
+				// shared by several members (Sky and Forward both target
+				// SceneColor/SceneDepth) appears once, taking its LoadOp from
+				// the first member that declared it and its StoreOp from the
+				// last -- exactly what "several logical passes, one scope"
+				// means for a Dynamic Rendering attachment.
 				RenderingInfo renderingInfo;
-				for (const RGResourceAccess& access : pass.Accesses)
+				for (uint32_t member = orderIndex; member < groupEnd; ++member)
 				{
-					const Resource& resource = m_Resources[access.Resource.Index];
-					if (access.Kind == RGAccessKind::WriteColorAttachment)
+					for (const RGResourceAccess& access : m_Passes[m_ExecutionOrder[member]].Accesses)
 					{
-						renderingInfo.ColorAttachments.push_back(
-							{ resource.RenderTarget, access.LoadOp, access.StoreOp });
-					}
-					else if (access.Kind == RGAccessKind::WriteDepthAttachment)
-					{
-						renderingInfo.DepthAttachment =
-							RenderingAttachmentInfo{ resource.RenderTarget, access.LoadOp, access.StoreOp };
+						const Resource& resource = m_Resources[access.Resource.Index];
+						if (access.Kind == RGAccessKind::WriteColorAttachment)
+						{
+							auto existing = std::find_if(renderingInfo.ColorAttachments.begin(), renderingInfo.ColorAttachments.end(),
+								[&](const RenderingAttachmentInfo& info) { return info.Target == resource.RenderTarget; });
+							if (existing == renderingInfo.ColorAttachments.end())
+								renderingInfo.ColorAttachments.push_back({ resource.RenderTarget, access.LoadOp, access.StoreOp });
+							else
+								existing->StoreOp = access.StoreOp;
+						}
+						else if (access.Kind == RGAccessKind::WriteDepthAttachment)
+						{
+							if (!renderingInfo.DepthAttachment.has_value())
+								renderingInfo.DepthAttachment = RenderingAttachmentInfo{ resource.RenderTarget, access.LoadOp, access.StoreOp };
+							else
+								renderingInfo.DepthAttachment->StoreOp = access.StoreOp;
+						}
 					}
 				}
 
@@ -414,22 +598,40 @@ namespace cerberus
 					renderingInfo.Height = sizeTarget->GetHeight();
 
 					graphics.BeginRenderingAttachments(renderingInfo);
-					pass.GraphicsExecute(graphics);
+					for (uint32_t member = orderIndex; member < groupEnd; ++member)
+					{
+						Pass& pass = m_Passes[m_ExecutionOrder[member]];
+						pass.GPUTimeQueryID = commandBuffer.BeginTimestampQueryRenderThread();
+						pass.GraphicsExecute(graphics);
+						commandBuffer.EndTimestampQueryRenderThread(pass.GPUTimeQueryID);
+					}
 					graphics.EndRenderingAttachments();
 				}
 				else
 				{
-					pass.GraphicsExecute(graphics);
+					for (uint32_t member = orderIndex; member < groupEnd; ++member)
+					{
+						Pass& pass = m_Passes[m_ExecutionOrder[member]];
+						pass.GPUTimeQueryID = commandBuffer.BeginTimestampQueryRenderThread();
+						pass.GraphicsExecute(graphics);
+						commandBuffer.EndTimestampQueryRenderThread(pass.GPUTimeQueryID);
+					}
 				}
-				break;
 			}
-			case Pass::Type::Compute:
-				pass.ComputeExecute(compute);
-				break;
-			case Pass::Type::RayTracing:
-				pass.RayTracingExecute(rayTracing);
-				break;
+			else
+			{
+				// Compute/RayTracing passes never merge (see Compile()), so
+				// this group always has exactly one member.
+				Pass& pass = m_Passes[m_ExecutionOrder[orderIndex]];
+				pass.GPUTimeQueryID = commandBuffer.BeginTimestampQueryRenderThread();
+				if (pass.Type == Pass::Type::Compute)
+					pass.ComputeExecute(compute);
+				else
+					pass.RayTracingExecute(rayTracing);
+				commandBuffer.EndTimestampQueryRenderThread(pass.GPUTimeQueryID);
 			}
+
+			orderIndex = groupEnd;
 		}
 
 		for (const Resource& resource : m_Resources)
@@ -461,5 +663,92 @@ namespace cerberus
 		m_Passes.clear();
 		m_ExecutionOrder.clear();
 		m_Compiled = false;
+	}
+
+	void RenderGraph::OnImGuiRender(CommandBuffer& commandBuffer)
+	{
+		if (!ui::PropertyGridHeader("RenderGraph", true))
+			return;
+
+		// Takes effect on the next Compile() (this frame's pass list below is
+		// still the one compiled with whatever these were set to last frame).
+		// There is no equivalent toggle for pass ordering/barrier computation
+		// itself -- increment 1 replaced the old hand-sequenced path rather
+		// than keeping it as a fallback, so these two are the parts of the
+		// graph that are genuinely optional to compare with/without live.
+		ImGui::Checkbox("Enable scope merging", &m_ScopeMergingEnabled);
+		ImGui::Checkbox("Enable pass culling", &m_PassCullingEnabled);
+		ImGui::Spacing();
+
+		const uint32_t culledCount = static_cast<uint32_t>(
+			std::count_if(m_Passes.begin(), m_Passes.end(), [](const Pass& pass) { return pass.Culled; }));
+		ImGui::Text("%zu passes compiled, %u culled", m_ExecutionOrder.size(), culledCount);
+
+		if (ImGui::BeginTable("RenderGraphPasses", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+		{
+			ImGui::TableSetupColumn("Pass");
+			ImGui::TableSetupColumn("Type");
+			ImGui::TableSetupColumn("Scope");
+			ImGui::TableSetupColumn("GPU Time");
+			ImGui::TableHeadersRow();
+
+			for (uint32_t passIndex : m_ExecutionOrder)
+			{
+				const Pass& pass = m_Passes[passIndex];
+				const char* typeName = pass.Type == Pass::Type::Graphics ? "Graphics"
+					: pass.Type == Pass::Type::Compute ? "Compute" : "RayTracing";
+
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(pass.Name.c_str());
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(typeName);
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(pass.MergesWithPrevious ? "merged" : "-");
+				ImGui::TableNextColumn();
+				if (pass.GPUTimeQueryID != InvalidQueryID)
+					ImGui::Text("%.3f ms", commandBuffer.GetExecutionGPUTime(pass.GPUTimeQueryID));
+				else
+					ImGui::TextUnformatted("-");
+			}
+			ImGui::EndTable();
+		}
+
+		// Per-pass declared accesses and the barrier Compile() resolved for
+		// each -- useful for inspecting exactly what synchronization a pass
+		// (e.g. one of the shadow cascades) actually got.
+		ImGui::Spacing();
+		ImGui::TextUnformatted("Pass details:");
+		for (uint32_t passIndex : m_ExecutionOrder)
+		{
+			const Pass& pass = m_Passes[passIndex];
+			if (!ImGui::TreeNode(reinterpret_cast<void*>(static_cast<intptr_t>(passIndex)), "%s", pass.Name.c_str()))
+				continue;
+
+			for (const RGResourceAccess& access : pass.Accesses)
+			{
+				const Resource& resource = m_Resources[access.Resource.Index];
+				ImGui::BulletText("%s [%s]", resource.Name.c_str(), AccessKindName(access.Kind));
+				ImGui::Indent();
+				ImGui::TextDisabled("before: %s @ %s", DescribeAccessFlags(access.Before.Access).c_str(), DescribeStageFlags(access.Before.Stage).c_str());
+				ImGui::TextDisabled(" after: %s @ %s", DescribeAccessFlags(access.After.Access).c_str(), DescribeStageFlags(access.After.Stage).c_str());
+				ImGui::Unindent();
+			}
+			ImGui::TreePop();
+		}
+
+		if (culledCount > 0)
+		{
+			ImGui::Spacing();
+			ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f),
+				"Culled (unreachable from any pass that writes an imported resource):");
+			for (const Pass& pass : m_Passes)
+			{
+				if (pass.Culled)
+					ImGui::BulletText("%s", pass.Name.c_str());
+			}
+		}
+
+		ui::EndTreeNode();
 	}
 }

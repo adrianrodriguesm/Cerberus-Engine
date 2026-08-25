@@ -237,11 +237,11 @@ ForwardSceneRenderer
 - records exclusively through `GraphicsCommandList`/`RenderGraph`;
 - owns and unloads its five renderer-specific shaders (PreDepth, Shadow, ForwardPBR, ForwardSky, Composite).
 
-Sky and Forward are separate logical passes registered as one `RenderGraph` pass
-so they keep sharing one Dynamic Rendering scope; there is no dependency between
-them that requires a scope boundary. Automatic multi-pass scope merging (declaring
-them as two passes and having the graph detect a mergeable, identical attachment
-set) is a later graph refinement, not required for this to be correct.
+Sky and Forward are separate logical passes registered as separate `RenderGraph`
+passes; they share one Dynamic Rendering scope because `Compile()` detects that
+both declare the identical `SceneColor`/`SceneDepth` attachment set and merges
+them automatically (see `RenderGraph.md`), not because either the call site or
+the graph hand-merges them.
 
 The inactive raster-test path that previously lived inside `PathTracerSceneRenderer` has been removed. It is not the modern forward renderer.
 
@@ -412,14 +412,18 @@ The transient scope owns the command-buffer lease. `ComputeCommandList` only bor
 
 ## RenderGraph
 
+See [`RenderGraph.md`](RenderGraph.md) for a full walkthrough of the
+implementation, its benefits, and what's still deferred. Summary:
+
 `RenderGraph` (`Renderer/RenderGraph/RenderGraph.h`/`.cpp`) owns per-frame pass
 ordering and barrier computation for both `ForwardSceneRenderer` and
-`PathTracerSceneRenderer`. This is increment 1 of the graph the "RenderGraph
-gate" below describes: **pass ordering and precise, per-resource barriers
-derived from declared reads/writes.** Transient/aliased resource allocation is
-an explicitly separate, later increment — every resource the graph touches is
-still imported from a `Handle<RenderTargetTexture>`/`Handle<Image>` the owning
-`SceneRenderer` created and destroys itself, exactly as before the graph
+`PathTracerSceneRenderer`: **pass ordering and precise, per-resource barriers
+derived from declared reads/writes** (increment 1), plus **automatic Dynamic
+Rendering scope merging, pass culling, and a debug/GPU-timing panel**
+(increment 2). Transient/aliased resource allocation is an explicitly
+separate, later increment — every resource the graph touches is still
+imported from a `Handle<RenderTargetTexture>`/`Handle<Image>` the owning
+`SceneRenderer` creates and destroys itself, exactly as before the graph
 existed.
 
 Researched against Frostbite's FrameGraph (GDC17), Unreal Engine 5's RDG, and
@@ -512,15 +516,30 @@ one closing transition to a shader-read layout after the last pass, mirroring
 what `EndRendering` used to do unconditionally for every shader-resource
 attachment when its scope closed.
 
+### Implemented (increment 2)
+
+- Automatic Dynamic Rendering scope merging: consecutive graphics passes that
+  declare an identical attachment set are folded into one scope by
+  `Compile()`/`Execute()`. Sky and `ForwardGeometry` are registered as
+  genuinely separate passes and recover their shared scope this way, instead
+  of being hand-merged into one registered pass.
+- Pass culling: a pass unreachable from anything that writes an imported
+  resource is excluded before the topological sort. Culls nothing in
+  Cerberus's current graph (every pass writes an imported resource today),
+  same "correct but currently inert" shape barrier precision had at first
+  touch — see `RenderGraph.md`.
+- A RenderGraph debug/GPU-timing ImGui panel (`RenderGraph::OnImGuiRender`),
+  in both scene renderers' existing "Renderer" window.
+
 ### Explicitly deferred
 
 - Transient/aliased resource allocation — the graph taking over render-target
   creation/destruction and reusing memory across non-overlapping resource
-  lifetimes. This is increment 2, once increment 1 is proven in production use.
-- Automatic consecutive-pass Dynamic Rendering scope merging (Sky+Forward is
-  hand-merged into one registered pass instead, see above).
-- Pass culling beyond what the dependency graph naturally excludes; there is no
-  priority- or cost-based scheduling.
+  lifetimes. Investigated for increment 2 and deferred on its merits (no real
+  aliasing candidates in Cerberus's current resource set — see
+  `RenderGraph.md`'s "What's missing"), not on sequencing.
+- Pass culling beyond simple reachability; there is no priority- or
+  cost-based scheduling.
 - Async compute / cross-queue scheduling — still gated on explicit queue-family
   ownership tracking, independent of the graph (see "Compute policy before
   RenderGraph" below).
@@ -743,9 +762,10 @@ The graph was gated on all of the following, which are now true:
 - statistics and frame indices are reliable.
 
 Increment 1 (pass ordering, declared resource reads/writes, precise
-per-resource barriers) is implemented for both scene renderers — see
-"RenderGraph" above. Transient-resource allocation and optional cross-queue
-scheduling remain future increments.
+per-resource barriers) and increment 2 (automatic scope merging, pass
+culling, debug/timing panel) are implemented for both scene renderers — see
+"RenderGraph" above and `RenderGraph.md`. Transient-resource allocation and
+optional cross-queue scheduling remain future increments.
 
 ## Windows/Vulkan validation checklist for Phase 2C.4B
 

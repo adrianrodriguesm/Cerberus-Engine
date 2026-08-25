@@ -1,2 +1,5 @@
 MeshSourceImporter:
-  []
+  Version: 2
+  Materials:
+    - MaterialSlot: 0
+      MaterialHandle: 10615240736047376530

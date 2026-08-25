@@ -126,14 +126,20 @@ namespace cerberus
 
 	void CommandBuffer::BeginRenderThread()
 	{
+		// Reset the timestamp cursor here too -- Begin() does this for the
+		// queued path (see its comment), and this is the immediate path's
+		// equivalent point: the start of a fresh recording for this frame's
+		// command-buffer slot.
+		m_TimestampNextAvailableQuery = 2;
+
 		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
-		BeginInternal(frameIndex, false);
+		BeginInternal(frameIndex, true);
 	}
 
 	void CommandBuffer::EndRenderThread()
 	{
 		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
-		EndInternal(frameIndex, false);
+		EndInternal(frameIndex, true);
 	}
 
 	void CommandBuffer::SubmitRenderThread()
@@ -142,7 +148,7 @@ namespace cerberus
 			return;
 
 		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
-		SubmitInternal(frameIndex, false);
+		SubmitInternal(frameIndex, true);
 	}
 
 	uint32_t CommandBuffer::BeginTimestampQuery()
@@ -167,6 +173,21 @@ namespace cerberus
 			VkCommandBuffer commandBuffer = instance->m_CommandBuffers[frameIndex];
 			vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, instance->m_TimestampQueryPools[frameIndex], queryID + 1);
 		});
+	}
+
+	uint32_t CommandBuffer::BeginTimestampQueryRenderThread()
+	{
+		const uint32_t queryIndex = m_TimestampNextAvailableQuery;
+		m_TimestampNextAvailableQuery += 2;
+		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+		vkCmdWriteTimestamp(m_CommandBuffers[frameIndex], VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, m_TimestampQueryPools[frameIndex], queryIndex);
+		return queryIndex;
+	}
+
+	void CommandBuffer::EndTimestampQueryRenderThread(uint32_t queryID)
+	{
+		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
+		vkCmdWriteTimestamp(m_CommandBuffers[frameIndex], VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_TimestampQueryPools[frameIndex], queryID + 1);
 	}
 	float CommandBuffer::GetExecutionGPUTime(uint32_t frameIndex, uint32_t queryIndex) const
 	{

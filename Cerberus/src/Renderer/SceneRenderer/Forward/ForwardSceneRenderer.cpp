@@ -732,15 +732,29 @@ namespace cerberus
 			}
 		}
 
-		// SkyPass and ForwardPass are separate logical passes registered as one
-		// graph pass so they keep sharing one Dynamic Rendering scope; there is
-		// no dependency between them that requires a scope boundary. Automatic
-		// multi-pass scope merging is a later graph refinement, not needed here.
+		// Sky and Forward are separate logical passes, registered as separate
+		// graph passes here -- they declare the same SceneColor/SceneDepth
+		// attachment set, so RenderGraph::Compile() detects that consecutive,
+		// identical-attachment run and Execute() folds them into one Dynamic
+		// Rendering scope automatically (see RenderGraph.md). There is no
+		// dependency between them that requires a scope boundary.
 		m_RenderGraph.AddGraphicsPass(
-			"ForwardOpaque",
-			[sceneColorRG, sceneDepthRG, shadowMapRG, hasShadowCastingLight](RenderGraphBuilder& builder)
+			"Sky",
+			[sceneColorRG, sceneDepthRG](RenderGraphBuilder& builder)
 			{
 				builder.WriteColorAttachment(sceneColorRG, LOAD_OP::CLEAR, STORE_OP::STORE);
+				builder.WriteDepthAttachment(sceneDepthRG, LOAD_OP::LOAD, STORE_OP::STORE);
+			},
+			[this](GraphicsCommandList& graphics)
+			{
+				RenderSkyPass(graphics, SkyPassResources{ m_SkyPipeline, m_SkyBindGroup });
+			});
+
+		m_RenderGraph.AddGraphicsPass(
+			"ForwardGeometry",
+			[sceneColorRG, sceneDepthRG, shadowMapRG, hasShadowCastingLight](RenderGraphBuilder& builder)
+			{
+				builder.WriteColorAttachment(sceneColorRG, LOAD_OP::LOAD, STORE_OP::STORE);
 				builder.WriteDepthAttachment(sceneDepthRG, LOAD_OP::LOAD, STORE_OP::STORE);
 				if (hasShadowCastingLight)
 				{
@@ -750,8 +764,6 @@ namespace cerberus
 			},
 			[this, drawStream, drawStreamCount](GraphicsCommandList& graphics)
 			{
-				RenderSkyPass(graphics, SkyPassResources{ m_SkyPipeline, m_SkyBindGroup });
-
 				RenderForwardPass(
 					graphics,
 					ForwardPassResources{ m_GeometryPipeline, m_GeometryBindGroup },
@@ -804,6 +816,10 @@ namespace cerberus
 			ImGui::Text("Free VRAM: %s", free.c_str());
 			ui::EndTreeNode();
 		}
+
+		if (CommandBuffer* commandBuffer = Renderer::GetMainCommandBuffer(m_Specification.SwapChainTarget))
+			m_RenderGraph.OnImGuiRender(*commandBuffer);
+
 		ImGui::End();
 	}
 

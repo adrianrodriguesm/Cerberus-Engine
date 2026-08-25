@@ -842,6 +842,9 @@ Assets:
   - Handle: 18033217899969463576
     FilePath: Resources/Meshes/Source/Sponza/16299174074766089871.jpg
     Type: Texture
+  - Handle: 18042325484223757135
+    FilePath: Resources/Scenes/RenderGraph Stress Test.cscene
+    Type: Scene
   - Handle: 18071836290770309515
     FilePath: Resources/Editor/HDR-Icon.png
     Type: Texture

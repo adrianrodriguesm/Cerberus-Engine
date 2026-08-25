@@ -123,26 +123,58 @@ namespace cerberus
 		void AddComputePass(const char* name, RGSetupFn setup, RGComputeExecuteFn execute);
 		void AddRayTracingPass(const char* name, RGSetupFn setup, RGRayTracingExecuteFn execute);
 
-		// Topo-sorts passes from their resource dependencies (a pass depends on
-		// every earlier pass that wrote a resource it reads or writes) and
-		// resolves each access's exact Before/After synchronization scope by
-		// walking resources in that order. Ties are broken by registration
-		// order, so passes with no cross-dependency (e.g. the shadow cascades,
-		// which each write a different target) keep the order they were added.
+		// Builds the dependency graph from declared accesses, culls any pass
+		// that isn't reachable from a pass writing an imported resource (see
+		// the culling comment on Pass::Culled below), topo-sorts the survivors
+		// from their resource dependencies (a pass depends on every earlier
+		// pass that wrote a resource it reads or writes), and resolves each
+		// access's exact Before/After synchronization scope by walking
+		// resources in that order. Ties are broken by registration order, so
+		// passes with no cross-dependency (e.g. the shadow cascades, which
+		// each write a different target) keep the order they were added.
+		// Finally marks consecutive graphics passes with an identical
+		// attachment set as mergeable (Pass::MergesWithPrevious) so Execute()
+		// opens one Dynamic Rendering scope for the whole run instead of one
+		// per pass.
 		void Compile();
 
-		// Records every pass's barriers, then its execute callback, into
-		// commandBuffer's current recording, in compiled order -- still one
-		// BeginRenderThread/EndRenderThread/SubmitRenderThread per frame at the
-		// call site, exactly like before the graph existed. Resources flagged
-		// shader-readable that no pass reads back (e.g. the final composite
-		// output the editor samples outside this graph) get one closing
-		// transition to a shader-read layout after the last pass, mirroring
-		// what GraphicsCommandList::EndRendering used to do unconditionally.
+		// Records every surviving pass's barriers, then its execute callback
+		// wrapped in a GPU timestamp query pair, into commandBuffer's current
+		// recording, in compiled order -- still one BeginRenderThread/
+		// EndRenderThread/SubmitRenderThread per frame at the call site,
+		// exactly like before the graph existed. Consecutive passes marked
+		// MergesWithPrevious record all their barriers up front and share one
+		// BeginRenderingAttachments/EndRenderingAttachments pair -- a barrier
+		// cannot legally target an image that's currently bound as an active
+		// Dynamic Rendering attachment, so every merged pass's barriers must
+		// land before the shared scope opens. Resources flagged shader-readable
+		// that no pass reads back (e.g. the final composite output the editor
+		// samples outside this graph) get one closing transition to a
+		// shader-read layout after the last pass, mirroring what
+		// GraphicsCommandList::EndRendering used to do unconditionally.
 		void Execute(CommandBuffer& commandBuffer, uint32_t frameIndex, RendererFrameStatistics* statistics);
 
 		// Clears the pass/resource lists so the graph can be rebuilt next frame.
+		// Debug toggles (below) are a standing preference, not per-frame
+		// compiled state, and survive Reset().
 		void Reset();
+
+		// Draws an ImGui table over the last Compile()'d pass list: name, type,
+		// whether it was merged into the previous pass's Dynamic Rendering scope
+		// or culled (unreachable from any pass that writes an imported
+		// resource), and its GPU time from the timestamp query Execute()
+		// recorded for it. commandBuffer must be the same one Execute() was
+		// last called with -- GPU-timestamp results lag the frame that recorded
+		// them by about one submission cycle, the same as CommandBuffer's
+		// existing (otherwise unused) timestamp-query API always has.
+		//
+		// Also exposes two checkboxes (both default on) that gate scope merging
+		// and pass culling for the *next* Compile() -- there is no equivalent
+		// switch for pass ordering/barrier computation itself, since increment 1
+		// replaced the old hand-sequenced BeginRendering/EndRendering path
+		// rather than keeping it as a fallback; these two are the parts of the
+		// graph that are genuinely optional to compare with/without live.
+		void OnImGuiRender(CommandBuffer& commandBuffer);
 
 		// Public so RenderGraph.cpp's barrier-resolution helpers (free functions,
 		// not members) can read it; not meant to be constructed outside RenderGraph.
@@ -162,6 +194,8 @@ namespace cerberus
 	private:
 		friend class RenderGraphBuilder;
 
+		static constexpr uint32_t InvalidQueryID = std::numeric_limits<uint32_t>::max();
+
 		struct Pass
 		{
 			std::string Name;
@@ -171,6 +205,23 @@ namespace cerberus
 			RGComputeExecuteFn ComputeExecute;
 			RGRayTracingExecuteFn RayTracingExecute;
 			std::vector<uint32_t> DependsOnPasses;
+
+			// Set by Compile(). True when nothing reachable from a pass that
+			// writes an imported resource depends on this one -- excluded from
+			// m_ExecutionOrder entirely, so it gets no barriers and never runs.
+			// Every access today writes an imported resource (increment 1 has
+			// no transient/graph-created resources yet), so this is currently
+			// always false; it becomes load-bearing once a transient resource
+			// exists that a pass can produce without anything depending on it.
+			bool Culled = false;
+			// Set by Compile(). True when this pass shares its full attachment
+			// set (same color + depth resources) with the immediately
+			// preceding pass in execution order, so Execute() folds it into
+			// that pass's Dynamic Rendering scope instead of opening a new one.
+			bool MergesWithPrevious = false;
+			// Set by Execute(); the timestamp-query pair id OnImGuiRender()
+			// reads this pass's GPU time back from.
+			uint32_t GPUTimeQueryID = InvalidQueryID;
 		};
 
 		void RecordAccess(uint32_t passIndex, RGResourceAccess access);
@@ -179,5 +230,9 @@ namespace cerberus
 		std::vector<Pass> m_Passes;
 		std::vector<uint32_t> m_ExecutionOrder;
 		bool m_Compiled = false;
+
+		// Debug-panel toggles read by Compile(); see OnImGuiRender()'s comment.
+		bool m_ScopeMergingEnabled = true;
+		bool m_PassCullingEnabled = true;
 	};
 }

@@ -37,8 +37,18 @@ namespace cerberus
 		void EndRenderThread();
 		void SubmitRenderThread();
 
+		// Queued: safe to call from the application thread before Begin() is
+		// queued. Their vkCmdWriteTimestamp is recorded later, by
+		// RenderQueueManager, along with the rest of the queued recording.
 		uint32_t BeginTimestampQuery();
 		void EndTimestampQuery(uint32_t queryID);
+		// Immediate: for a caller already executing on the render thread,
+		// between BeginRenderThread() and EndRenderThread() (e.g.
+		// RenderGraph::Execute). Calling the queued versions above from here
+		// would defer their vkCmdWriteTimestamp past this recording's own
+		// EndRenderThread()/SubmitRenderThread(), which is invalid.
+		uint32_t BeginTimestampQueryRenderThread();
+		void EndTimestampQueryRenderThread(uint32_t queryID);
 		float GetExecutionGPUTime(uint32_t frameIndex, uint32_t queryIndex) const;
 		float GetExecutionGPUTime(uint32_t queryIndex) const;
 

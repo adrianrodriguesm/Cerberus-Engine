@@ -1,0 +1,3861 @@
+Scene: RenderGraph Stress Test
+Renderer: Forward
+Entities:
+  - Entity: 5009480834507629392
+    TagComponent:
+      Tag: Ground
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [60, 1, 60]
+    MeshComponent:
+      AssetHandle: 7819270352573126076
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 15165444341538077239
+    TagComponent:
+      Tag: Cube 0_0
+    TransformComponent:
+      Translation: [-20.4, 0.3458, -20.4]
+      Rotation: [0, 229.5, 0]
+      Scale: [0.6916, 0.6916, 0.6916]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 3563613148096866906
+    TagComponent:
+      Tag: Sphere 0_1
+    TransformComponent:
+      Translation: [-20.4, 0.319, -18]
+      Rotation: [0, 154, 0]
+      Scale: [0.638, 0.638, 0.638]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 953271986075252195
+    TagComponent:
+      Tag: Cone 0_2
+    TransformComponent:
+      Translation: [-20.4, 0.543, -15.6]
+      Rotation: [0, 100.3, 0]
+      Scale: [1.086, 1.086, 1.086]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 15806120059935565971
+    TagComponent:
+      Tag: Cylinder 0_3
+    TransformComponent:
+      Translation: [-20.4, 0.5382, -13.2]
+      Rotation: [0, 124.8, 0]
+      Scale: [1.076, 1.076, 1.076]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 3186355870567702002
+    TagComponent:
+      Tag: Torus 0_4
+    TransformComponent:
+      Translation: [-20.4, 0.2035, -10.8]
+      Rotation: [0, 274.8, 0]
+      Scale: [0.6782, 0.6782, 0.6782]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 1678448424345830168
+    TagComponent:
+      Tag: Capsule 0_5
+    TransformComponent:
+      Translation: [-20.4, 0.4615, -8.4]
+      Rotation: [0, 347.9, 0]
+      Scale: [0.923, 0.923, 0.923]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 10330109571819767072
+    TagComponent:
+      Tag: Cube 0_6
+    TransformComponent:
+      Translation: [-20.4, 0.3254, -6]
+      Rotation: [0, 159.4, 0]
+      Scale: [0.6508, 0.6508, 0.6508]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 7864500590369764988
+    TagComponent:
+      Tag: Sphere 0_7
+    TransformComponent:
+      Translation: [-20.4, 0.378, -3.6]
+      Rotation: [0, 179.2, 0]
+      Scale: [0.7561, 0.7561, 0.7561]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 700139588103658035
+    TagComponent:
+      Tag: Cone 0_8
+    TransformComponent:
+      Translation: [-20.4, 0.4685, -1.2]
+      Rotation: [0, 121.2, 0]
+      Scale: [0.937, 0.937, 0.937]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 16292837850934958289
+    TagComponent:
+      Tag: Cylinder 0_9
+    TransformComponent:
+      Translation: [-20.4, 0.4438, 1.2]
+      Rotation: [0, 326.5, 0]
+      Scale: [0.8875, 0.8875, 0.8875]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 14831373363778734113
+    TagComponent:
+      Tag: Torus 0_10
+    TransformComponent:
+      Translation: [-20.4, 0.3201, 3.6]
+      Rotation: [0, 7.828, 0]
+      Scale: [1.067, 1.067, 1.067]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 16168080698860251193
+    TagComponent:
+      Tag: Capsule 0_11
+    TransformComponent:
+      Translation: [-20.4, 0.5119, 6]
+      Rotation: [0, 96.83, 0]
+      Scale: [1.024, 1.024, 1.024]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 16430436267680341801
+    TagComponent:
+      Tag: Cube 0_12
+    TransformComponent:
+      Translation: [-20.4, 0.3898, 8.4]
+      Rotation: [0, 227.6, 0]
+      Scale: [0.7795, 0.7795, 0.7795]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 6443412992857993611
+    TagComponent:
+      Tag: Sphere 0_13
+    TransformComponent:
+      Translation: [-20.4, 0.3919, 10.8]
+      Rotation: [0, 124.5, 0]
+      Scale: [0.7838, 0.7838, 0.7838]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 10917235229718087749
+    TagComponent:
+      Tag: Cone 0_14
+    TransformComponent:
+      Translation: [-20.4, 0.4328, 13.2]
+      Rotation: [0, 70.11, 0]
+      Scale: [0.8656, 0.8656, 0.8656]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 10658263891000831778
+    TagComponent:
+      Tag: Cylinder 0_15
+    TransformComponent:
+      Translation: [-20.4, 0.4805, 15.6]
+      Rotation: [0, 293.4, 0]
+      Scale: [0.9609, 0.9609, 0.9609]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 10855819238675830452
+    TagComponent:
+      Tag: Torus 0_16
+    TransformComponent:
+      Translation: [-20.4, 0.2419, 18]
+      Rotation: [0, 224.8, 0]
+      Scale: [0.8064, 0.8064, 0.8064]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 13417824570935510031
+    TagComponent:
+      Tag: Capsule 0_17
+    TransformComponent:
+      Translation: [-20.4, 0.5157, 20.4]
+      Rotation: [0, 129.9, 0]
+      Scale: [1.031, 1.031, 1.031]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 17760009085075570416
+    TagComponent:
+      Tag: Sphere 1_0
+    TransformComponent:
+      Translation: [-18, 0.4456, -20.4]
+      Rotation: [0, 143.2, 0]
+      Scale: [0.8912, 0.8912, 0.8912]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 11118890293747389838
+    TagComponent:
+      Tag: Cone 1_1
+    TransformComponent:
+      Translation: [-18, 0.4086, -18]
+      Rotation: [0, 324, 0]
+      Scale: [0.8173, 0.8173, 0.8173]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 17415513098208340070
+    TagComponent:
+      Tag: Cylinder 1_2
+    TransformComponent:
+      Translation: [-18, 0.479, -15.6]
+      Rotation: [0, 166.5, 0]
+      Scale: [0.958, 0.958, 0.958]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 12324273427959688035
+    TagComponent:
+      Tag: Torus 1_3
+    TransformComponent:
+      Translation: [-18, 0.2643, -13.2]
+      Rotation: [0, 86.01, 0]
+      Scale: [0.8811, 0.8811, 0.8811]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 14424422905886636013
+    TagComponent:
+      Tag: Capsule 1_4
+    TransformComponent:
+      Translation: [-18, 0.3611, -10.8]
+      Rotation: [0, 10.12, 0]
+      Scale: [0.7222, 0.7222, 0.7222]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 1238352707265529075
+    TagComponent:
+      Tag: Cube 1_5
+    TransformComponent:
+      Translation: [-18, 0.3181, -8.4]
+      Rotation: [0, 157.5, 0]
+      Scale: [0.6362, 0.6362, 0.6362]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 13798034351888671128
+    TagComponent:
+      Tag: Sphere 1_6
+    TransformComponent:
+      Translation: [-18, 0.4038, -6]
+      Rotation: [0, 279.9, 0]
+      Scale: [0.8077, 0.8077, 0.8077]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 13497681119709718895
+    TagComponent:
+      Tag: Cone 1_7
+    TransformComponent:
+      Translation: [-18, 0.3312, -3.6]
+      Rotation: [0, 251.3, 0]
+      Scale: [0.6623, 0.6623, 0.6623]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 10270141996778504400
+    TagComponent:
+      Tag: Cylinder 1_8
+    TransformComponent:
+      Translation: [-18, 0.3828, -1.2]
+      Rotation: [0, 229.4, 0]
+      Scale: [0.7656, 0.7656, 0.7656]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 6838984687884791101
+    TagComponent:
+      Tag: Torus 1_9
+    TransformComponent:
+      Translation: [-18, 0.2434, 1.2]
+      Rotation: [0, 111.7, 0]
+      Scale: [0.8114, 0.8114, 0.8114]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 10417810730602468614
+    TagComponent:
+      Tag: Capsule 1_10
+    TransformComponent:
+      Translation: [-18, 0.3898, 3.6]
+      Rotation: [0, 85.76, 0]
+      Scale: [0.7796, 0.7796, 0.7796]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 6176057979758835649
+    TagComponent:
+      Tag: Cube 1_11
+    TransformComponent:
+      Translation: [-18, 0.5097, 6]
+      Rotation: [0, 262, 0]
+      Scale: [1.019, 1.019, 1.019]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 5846415112894866774
+    TagComponent:
+      Tag: Sphere 1_12
+    TransformComponent:
+      Translation: [-18, 0.4393, 8.4]
+      Rotation: [0, 212.3, 0]
+      Scale: [0.8785, 0.8785, 0.8785]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 4987994560788205248
+    TagComponent:
+      Tag: Cone 1_13
+    TransformComponent:
+      Translation: [-18, 0.4248, 10.8]
+      Rotation: [0, 213.3, 0]
+      Scale: [0.8496, 0.8496, 0.8496]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 16720400851539320180
+    TagComponent:
+      Tag: Cylinder 1_14
+    TransformComponent:
+      Translation: [-18, 0.4773, 13.2]
+      Rotation: [0, 331.2, 0]
+      Scale: [0.9547, 0.9547, 0.9547]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 7330897841483027207
+    TagComponent:
+      Tag: Torus 1_15
+    TransformComponent:
+      Translation: [-18, 0.2178, 15.6]
+      Rotation: [0, 269.9, 0]
+      Scale: [0.7258, 0.7258, 0.7258]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 76399252387600177
+    TagComponent:
+      Tag: Capsule 1_16
+    TransformComponent:
+      Translation: [-18, 0.446, 18]
+      Rotation: [0, 23.32, 0]
+      Scale: [0.892, 0.892, 0.892]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 18401454950205862272
+    TagComponent:
+      Tag: Cube 1_17
+    TransformComponent:
+      Translation: [-18, 0.3708, 20.4]
+      Rotation: [0, 253.2, 0]
+      Scale: [0.7415, 0.7415, 0.7415]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 7970635032169366682
+    TagComponent:
+      Tag: Cone 2_0
+    TransformComponent:
+      Translation: [-15.6, 0.3143, -20.4]
+      Rotation: [0, 13.35, 0]
+      Scale: [0.6287, 0.6287, 0.6287]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 13760339045779213195
+    TagComponent:
+      Tag: Cylinder 2_1
+    TransformComponent:
+      Translation: [-15.6, 0.3364, -18]
+      Rotation: [0, 212.3, 0]
+      Scale: [0.6728, 0.6728, 0.6728]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 1934622414784577616
+    TagComponent:
+      Tag: Torus 2_2
+    TransformComponent:
+      Translation: [-15.6, 0.1872, -15.6]
+      Rotation: [0, 182.9, 0]
+      Scale: [0.624, 0.624, 0.624]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 5869004969775659747
+    TagComponent:
+      Tag: Capsule 2_3
+    TransformComponent:
+      Translation: [-15.6, 0.4746, -13.2]
+      Rotation: [0, 229.4, 0]
+      Scale: [0.9492, 0.9492, 0.9492]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 3070409883326784861
+    TagComponent:
+      Tag: Cube 2_4
+    TransformComponent:
+      Translation: [-15.6, 0.3599, -10.8]
+      Rotation: [0, 228.5, 0]
+      Scale: [0.7198, 0.7198, 0.7198]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 15449851069167652194
+    TagComponent:
+      Tag: Sphere 2_5
+    TransformComponent:
+      Translation: [-15.6, 0.3021, -8.4]
+      Rotation: [0, 151.3, 0]
+      Scale: [0.6042, 0.6042, 0.6042]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 9127209960756607034
+    TagComponent:
+      Tag: Cone 2_6
+    TransformComponent:
+      Translation: [-15.6, 0.396, -6]
+      Rotation: [0, 22.05, 0]
+      Scale: [0.7919, 0.7919, 0.7919]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 10995346756547973730
+    TagComponent:
+      Tag: Cylinder 2_7
+    TransformComponent:
+      Translation: [-15.6, 0.4472, -3.6]
+      Rotation: [0, 174.8, 0]
+      Scale: [0.8945, 0.8945, 0.8945]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 14310297658602114626
+    TagComponent:
+      Tag: Torus 2_8
+    TransformComponent:
+      Translation: [-15.6, 0.2822, -1.2]
+      Rotation: [0, 339, 0]
+      Scale: [0.9405, 0.9405, 0.9405]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 14240268851690317992
+    TagComponent:
+      Tag: Capsule 2_9
+    TransformComponent:
+      Translation: [-15.6, 0.3223, 1.2]
+      Rotation: [0, 284.5, 0]
+      Scale: [0.6445, 0.6445, 0.6445]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 10015037224317996237
+    TagComponent:
+      Tag: Cube 2_10
+    TransformComponent:
+      Translation: [-15.6, 0.527, 3.6]
+      Rotation: [0, 174.8, 0]
+      Scale: [1.054, 1.054, 1.054]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 12678962645822504083
+    TagComponent:
+      Tag: Sphere 2_11
+    TransformComponent:
+      Translation: [-15.6, 0.5405, 6]
+      Rotation: [0, 100.3, 0]
+      Scale: [1.081, 1.081, 1.081]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 6606629853543766558
+    TagComponent:
+      Tag: Cone 2_12
+    TransformComponent:
+      Translation: [-15.6, 0.4332, 8.4]
+      Rotation: [0, 292.5, 0]
+      Scale: [0.8664, 0.8664, 0.8664]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 3835140441983670543
+    TagComponent:
+      Tag: Cylinder 2_13
+    TransformComponent:
+      Translation: [-15.6, 0.4006, 10.8]
+      Rotation: [0, 359.6, 0]
+      Scale: [0.8012, 0.8012, 0.8012]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 4118693293996430230
+    TagComponent:
+      Tag: Torus 2_14
+    TransformComponent:
+      Translation: [-15.6, 0.248, 13.2]
+      Rotation: [0, 323.9, 0]
+      Scale: [0.8266, 0.8266, 0.8266]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 12235486153103242933
+    TagComponent:
+      Tag: Capsule 2_15
+    TransformComponent:
+      Translation: [-15.6, 0.4947, 15.6]
+      Rotation: [0, 341.9, 0]
+      Scale: [0.9895, 0.9895, 0.9895]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 7872886097124106731
+    TagComponent:
+      Tag: Cube 2_16
+    TransformComponent:
+      Translation: [-15.6, 0.3977, 18]
+      Rotation: [0, 28.58, 0]
+      Scale: [0.7954, 0.7954, 0.7954]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 9215338044470349026
+    TagComponent:
+      Tag: Sphere 2_17
+    TransformComponent:
+      Translation: [-15.6, 0.4762, 20.4]
+      Rotation: [0, 130.8, 0]
+      Scale: [0.9524, 0.9524, 0.9524]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 7399423850771163834
+    TagComponent:
+      Tag: Cylinder 3_0
+    TransformComponent:
+      Translation: [-13.2, 0.5477, -20.4]
+      Rotation: [0, 175.3, 0]
+      Scale: [1.095, 1.095, 1.095]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 2265526026348073635
+    TagComponent:
+      Tag: Torus 3_1
+    TransformComponent:
+      Translation: [-13.2, 0.2159, -18]
+      Rotation: [0, 68.68, 0]
+      Scale: [0.7195, 0.7195, 0.7195]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 398875148701434416
+    TagComponent:
+      Tag: Capsule 3_2
+    TransformComponent:
+      Translation: [-13.2, 0.5178, -15.6]
+      Rotation: [0, 344.2, 0]
+      Scale: [1.036, 1.036, 1.036]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 6806651141108493152
+    TagComponent:
+      Tag: Cube 3_3
+    TransformComponent:
+      Translation: [-13.2, 0.3003, -13.2]
+      Rotation: [0, 231.6, 0]
+      Scale: [0.6005, 0.6005, 0.6005]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 1207094665497839093
+    TagComponent:
+      Tag: Sphere 3_4
+    TransformComponent:
+      Translation: [-13.2, 0.413, -10.8]
+      Rotation: [0, 247.6, 0]
+      Scale: [0.826, 0.826, 0.826]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 16374152500520179846
+    TagComponent:
+      Tag: Cone 3_5
+    TransformComponent:
+      Translation: [-13.2, 0.3119, -8.4]
+      Rotation: [0, 192.7, 0]
+      Scale: [0.6237, 0.6237, 0.6237]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 11383898005617720041
+    TagComponent:
+      Tag: Cylinder 3_6
+    TransformComponent:
+      Translation: [-13.2, 0.5341, -6]
+      Rotation: [0, 36.68, 0]
+      Scale: [1.068, 1.068, 1.068]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 7689251759612142596
+    TagComponent:
+      Tag: Torus 3_7
+    TransformComponent:
+      Translation: [-13.2, 0.2278, -3.6]
+      Rotation: [0, 98.8, 0]
+      Scale: [0.7595, 0.7595, 0.7595]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 1316853631528150155
+    TagComponent:
+      Tag: Capsule 3_8
+    TransformComponent:
+      Translation: [-13.2, 0.4209, -1.2]
+      Rotation: [0, 254.4, 0]
+      Scale: [0.8418, 0.8418, 0.8418]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 14842481788339407072
+    TagComponent:
+      Tag: Cube 3_9
+    TransformComponent:
+      Translation: [-13.2, 0.4088, 1.2]
+      Rotation: [0, 45.06, 0]
+      Scale: [0.8175, 0.8175, 0.8175]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 8755935880868669901
+    TagComponent:
+      Tag: Sphere 3_10
+    TransformComponent:
+      Translation: [-13.2, 0.3019, 3.6]
+      Rotation: [0, 305.2, 0]
+      Scale: [0.6037, 0.6037, 0.6037]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 8530617020328777938
+    TagComponent:
+      Tag: Cone 3_11
+    TransformComponent:
+      Translation: [-13.2, 0.313, 6]
+      Rotation: [0, 99.95, 0]
+      Scale: [0.626, 0.626, 0.626]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 6715993078381657655
+    TagComponent:
+      Tag: Cylinder 3_12
+    TransformComponent:
+      Translation: [-13.2, 0.5481, 8.4]
+      Rotation: [0, 63.32, 0]
+      Scale: [1.096, 1.096, 1.096]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 12079216989483669929
+    TagComponent:
+      Tag: Torus 3_13
+    TransformComponent:
+      Translation: [-13.2, 0.2095, 10.8]
+      Rotation: [0, 92.39, 0]
+      Scale: [0.6985, 0.6985, 0.6985]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 15113698282906825586
+    TagComponent:
+      Tag: Capsule 3_14
+    TransformComponent:
+      Translation: [-13.2, 0.4518, 13.2]
+      Rotation: [0, 337, 0]
+      Scale: [0.9035, 0.9035, 0.9035]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 3512393838089585801
+    TagComponent:
+      Tag: Cube 3_15
+    TransformComponent:
+      Translation: [-13.2, 0.3334, 15.6]
+      Rotation: [0, 272.3, 0]
+      Scale: [0.6669, 0.6669, 0.6669]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 1837554600779189597
+    TagComponent:
+      Tag: Sphere 3_16
+    TransformComponent:
+      Translation: [-13.2, 0.4796, 18]
+      Rotation: [0, 200.7, 0]
+      Scale: [0.9592, 0.9592, 0.9592]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 14449575945968894918
+    TagComponent:
+      Tag: Cone 3_17
+    TransformComponent:
+      Translation: [-13.2, 0.4486, 20.4]
+      Rotation: [0, 203.2, 0]
+      Scale: [0.8972, 0.8972, 0.8972]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 8289189452692872176
+    TagComponent:
+      Tag: Torus 4_0
+    TransformComponent:
+      Translation: [-10.8, 0.1909, -20.4]
+      Rotation: [0, 107.3, 0]
+      Scale: [0.6363, 0.6363, 0.6363]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 3618279971740448225
+    TagComponent:
+      Tag: Capsule 4_1
+    TransformComponent:
+      Translation: [-10.8, 0.5411, -18]
+      Rotation: [0, 292.1, 0]
+      Scale: [1.082, 1.082, 1.082]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 389827801536665961
+    TagComponent:
+      Tag: Cube 4_2
+    TransformComponent:
+      Translation: [-10.8, 0.3186, -15.6]
+      Rotation: [0, 253.8, 0]
+      Scale: [0.6371, 0.6371, 0.6371]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 16097610453377966098
+    TagComponent:
+      Tag: Sphere 4_3
+    TransformComponent:
+      Translation: [-10.8, 0.3571, -13.2]
+      Rotation: [0, 316.2, 0]
+      Scale: [0.7142, 0.7142, 0.7142]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 9763232488658582116
+    TagComponent:
+      Tag: Cone 4_4
+    TransformComponent:
+      Translation: [-10.8, 0.4298, -10.8]
+      Rotation: [0, 195.4, 0]
+      Scale: [0.8595, 0.8595, 0.8595]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 13551874437345974988
+    TagComponent:
+      Tag: Cylinder 4_5
+    TransformComponent:
+      Translation: [-10.8, 0.3657, -8.4]
+      Rotation: [0, 302.5, 0]
+      Scale: [0.7314, 0.7314, 0.7314]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 2896604715156330537
+    TagComponent:
+      Tag: Torus 4_6
+    TransformComponent:
+      Translation: [-10.8, 0.1849, -6]
+      Rotation: [0, 243.6, 0]
+      Scale: [0.6162, 0.6162, 0.6162]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 17731528020022367098
+    TagComponent:
+      Tag: Capsule 4_7
+    TransformComponent:
+      Translation: [-10.8, 0.4332, -3.6]
+      Rotation: [0, 193.9, 0]
+      Scale: [0.8664, 0.8664, 0.8664]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 18392074087687722627
+    TagComponent:
+      Tag: Cube 4_8
+    TransformComponent:
+      Translation: [-10.8, 0.3895, -1.2]
+      Rotation: [0, 123.6, 0]
+      Scale: [0.779, 0.779, 0.779]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 11086408755629743077
+    TagComponent:
+      Tag: Sphere 4_9
+    TransformComponent:
+      Translation: [-10.8, 0.3513, 1.2]
+      Rotation: [0, 282, 0]
+      Scale: [0.7027, 0.7027, 0.7027]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 14413305448617305671
+    TagComponent:
+      Tag: Cone 4_10
+    TransformComponent:
+      Translation: [-10.8, 0.3254, 3.6]
+      Rotation: [0, 154.2, 0]
+      Scale: [0.6508, 0.6508, 0.6508]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 15478772053578647789
+    TagComponent:
+      Tag: Cylinder 4_11
+    TransformComponent:
+      Translation: [-10.8, 0.4085, 6]
+      Rotation: [0, 221.5, 0]
+      Scale: [0.817, 0.817, 0.817]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 9349634787821244973
+    TagComponent:
+      Tag: Torus 4_12
+    TransformComponent:
+      Translation: [-10.8, 0.3046, 8.4]
+      Rotation: [0, 204.2, 0]
+      Scale: [1.015, 1.015, 1.015]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 8325265653154835349
+    TagComponent:
+      Tag: Capsule 4_13
+    TransformComponent:
+      Translation: [-10.8, 0.307, 10.8]
+      Rotation: [0, 194.8, 0]
+      Scale: [0.6139, 0.6139, 0.6139]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 2536569306577771112
+    TagComponent:
+      Tag: Cube 4_14
+    TransformComponent:
+      Translation: [-10.8, 0.4929, 13.2]
+      Rotation: [0, 181.5, 0]
+      Scale: [0.9857, 0.9857, 0.9857]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 8485943975230944425
+    TagComponent:
+      Tag: Sphere 4_15
+    TransformComponent:
+      Translation: [-10.8, 0.368, 15.6]
+      Rotation: [0, 154.8, 0]
+      Scale: [0.7359, 0.7359, 0.7359]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 5801752848135029739
+    TagComponent:
+      Tag: Cone 4_16
+    TransformComponent:
+      Translation: [-10.8, 0.305, 18]
+      Rotation: [0, 307.4, 0]
+      Scale: [0.6101, 0.6101, 0.6101]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 7046188713234697381
+    TagComponent:
+      Tag: Cylinder 4_17
+    TransformComponent:
+      Translation: [-10.8, 0.4305, 20.4]
+      Rotation: [0, 161.4, 0]
+      Scale: [0.861, 0.861, 0.861]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 16609324165375525993
+    TagComponent:
+      Tag: Capsule 5_0
+    TransformComponent:
+      Translation: [-8.4, 0.4421, -20.4]
+      Rotation: [0, 138, 0]
+      Scale: [0.8842, 0.8842, 0.8842]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 17540907151882492557
+    TagComponent:
+      Tag: Cube 5_1
+    TransformComponent:
+      Translation: [-8.4, 0.4738, -18]
+      Rotation: [0, 233.9, 0]
+      Scale: [0.9476, 0.9476, 0.9476]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 13120315883676518772
+    TagComponent:
+      Tag: Sphere 5_2
+    TransformComponent:
+      Translation: [-8.4, 0.3878, -15.6]
+      Rotation: [0, 65.69, 0]
+      Scale: [0.7755, 0.7755, 0.7755]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 2260337289286051576
+    TagComponent:
+      Tag: Cone 5_3
+    TransformComponent:
+      Translation: [-8.4, 0.4948, -13.2]
+      Rotation: [0, 343.6, 0]
+      Scale: [0.9896, 0.9896, 0.9896]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 5511490728378082656
+    TagComponent:
+      Tag: Cylinder 5_4
+    TransformComponent:
+      Translation: [-8.4, 0.3207, -10.8]
+      Rotation: [0, 208.2, 0]
+      Scale: [0.6415, 0.6415, 0.6415]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 2217138423213592351
+    TagComponent:
+      Tag: Torus 5_5
+    TransformComponent:
+      Translation: [-8.4, 0.1891, -8.4]
+      Rotation: [0, 307.9, 0]
+      Scale: [0.6302, 0.6302, 0.6302]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 9128346207131972727
+    TagComponent:
+      Tag: Capsule 5_6
+    TransformComponent:
+      Translation: [-8.4, 0.3972, -6]
+      Rotation: [0, 208.8, 0]
+      Scale: [0.7944, 0.7944, 0.7944]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 13254798069883226580
+    TagComponent:
+      Tag: Cube 5_7
+    TransformComponent:
+      Translation: [-8.4, 0.3086, -3.6]
+      Rotation: [0, 163.1, 0]
+      Scale: [0.6172, 0.6172, 0.6172]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 17869707527860471790
+    TagComponent:
+      Tag: Sphere 5_8
+    TransformComponent:
+      Translation: [-8.4, 0.3084, -1.2]
+      Rotation: [0, 80.15, 0]
+      Scale: [0.6167, 0.6167, 0.6167]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 2658671246978959900
+    TagComponent:
+      Tag: Cone 5_9
+    TransformComponent:
+      Translation: [-8.4, 0.3692, 1.2]
+      Rotation: [0, 357.7, 0]
+      Scale: [0.7384, 0.7384, 0.7384]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 13335209696876442143
+    TagComponent:
+      Tag: Cylinder 5_10
+    TransformComponent:
+      Translation: [-8.4, 0.3722, 3.6]
+      Rotation: [0, 58.79, 0]
+      Scale: [0.7443, 0.7443, 0.7443]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 1842515237981265377
+    TagComponent:
+      Tag: Torus 5_11
+    TransformComponent:
+      Translation: [-8.4, 0.2386, 6]
+      Rotation: [0, 277.2, 0]
+      Scale: [0.7954, 0.7954, 0.7954]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 11221661429957092389
+    TagComponent:
+      Tag: Capsule 5_12
+    TransformComponent:
+      Translation: [-8.4, 0.5046, 8.4]
+      Rotation: [0, 312, 0]
+      Scale: [1.009, 1.009, 1.009]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 14551482715992035852
+    TagComponent:
+      Tag: Cube 5_13
+    TransformComponent:
+      Translation: [-8.4, 0.3275, 10.8]
+      Rotation: [0, 20.7, 0]
+      Scale: [0.6551, 0.6551, 0.6551]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 14581384460096674859
+    TagComponent:
+      Tag: Sphere 5_14
+    TransformComponent:
+      Translation: [-8.4, 0.3535, 13.2]
+      Rotation: [0, 341.2, 0]
+      Scale: [0.707, 0.707, 0.707]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 10013890512107365378
+    TagComponent:
+      Tag: Cone 5_15
+    TransformComponent:
+      Translation: [-8.4, 0.508, 15.6]
+      Rotation: [0, 315.1, 0]
+      Scale: [1.016, 1.016, 1.016]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 12436967809599223139
+    TagComponent:
+      Tag: Cylinder 5_16
+    TransformComponent:
+      Translation: [-8.4, 0.4983, 18]
+      Rotation: [0, 293.8, 0]
+      Scale: [0.9967, 0.9967, 0.9967]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 15393558096925221775
+    TagComponent:
+      Tag: Torus 5_17
+    TransformComponent:
+      Translation: [-8.4, 0.265, 20.4]
+      Rotation: [0, 269.1, 0]
+      Scale: [0.8832, 0.8832, 0.8832]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 3255633160908533780
+    TagComponent:
+      Tag: Cube 6_0
+    TransformComponent:
+      Translation: [-6, 0.3936, -20.4]
+      Rotation: [0, 311.2, 0]
+      Scale: [0.7872, 0.7872, 0.7872]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 9983976150401588575
+    TagComponent:
+      Tag: Sphere 6_1
+    TransformComponent:
+      Translation: [-6, 0.3736, -18]
+      Rotation: [0, 10.24, 0]
+      Scale: [0.7471, 0.7471, 0.7471]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 665746113844929832
+    TagComponent:
+      Tag: Cone 6_2
+    TransformComponent:
+      Translation: [-6, 0.5035, -15.6]
+      Rotation: [0, 289.8, 0]
+      Scale: [1.007, 1.007, 1.007]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 15964464367131710216
+    TagComponent:
+      Tag: Cylinder 6_3
+    TransformComponent:
+      Translation: [-6, 0.4732, -13.2]
+      Rotation: [0, 127.7, 0]
+      Scale: [0.9465, 0.9465, 0.9465]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 1650852880671888147
+    TagComponent:
+      Tag: Torus 6_4
+    TransformComponent:
+      Translation: [-6, 0.3166, -10.8]
+      Rotation: [0, 305.1, 0]
+      Scale: [1.055, 1.055, 1.055]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 4940467409578458933
+    TagComponent:
+      Tag: Capsule 6_5
+    TransformComponent:
+      Translation: [-6, 0.3778, -8.4]
+      Rotation: [0, 337.5, 0]
+      Scale: [0.7555, 0.7555, 0.7555]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 18226553890747068733
+    TagComponent:
+      Tag: Cube 6_6
+    TransformComponent:
+      Translation: [-6, 0.497, -6]
+      Rotation: [0, 44.18, 0]
+      Scale: [0.994, 0.994, 0.994]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 10858935975643849246
+    TagComponent:
+      Tag: Sphere 6_7
+    TransformComponent:
+      Translation: [-6, 0.3345, -3.6]
+      Rotation: [0, 142.3, 0]
+      Scale: [0.6689, 0.6689, 0.6689]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 16276616595389743022
+    TagComponent:
+      Tag: Cone 6_8
+    TransformComponent:
+      Translation: [-6, 0.5054, -1.2]
+      Rotation: [0, 237.6, 0]
+      Scale: [1.011, 1.011, 1.011]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 3135010782092418492
+    TagComponent:
+      Tag: Cylinder 6_9
+    TransformComponent:
+      Translation: [-6, 0.3388, 1.2]
+      Rotation: [0, 318.4, 0]
+      Scale: [0.6776, 0.6776, 0.6776]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 8789790223817714282
+    TagComponent:
+      Tag: Torus 6_10
+    TransformComponent:
+      Translation: [-6, 0.2472, 3.6]
+      Rotation: [0, 154.9, 0]
+      Scale: [0.8241, 0.8241, 0.8241]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 4428446739896338969
+    TagComponent:
+      Tag: Capsule 6_11
+    TransformComponent:
+      Translation: [-6, 0.3852, 6]
+      Rotation: [0, 211.8, 0]
+      Scale: [0.7704, 0.7704, 0.7704]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 5858725708813377207
+    TagComponent:
+      Tag: Cube 6_12
+    TransformComponent:
+      Translation: [-6, 0.4574, 8.4]
+      Rotation: [0, 163, 0]
+      Scale: [0.9148, 0.9148, 0.9148]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 1378244054588489622
+    TagComponent:
+      Tag: Sphere 6_13
+    TransformComponent:
+      Translation: [-6, 0.5093, 10.8]
+      Rotation: [0, 125.4, 0]
+      Scale: [1.019, 1.019, 1.019]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 5010583864969120469
+    TagComponent:
+      Tag: Cone 6_14
+    TransformComponent:
+      Translation: [-6, 0.3533, 13.2]
+      Rotation: [0, 173.6, 0]
+      Scale: [0.7065, 0.7065, 0.7065]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 16637731328927800836
+    TagComponent:
+      Tag: Cylinder 6_15
+    TransformComponent:
+      Translation: [-6, 0.4121, 15.6]
+      Rotation: [0, 63.26, 0]
+      Scale: [0.8242, 0.8242, 0.8242]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 8660043508167584800
+    TagComponent:
+      Tag: Torus 6_16
+    TransformComponent:
+      Translation: [-6, 0.2363, 18]
+      Rotation: [0, 281, 0]
+      Scale: [0.7877, 0.7877, 0.7877]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 10944307007398601422
+    TagComponent:
+      Tag: Capsule 6_17
+    TransformComponent:
+      Translation: [-6, 0.4946, 20.4]
+      Rotation: [0, 320.4, 0]
+      Scale: [0.9893, 0.9893, 0.9893]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 1155779676786248402
+    TagComponent:
+      Tag: Sphere 7_0
+    TransformComponent:
+      Translation: [-3.6, 0.3573, -20.4]
+      Rotation: [0, 118, 0]
+      Scale: [0.7146, 0.7146, 0.7146]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 15316362611452444842
+    TagComponent:
+      Tag: Cone 7_1
+    TransformComponent:
+      Translation: [-3.6, 0.5061, -18]
+      Rotation: [0, 49.71, 0]
+      Scale: [1.012, 1.012, 1.012]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 10308075731310004064
+    TagComponent:
+      Tag: Cylinder 7_2
+    TransformComponent:
+      Translation: [-3.6, 0.5416, -15.6]
+      Rotation: [0, 305.2, 0]
+      Scale: [1.083, 1.083, 1.083]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 10740665694421045009
+    TagComponent:
+      Tag: Torus 7_3
+    TransformComponent:
+      Translation: [-3.6, 0.2218, -13.2]
+      Rotation: [0, 236.9, 0]
+      Scale: [0.7393, 0.7393, 0.7393]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 345787330969079302
+    TagComponent:
+      Tag: Capsule 7_4
+    TransformComponent:
+      Translation: [-3.6, 0.5358, -10.8]
+      Rotation: [0, 4.549, 0]
+      Scale: [1.072, 1.072, 1.072]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 7492390756123626402
+    TagComponent:
+      Tag: Cube 7_5
+    TransformComponent:
+      Translation: [-3.6, 0.3042, -8.4]
+      Rotation: [0, 275.6, 0]
+      Scale: [0.6085, 0.6085, 0.6085]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 1723244868301070923
+    TagComponent:
+      Tag: Sphere 7_6
+    TransformComponent:
+      Translation: [-3.6, 0.3585, -6]
+      Rotation: [0, 105.7, 0]
+      Scale: [0.7171, 0.7171, 0.7171]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 270341937001698449
+    TagComponent:
+      Tag: Cone 7_7
+    TransformComponent:
+      Translation: [-3.6, 0.5497, -3.6]
+      Rotation: [0, 183.5, 0]
+      Scale: [1.099, 1.099, 1.099]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 18375833735829089899
+    TagComponent:
+      Tag: Cylinder 7_8
+    TransformComponent:
+      Translation: [-3.6, 0.4521, -1.2]
+      Rotation: [0, 213.5, 0]
+      Scale: [0.9042, 0.9042, 0.9042]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 1870430458016544220
+    TagComponent:
+      Tag: Torus 7_9
+    TransformComponent:
+      Translation: [-3.6, 0.3278, 1.2]
+      Rotation: [0, 33.07, 0]
+      Scale: [1.093, 1.093, 1.093]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 17857417768826707634
+    TagComponent:
+      Tag: Capsule 7_10
+    TransformComponent:
+      Translation: [-3.6, 0.4571, 3.6]
+      Rotation: [0, 202, 0]
+      Scale: [0.9142, 0.9142, 0.9142]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 1256480905924097435
+    TagComponent:
+      Tag: Cube 7_11
+    TransformComponent:
+      Translation: [-3.6, 0.3195, 6]
+      Rotation: [0, 268.2, 0]
+      Scale: [0.6391, 0.6391, 0.6391]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 12177956568493491554
+    TagComponent:
+      Tag: Sphere 7_12
+    TransformComponent:
+      Translation: [-3.6, 0.3532, 8.4]
+      Rotation: [0, 326.1, 0]
+      Scale: [0.7064, 0.7064, 0.7064]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 3614666154002043849
+    TagComponent:
+      Tag: Cone 7_13
+    TransformComponent:
+      Translation: [-3.6, 0.3246, 10.8]
+      Rotation: [0, 274.9, 0]
+      Scale: [0.6492, 0.6492, 0.6492]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 7643087047172056710
+    TagComponent:
+      Tag: Cylinder 7_14
+    TransformComponent:
+      Translation: [-3.6, 0.5473, 13.2]
+      Rotation: [0, 346.4, 0]
+      Scale: [1.095, 1.095, 1.095]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 2115928792392650586
+    TagComponent:
+      Tag: Torus 7_15
+    TransformComponent:
+      Translation: [-3.6, 0.2747, 15.6]
+      Rotation: [0, 303.8, 0]
+      Scale: [0.9156, 0.9156, 0.9156]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 16987058050017649344
+    TagComponent:
+      Tag: Capsule 7_16
+    TransformComponent:
+      Translation: [-3.6, 0.3453, 18]
+      Rotation: [0, 173.5, 0]
+      Scale: [0.6907, 0.6907, 0.6907]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 11064097607793317002
+    TagComponent:
+      Tag: Cube 7_17
+    TransformComponent:
+      Translation: [-3.6, 0.4015, 20.4]
+      Rotation: [0, 119, 0]
+      Scale: [0.803, 0.803, 0.803]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 2223083165411880258
+    TagComponent:
+      Tag: Cone 8_0
+    TransformComponent:
+      Translation: [-1.2, 0.5157, -20.4]
+      Rotation: [0, 322.9, 0]
+      Scale: [1.031, 1.031, 1.031]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 16832381645627807471
+    TagComponent:
+      Tag: Cylinder 8_1
+    TransformComponent:
+      Translation: [-1.2, 0.3885, -18]
+      Rotation: [0, 349.6, 0]
+      Scale: [0.7771, 0.7771, 0.7771]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 7379852471802230509
+    TagComponent:
+      Tag: Torus 8_2
+    TransformComponent:
+      Translation: [-1.2, 0.2074, -15.6]
+      Rotation: [0, 37.06, 0]
+      Scale: [0.6913, 0.6913, 0.6913]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 1273159327400709083
+    TagComponent:
+      Tag: Capsule 8_3
+    TransformComponent:
+      Translation: [-1.2, 0.5153, -13.2]
+      Rotation: [0, 324.1, 0]
+      Scale: [1.031, 1.031, 1.031]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 7851471696373556071
+    TagComponent:
+      Tag: Cube 8_4
+    TransformComponent:
+      Translation: [-1.2, 0.4589, -10.8]
+      Rotation: [0, 220.1, 0]
+      Scale: [0.9178, 0.9178, 0.9178]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 1238194858942647204
+    TagComponent:
+      Tag: Sphere 8_5
+    TransformComponent:
+      Translation: [-1.2, 0.3581, -8.4]
+      Rotation: [0, 347.1, 0]
+      Scale: [0.7162, 0.7162, 0.7162]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 11346733967657662782
+    TagComponent:
+      Tag: Cone 8_6
+    TransformComponent:
+      Translation: [-1.2, 0.5063, -6]
+      Rotation: [0, 0.3579, 0]
+      Scale: [1.013, 1.013, 1.013]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 137676834840208644
+    TagComponent:
+      Tag: Cylinder 8_7
+    TransformComponent:
+      Translation: [-1.2, 0.3893, -3.6]
+      Rotation: [0, 59.89, 0]
+      Scale: [0.7786, 0.7786, 0.7786]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 10729500564610226984
+    TagComponent:
+      Tag: Torus 8_8
+    TransformComponent:
+      Translation: [-1.2, 0.2082, -1.2]
+      Rotation: [0, 320.8, 0]
+      Scale: [0.6939, 0.6939, 0.6939]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 11234447853908321852
+    TagComponent:
+      Tag: Capsule 8_9
+    TransformComponent:
+      Translation: [-1.2, 0.4119, 1.2]
+      Rotation: [0, 158.5, 0]
+      Scale: [0.8238, 0.8238, 0.8238]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 7529306716098118712
+    TagComponent:
+      Tag: Cube 8_10
+    TransformComponent:
+      Translation: [-1.2, 0.432, 3.6]
+      Rotation: [0, 300.2, 0]
+      Scale: [0.8639, 0.8639, 0.8639]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 13430493321472112174
+    TagComponent:
+      Tag: Sphere 8_11
+    TransformComponent:
+      Translation: [-1.2, 0.365, 6]
+      Rotation: [0, 81.36, 0]
+      Scale: [0.7299, 0.7299, 0.7299]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 10200587387995353695
+    TagComponent:
+      Tag: Cone 8_12
+    TransformComponent:
+      Translation: [-1.2, 0.5049, 8.4]
+      Rotation: [0, 59.78, 0]
+      Scale: [1.01, 1.01, 1.01]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 6623788749257269517
+    TagComponent:
+      Tag: Cylinder 8_13
+    TransformComponent:
+      Translation: [-1.2, 0.4302, 10.8]
+      Rotation: [0, 107, 0]
+      Scale: [0.8605, 0.8605, 0.8605]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 14137096961484968753
+    TagComponent:
+      Tag: Torus 8_14
+    TransformComponent:
+      Translation: [-1.2, 0.2009, 13.2]
+      Rotation: [0, 90.27, 0]
+      Scale: [0.6697, 0.6697, 0.6697]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 13538758926512830252
+    TagComponent:
+      Tag: Capsule 8_15
+    TransformComponent:
+      Translation: [-1.2, 0.3784, 15.6]
+      Rotation: [0, 282, 0]
+      Scale: [0.7568, 0.7568, 0.7568]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 4433870125508653257
+    TagComponent:
+      Tag: Cube 8_16
+    TransformComponent:
+      Translation: [-1.2, 0.491, 18]
+      Rotation: [0, 82.42, 0]
+      Scale: [0.982, 0.982, 0.982]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 17626474436794639610
+    TagComponent:
+      Tag: Sphere 8_17
+    TransformComponent:
+      Translation: [-1.2, 0.4816, 20.4]
+      Rotation: [0, 258.3, 0]
+      Scale: [0.9632, 0.9632, 0.9632]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 2708417588837138425
+    TagComponent:
+      Tag: Cylinder 9_0
+    TransformComponent:
+      Translation: [1.2, 0.4243, -20.4]
+      Rotation: [0, 169.6, 0]
+      Scale: [0.8486, 0.8486, 0.8486]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 11706064350511531997
+    TagComponent:
+      Tag: Torus 9_1
+    TransformComponent:
+      Translation: [1.2, 0.3145, -18]
+      Rotation: [0, 266.3, 0]
+      Scale: [1.048, 1.048, 1.048]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 10167059445401552810
+    TagComponent:
+      Tag: Capsule 9_2
+    TransformComponent:
+      Translation: [1.2, 0.5459, -15.6]
+      Rotation: [0, 192.7, 0]
+      Scale: [1.092, 1.092, 1.092]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 276181998801388212
+    TagComponent:
+      Tag: Cube 9_3
+    TransformComponent:
+      Translation: [1.2, 0.334, -13.2]
+      Rotation: [0, 324.3, 0]
+      Scale: [0.6679, 0.6679, 0.6679]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 8623491942652845475
+    TagComponent:
+      Tag: Sphere 9_4
+    TransformComponent:
+      Translation: [1.2, 0.4133, -10.8]
+      Rotation: [0, 144.8, 0]
+      Scale: [0.8267, 0.8267, 0.8267]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 11942191074728439281
+    TagComponent:
+      Tag: Cone 9_5
+    TransformComponent:
+      Translation: [1.2, 0.4778, -8.4]
+      Rotation: [0, 352.4, 0]
+      Scale: [0.9556, 0.9556, 0.9556]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 12078984369578991553
+    TagComponent:
+      Tag: Cylinder 9_6
+    TransformComponent:
+      Translation: [1.2, 0.4972, -6]
+      Rotation: [0, 256.8, 0]
+      Scale: [0.9945, 0.9945, 0.9945]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 1819557164553253401
+    TagComponent:
+      Tag: Torus 9_7
+    TransformComponent:
+      Translation: [1.2, 0.3168, -3.6]
+      Rotation: [0, 126.5, 0]
+      Scale: [1.056, 1.056, 1.056]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 2737194363946028237
+    TagComponent:
+      Tag: Capsule 9_8
+    TransformComponent:
+      Translation: [1.2, 0.3511, -1.2]
+      Rotation: [0, 72.72, 0]
+      Scale: [0.7023, 0.7023, 0.7023]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 7130945699216921981
+    TagComponent:
+      Tag: Cube 9_9
+    TransformComponent:
+      Translation: [1.2, 0.4619, 1.2]
+      Rotation: [0, 233, 0]
+      Scale: [0.9237, 0.9237, 0.9237]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 7798069214427059303
+    TagComponent:
+      Tag: Sphere 9_10
+    TransformComponent:
+      Translation: [1.2, 0.4042, 3.6]
+      Rotation: [0, 262.6, 0]
+      Scale: [0.8085, 0.8085, 0.8085]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 11179132928711709201
+    TagComponent:
+      Tag: Cone 9_11
+    TransformComponent:
+      Translation: [1.2, 0.4449, 6]
+      Rotation: [0, 68.14, 0]
+      Scale: [0.8898, 0.8898, 0.8898]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 14657238544978194471
+    TagComponent:
+      Tag: Cylinder 9_12
+    TransformComponent:
+      Translation: [1.2, 0.3009, 8.4]
+      Rotation: [0, 353, 0]
+      Scale: [0.6018, 0.6018, 0.6018]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 13702352145746845296
+    TagComponent:
+      Tag: Torus 9_13
+    TransformComponent:
+      Translation: [1.2, 0.2753, 10.8]
+      Rotation: [0, 25.25, 0]
+      Scale: [0.9178, 0.9178, 0.9178]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 13367439238074461857
+    TagComponent:
+      Tag: Capsule 9_14
+    TransformComponent:
+      Translation: [1.2, 0.4872, 13.2]
+      Rotation: [0, 307, 0]
+      Scale: [0.9744, 0.9744, 0.9744]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 14776571136718894931
+    TagComponent:
+      Tag: Cube 9_15
+    TransformComponent:
+      Translation: [1.2, 0.4093, 15.6]
+      Rotation: [0, 105.7, 0]
+      Scale: [0.8187, 0.8187, 0.8187]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 3145398254989844638
+    TagComponent:
+      Tag: Sphere 9_16
+    TransformComponent:
+      Translation: [1.2, 0.4775, 18]
+      Rotation: [0, 113.6, 0]
+      Scale: [0.9549, 0.9549, 0.9549]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 17531633592731586380
+    TagComponent:
+      Tag: Cone 9_17
+    TransformComponent:
+      Translation: [1.2, 0.3769, 20.4]
+      Rotation: [0, 101, 0]
+      Scale: [0.7537, 0.7537, 0.7537]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 17821631163766905857
+    TagComponent:
+      Tag: Torus 10_0
+    TransformComponent:
+      Translation: [3.6, 0.2248, -20.4]
+      Rotation: [0, 327.5, 0]
+      Scale: [0.7495, 0.7495, 0.7495]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 5708742547583498831
+    TagComponent:
+      Tag: Capsule 10_1
+    TransformComponent:
+      Translation: [3.6, 0.4611, -18]
+      Rotation: [0, 313.9, 0]
+      Scale: [0.9222, 0.9222, 0.9222]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 15120276599852719872
+    TagComponent:
+      Tag: Cube 10_2
+    TransformComponent:
+      Translation: [3.6, 0.309, -15.6]
+      Rotation: [0, 199.4, 0]
+      Scale: [0.6181, 0.6181, 0.6181]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 4688608822831327170
+    TagComponent:
+      Tag: Sphere 10_3
+    TransformComponent:
+      Translation: [3.6, 0.3073, -13.2]
+      Rotation: [0, 215.3, 0]
+      Scale: [0.6145, 0.6145, 0.6145]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 17836921004322043438
+    TagComponent:
+      Tag: Cone 10_4
+    TransformComponent:
+      Translation: [3.6, 0.4984, -10.8]
+      Rotation: [0, 146.9, 0]
+      Scale: [0.9968, 0.9968, 0.9968]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 12824717976526493545
+    TagComponent:
+      Tag: Cylinder 10_5
+    TransformComponent:
+      Translation: [3.6, 0.388, -8.4]
+      Rotation: [0, 321.7, 0]
+      Scale: [0.776, 0.776, 0.776]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 12091297010001181715
+    TagComponent:
+      Tag: Torus 10_6
+    TransformComponent:
+      Translation: [3.6, 0.1831, -6]
+      Rotation: [0, 217.8, 0]
+      Scale: [0.6102, 0.6102, 0.6102]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 11131011036978872224
+    TagComponent:
+      Tag: Capsule 10_7
+    TransformComponent:
+      Translation: [3.6, 0.3271, -3.6]
+      Rotation: [0, 5.009, 0]
+      Scale: [0.6543, 0.6543, 0.6543]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 17248102424915392582
+    TagComponent:
+      Tag: Cube 10_8
+    TransformComponent:
+      Translation: [3.6, 0.3012, -1.2]
+      Rotation: [0, 310.4, 0]
+      Scale: [0.6024, 0.6024, 0.6024]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 5649127215466155310
+    TagComponent:
+      Tag: Sphere 10_9
+    TransformComponent:
+      Translation: [3.6, 0.3768, 1.2]
+      Rotation: [0, 25.48, 0]
+      Scale: [0.7537, 0.7537, 0.7537]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 1612394583057510307
+    TagComponent:
+      Tag: Cone 10_10
+    TransformComponent:
+      Translation: [3.6, 0.3585, 3.6]
+      Rotation: [0, 10.35, 0]
+      Scale: [0.717, 0.717, 0.717]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 10365214088955026246
+    TagComponent:
+      Tag: Cylinder 10_11
+    TransformComponent:
+      Translation: [3.6, 0.3287, 6]
+      Rotation: [0, 344.8, 0]
+      Scale: [0.6574, 0.6574, 0.6574]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 17172769535565963369
+    TagComponent:
+      Tag: Torus 10_12
+    TransformComponent:
+      Translation: [3.6, 0.2762, 8.4]
+      Rotation: [0, 333.4, 0]
+      Scale: [0.9208, 0.9208, 0.9208]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 6958481271405064857
+    TagComponent:
+      Tag: Capsule 10_13
+    TransformComponent:
+      Translation: [3.6, 0.3141, 10.8]
+      Rotation: [0, 224, 0]
+      Scale: [0.6283, 0.6283, 0.6283]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 8315185219374508902
+    TagComponent:
+      Tag: Cube 10_14
+    TransformComponent:
+      Translation: [3.6, 0.373, 13.2]
+      Rotation: [0, 93.88, 0]
+      Scale: [0.7459, 0.7459, 0.7459]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 16370634179085443084
+    TagComponent:
+      Tag: Sphere 10_15
+    TransformComponent:
+      Translation: [3.6, 0.5164, 15.6]
+      Rotation: [0, 233.7, 0]
+      Scale: [1.033, 1.033, 1.033]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 18404003397877737998
+    TagComponent:
+      Tag: Cone 10_16
+    TransformComponent:
+      Translation: [3.6, 0.4679, 18]
+      Rotation: [0, 243.4, 0]
+      Scale: [0.9357, 0.9357, 0.9357]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 4365039588248320062
+    TagComponent:
+      Tag: Cylinder 10_17
+    TransformComponent:
+      Translation: [3.6, 0.4329, 20.4]
+      Rotation: [0, 325.2, 0]
+      Scale: [0.8659, 0.8659, 0.8659]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 15076610034433258071
+    TagComponent:
+      Tag: Capsule 11_0
+    TransformComponent:
+      Translation: [6, 0.3163, -20.4]
+      Rotation: [0, 188.3, 0]
+      Scale: [0.6327, 0.6327, 0.6327]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 2891891793980244986
+    TagComponent:
+      Tag: Cube 11_1
+    TransformComponent:
+      Translation: [6, 0.312, -18]
+      Rotation: [0, 343.8, 0]
+      Scale: [0.6241, 0.6241, 0.6241]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 4624007482435141521
+    TagComponent:
+      Tag: Sphere 11_2
+    TransformComponent:
+      Translation: [6, 0.5186, -15.6]
+      Rotation: [0, 316.5, 0]
+      Scale: [1.037, 1.037, 1.037]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 7816179045341556662
+    TagComponent:
+      Tag: Cone 11_3
+    TransformComponent:
+      Translation: [6, 0.4238, -13.2]
+      Rotation: [0, 201.4, 0]
+      Scale: [0.8477, 0.8477, 0.8477]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 7967782102734914468
+    TagComponent:
+      Tag: Cylinder 11_4
+    TransformComponent:
+      Translation: [6, 0.3696, -10.8]
+      Rotation: [0, 271.1, 0]
+      Scale: [0.7392, 0.7392, 0.7392]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 7079745958462116365
+    TagComponent:
+      Tag: Torus 11_5
+    TransformComponent:
+      Translation: [6, 0.2019, -8.4]
+      Rotation: [0, 105.8, 0]
+      Scale: [0.6729, 0.6729, 0.6729]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 15123636338350240528
+    TagComponent:
+      Tag: Capsule 11_6
+    TransformComponent:
+      Translation: [6, 0.3767, -6]
+      Rotation: [0, 72.15, 0]
+      Scale: [0.7534, 0.7534, 0.7534]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 15892936440560262767
+    TagComponent:
+      Tag: Cube 11_7
+    TransformComponent:
+      Translation: [6, 0.5078, -3.6]
+      Rotation: [0, 3.083, 0]
+      Scale: [1.016, 1.016, 1.016]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 1071751790089912628
+    TagComponent:
+      Tag: Sphere 11_8
+    TransformComponent:
+      Translation: [6, 0.4462, -1.2]
+      Rotation: [0, 268.6, 0]
+      Scale: [0.8923, 0.8923, 0.8923]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 10446921639579029973
+    TagComponent:
+      Tag: Cone 11_9
+    TransformComponent:
+      Translation: [6, 0.3831, 1.2]
+      Rotation: [0, 197.7, 0]
+      Scale: [0.7663, 0.7663, 0.7663]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 6045337955697518510
+    TagComponent:
+      Tag: Cylinder 11_10
+    TransformComponent:
+      Translation: [6, 0.4391, 3.6]
+      Rotation: [0, 201.6, 0]
+      Scale: [0.8783, 0.8783, 0.8783]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 5924594183954240869
+    TagComponent:
+      Tag: Torus 11_11
+    TransformComponent:
+      Translation: [6, 0.3269, 6]
+      Rotation: [0, 129.4, 0]
+      Scale: [1.09, 1.09, 1.09]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 17242507431608074775
+    TagComponent:
+      Tag: Capsule 11_12
+    TransformComponent:
+      Translation: [6, 0.307, 8.4]
+      Rotation: [0, 72.76, 0]
+      Scale: [0.614, 0.614, 0.614]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 10415498270244936572
+    TagComponent:
+      Tag: Cube 11_13
+    TransformComponent:
+      Translation: [6, 0.4348, 10.8]
+      Rotation: [0, 160.3, 0]
+      Scale: [0.8696, 0.8696, 0.8696]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 11749767051046601011
+    TagComponent:
+      Tag: Sphere 11_14
+    TransformComponent:
+      Translation: [6, 0.4418, 13.2]
+      Rotation: [0, 319.6, 0]
+      Scale: [0.8837, 0.8837, 0.8837]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 8746984373611931209
+    TagComponent:
+      Tag: Cone 11_15
+    TransformComponent:
+      Translation: [6, 0.3384, 15.6]
+      Rotation: [0, 227.6, 0]
+      Scale: [0.6768, 0.6768, 0.6768]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 11804921069673985082
+    TagComponent:
+      Tag: Cylinder 11_16
+    TransformComponent:
+      Translation: [6, 0.5033, 18]
+      Rotation: [0, 357.9, 0]
+      Scale: [1.007, 1.007, 1.007]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 2458353048215597037
+    TagComponent:
+      Tag: Torus 11_17
+    TransformComponent:
+      Translation: [6, 0.3206, 20.4]
+      Rotation: [0, 145.5, 0]
+      Scale: [1.069, 1.069, 1.069]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 4165282046002188249
+    TagComponent:
+      Tag: Cube 12_0
+    TransformComponent:
+      Translation: [8.4, 0.3266, -20.4]
+      Rotation: [0, 326.8, 0]
+      Scale: [0.6532, 0.6532, 0.6532]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 10844290233732907930
+    TagComponent:
+      Tag: Sphere 12_1
+    TransformComponent:
+      Translation: [8.4, 0.323, -18]
+      Rotation: [0, 275.2, 0]
+      Scale: [0.6459, 0.6459, 0.6459]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 7577933166553503240
+    TagComponent:
+      Tag: Cone 12_2
+    TransformComponent:
+      Translation: [8.4, 0.3888, -15.6]
+      Rotation: [0, 56.73, 0]
+      Scale: [0.7776, 0.7776, 0.7776]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 13491869582096638830
+    TagComponent:
+      Tag: Cylinder 12_3
+    TransformComponent:
+      Translation: [8.4, 0.3184, -13.2]
+      Rotation: [0, 228.8, 0]
+      Scale: [0.6368, 0.6368, 0.6368]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 780877687825246220
+    TagComponent:
+      Tag: Torus 12_4
+    TransformComponent:
+      Translation: [8.4, 0.3212, -10.8]
+      Rotation: [0, 123.7, 0]
+      Scale: [1.071, 1.071, 1.071]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 1334493702401672998
+    TagComponent:
+      Tag: Capsule 12_5
+    TransformComponent:
+      Translation: [8.4, 0.4137, -8.4]
+      Rotation: [0, 277.7, 0]
+      Scale: [0.8274, 0.8274, 0.8274]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 15149310015672037690
+    TagComponent:
+      Tag: Cube 12_6
+    TransformComponent:
+      Translation: [8.4, 0.3768, -6]
+      Rotation: [0, 14.72, 0]
+      Scale: [0.7537, 0.7537, 0.7537]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 16390320761290310955
+    TagComponent:
+      Tag: Sphere 12_7
+    TransformComponent:
+      Translation: [8.4, 0.3119, -3.6]
+      Rotation: [0, 46.18, 0]
+      Scale: [0.6237, 0.6237, 0.6237]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 11754265518136052603
+    TagComponent:
+      Tag: Cone 12_8
+    TransformComponent:
+      Translation: [8.4, 0.3208, -1.2]
+      Rotation: [0, 172.6, 0]
+      Scale: [0.6417, 0.6417, 0.6417]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 11192493603198949727
+    TagComponent:
+      Tag: Cylinder 12_9
+    TransformComponent:
+      Translation: [8.4, 0.3702, 1.2]
+      Rotation: [0, 48.23, 0]
+      Scale: [0.7405, 0.7405, 0.7405]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 12369167487118932245
+    TagComponent:
+      Tag: Torus 12_10
+    TransformComponent:
+      Translation: [8.4, 0.2089, 3.6]
+      Rotation: [0, 6.574, 0]
+      Scale: [0.6965, 0.6965, 0.6965]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 13161232751894037774
+    TagComponent:
+      Tag: Capsule 12_11
+    TransformComponent:
+      Translation: [8.4, 0.4456, 6]
+      Rotation: [0, 157.2, 0]
+      Scale: [0.8913, 0.8913, 0.8913]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 422142643613907921
+    TagComponent:
+      Tag: Cube 12_12
+    TransformComponent:
+      Translation: [8.4, 0.4084, 8.4]
+      Rotation: [0, 251.9, 0]
+      Scale: [0.8169, 0.8169, 0.8169]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 12860982005654131195
+    TagComponent:
+      Tag: Sphere 12_13
+    TransformComponent:
+      Translation: [8.4, 0.5247, 10.8]
+      Rotation: [0, 218.2, 0]
+      Scale: [1.049, 1.049, 1.049]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 5068186048254814390
+    TagComponent:
+      Tag: Cone 12_14
+    TransformComponent:
+      Translation: [8.4, 0.3927, 13.2]
+      Rotation: [0, 317.5, 0]
+      Scale: [0.7855, 0.7855, 0.7855]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 16707664925347068307
+    TagComponent:
+      Tag: Cylinder 12_15
+    TransformComponent:
+      Translation: [8.4, 0.3642, 15.6]
+      Rotation: [0, 359.6, 0]
+      Scale: [0.7284, 0.7284, 0.7284]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 14222473213890018797
+    TagComponent:
+      Tag: Torus 12_16
+    TransformComponent:
+      Translation: [8.4, 0.2942, 18]
+      Rotation: [0, 162.9, 0]
+      Scale: [0.9806, 0.9806, 0.9806]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 7954375965260325035
+    TagComponent:
+      Tag: Capsule 12_17
+    TransformComponent:
+      Translation: [8.4, 0.4519, 20.4]
+      Rotation: [0, 25.4, 0]
+      Scale: [0.9038, 0.9038, 0.9038]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 10762407777608215623
+    TagComponent:
+      Tag: Sphere 13_0
+    TransformComponent:
+      Translation: [10.8, 0.4652, -20.4]
+      Rotation: [0, 82.47, 0]
+      Scale: [0.9304, 0.9304, 0.9304]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 6125977221572437535
+    TagComponent:
+      Tag: Cone 13_1
+    TransformComponent:
+      Translation: [10.8, 0.5392, -18]
+      Rotation: [0, 82.28, 0]
+      Scale: [1.078, 1.078, 1.078]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 3836552254235636413
+    TagComponent:
+      Tag: Cylinder 13_2
+    TransformComponent:
+      Translation: [10.8, 0.4651, -15.6]
+      Rotation: [0, 242.5, 0]
+      Scale: [0.9302, 0.9302, 0.9302]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 582902018549945365
+    TagComponent:
+      Tag: Torus 13_3
+    TransformComponent:
+      Translation: [10.8, 0.2447, -13.2]
+      Rotation: [0, 82.59, 0]
+      Scale: [0.8157, 0.8157, 0.8157]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 1813359000953359262
+    TagComponent:
+      Tag: Capsule 13_4
+    TransformComponent:
+      Translation: [10.8, 0.5286, -10.8]
+      Rotation: [0, 324.4, 0]
+      Scale: [1.057, 1.057, 1.057]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 7874326163943839767
+    TagComponent:
+      Tag: Cube 13_5
+    TransformComponent:
+      Translation: [10.8, 0.4533, -8.4]
+      Rotation: [0, 300.9, 0]
+      Scale: [0.9066, 0.9066, 0.9066]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 13656002115207919829
+    TagComponent:
+      Tag: Sphere 13_6
+    TransformComponent:
+      Translation: [10.8, 0.4417, -6]
+      Rotation: [0, 338.9, 0]
+      Scale: [0.8834, 0.8834, 0.8834]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 16144216506423944777
+    TagComponent:
+      Tag: Cone 13_7
+    TransformComponent:
+      Translation: [10.8, 0.32, -3.6]
+      Rotation: [0, 292.5, 0]
+      Scale: [0.6401, 0.6401, 0.6401]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 15232492518126015071
+    TagComponent:
+      Tag: Cylinder 13_8
+    TransformComponent:
+      Translation: [10.8, 0.3376, -1.2]
+      Rotation: [0, 187.8, 0]
+      Scale: [0.6751, 0.6751, 0.6751]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 2487370988633815361
+    TagComponent:
+      Tag: Torus 13_9
+    TransformComponent:
+      Translation: [10.8, 0.2754, 1.2]
+      Rotation: [0, 204.4, 0]
+      Scale: [0.9181, 0.9181, 0.9181]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 14079026520366854017
+    TagComponent:
+      Tag: Capsule 13_10
+    TransformComponent:
+      Translation: [10.8, 0.4834, 3.6]
+      Rotation: [0, 71.62, 0]
+      Scale: [0.9669, 0.9669, 0.9669]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 1114167481260178253
+    TagComponent:
+      Tag: Cube 13_11
+    TransformComponent:
+      Translation: [10.8, 0.4276, 6]
+      Rotation: [0, 113.9, 0]
+      Scale: [0.8553, 0.8553, 0.8553]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 9289192180088913374
+    TagComponent:
+      Tag: Sphere 13_12
+    TransformComponent:
+      Translation: [10.8, 0.3239, 8.4]
+      Rotation: [0, 103.1, 0]
+      Scale: [0.6477, 0.6477, 0.6477]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 15006517731352334486
+    TagComponent:
+      Tag: Cone 13_13
+    TransformComponent:
+      Translation: [10.8, 0.3982, 10.8]
+      Rotation: [0, 89.18, 0]
+      Scale: [0.7965, 0.7965, 0.7965]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 4967288146765071093
+    TagComponent:
+      Tag: Cylinder 13_14
+    TransformComponent:
+      Translation: [10.8, 0.5043, 13.2]
+      Rotation: [0, 337.7, 0]
+      Scale: [1.009, 1.009, 1.009]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 327484439470109724
+    TagComponent:
+      Tag: Torus 13_15
+    TransformComponent:
+      Translation: [10.8, 0.2088, 15.6]
+      Rotation: [0, 264.7, 0]
+      Scale: [0.696, 0.696, 0.696]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 4091015557130174575
+    TagComponent:
+      Tag: Capsule 13_16
+    TransformComponent:
+      Translation: [10.8, 0.4038, 18]
+      Rotation: [0, 170.2, 0]
+      Scale: [0.8076, 0.8076, 0.8076]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 902629677192160753
+    TagComponent:
+      Tag: Cube 13_17
+    TransformComponent:
+      Translation: [10.8, 0.3045, 20.4]
+      Rotation: [0, 109.1, 0]
+      Scale: [0.609, 0.609, 0.609]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 2716814286928197047
+    TagComponent:
+      Tag: Cone 14_0
+    TransformComponent:
+      Translation: [13.2, 0.5033, -20.4]
+      Rotation: [0, 95.89, 0]
+      Scale: [1.007, 1.007, 1.007]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 2653154614908887384
+    TagComponent:
+      Tag: Cylinder 14_1
+    TransformComponent:
+      Translation: [13.2, 0.4409, -18]
+      Rotation: [0, 11.6, 0]
+      Scale: [0.8818, 0.8818, 0.8818]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 1405173488373104576
+    TagComponent:
+      Tag: Torus 14_2
+    TransformComponent:
+      Translation: [13.2, 0.2304, -15.6]
+      Rotation: [0, 114.8, 0]
+      Scale: [0.7679, 0.7679, 0.7679]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 8182131442438229312
+    TagComponent:
+      Tag: Capsule 14_3
+    TransformComponent:
+      Translation: [13.2, 0.3358, -13.2]
+      Rotation: [0, 84.23, 0]
+      Scale: [0.6716, 0.6716, 0.6716]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 2008546688520850366
+    TagComponent:
+      Tag: Cube 14_4
+    TransformComponent:
+      Translation: [13.2, 0.4038, -10.8]
+      Rotation: [0, 94.55, 0]
+      Scale: [0.8077, 0.8077, 0.8077]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 12457472841658546291
+    TagComponent:
+      Tag: Sphere 14_5
+    TransformComponent:
+      Translation: [13.2, 0.4596, -8.4]
+      Rotation: [0, 352.4, 0]
+      Scale: [0.9191, 0.9191, 0.9191]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 16189212550368742884
+    TagComponent:
+      Tag: Cone 14_6
+    TransformComponent:
+      Translation: [13.2, 0.3357, -6]
+      Rotation: [0, 195.7, 0]
+      Scale: [0.6714, 0.6714, 0.6714]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 5536854458418547352
+    TagComponent:
+      Tag: Cylinder 14_7
+    TransformComponent:
+      Translation: [13.2, 0.5269, -3.6]
+      Rotation: [0, 187.7, 0]
+      Scale: [1.054, 1.054, 1.054]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 11351117192625370760
+    TagComponent:
+      Tag: Torus 14_8
+    TransformComponent:
+      Translation: [13.2, 0.1908, -1.2]
+      Rotation: [0, 295.6, 0]
+      Scale: [0.636, 0.636, 0.636]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 2353111282592200017
+    TagComponent:
+      Tag: Capsule 14_9
+    TransformComponent:
+      Translation: [13.2, 0.5085, 1.2]
+      Rotation: [0, 268, 0]
+      Scale: [1.017, 1.017, 1.017]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 8886814799119540638
+    TagComponent:
+      Tag: Cube 14_10
+    TransformComponent:
+      Translation: [13.2, 0.3947, 3.6]
+      Rotation: [0, 145.5, 0]
+      Scale: [0.7895, 0.7895, 0.7895]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 10409347532914396669
+    TagComponent:
+      Tag: Sphere 14_11
+    TransformComponent:
+      Translation: [13.2, 0.525, 6]
+      Rotation: [0, 286.7, 0]
+      Scale: [1.05, 1.05, 1.05]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 6413609383412239224
+    TagComponent:
+      Tag: Cone 14_12
+    TransformComponent:
+      Translation: [13.2, 0.4501, 8.4]
+      Rotation: [0, 345.2, 0]
+      Scale: [0.9002, 0.9002, 0.9002]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 17034997958527349985
+    TagComponent:
+      Tag: Cylinder 14_13
+    TransformComponent:
+      Translation: [13.2, 0.4078, 10.8]
+      Rotation: [0, 107.3, 0]
+      Scale: [0.8156, 0.8156, 0.8156]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 8710614950912065951
+    TagComponent:
+      Tag: Torus 14_14
+    TransformComponent:
+      Translation: [13.2, 0.3234, 13.2]
+      Rotation: [0, 179.1, 0]
+      Scale: [1.078, 1.078, 1.078]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 3166989782274536279
+    TagComponent:
+      Tag: Capsule 14_15
+    TransformComponent:
+      Translation: [13.2, 0.3235, 15.6]
+      Rotation: [0, 86.15, 0]
+      Scale: [0.6469, 0.6469, 0.6469]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 12960334745444227947
+    TagComponent:
+      Tag: Cube 14_16
+    TransformComponent:
+      Translation: [13.2, 0.3359, 18]
+      Rotation: [0, 111, 0]
+      Scale: [0.6718, 0.6718, 0.6718]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 11046538995051394900
+    TagComponent:
+      Tag: Sphere 14_17
+    TransformComponent:
+      Translation: [13.2, 0.4777, 20.4]
+      Rotation: [0, 83.26, 0]
+      Scale: [0.9554, 0.9554, 0.9554]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 1969675115447034424
+    TagComponent:
+      Tag: Cylinder 15_0
+    TransformComponent:
+      Translation: [15.6, 0.4124, -20.4]
+      Rotation: [0, 327.5, 0]
+      Scale: [0.8247, 0.8247, 0.8247]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 13463616945686904202
+    TagComponent:
+      Tag: Torus 15_1
+    TransformComponent:
+      Translation: [15.6, 0.2687, -18]
+      Rotation: [0, 248.1, 0]
+      Scale: [0.8958, 0.8958, 0.8958]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 14988403888441983798
+    TagComponent:
+      Tag: Capsule 15_2
+    TransformComponent:
+      Translation: [15.6, 0.3587, -15.6]
+      Rotation: [0, 173.4, 0]
+      Scale: [0.7174, 0.7174, 0.7174]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 3469171543371786195
+    TagComponent:
+      Tag: Cube 15_3
+    TransformComponent:
+      Translation: [15.6, 0.5114, -13.2]
+      Rotation: [0, 300.5, 0]
+      Scale: [1.023, 1.023, 1.023]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 17397315990855999525
+    TagComponent:
+      Tag: Sphere 15_4
+    TransformComponent:
+      Translation: [15.6, 0.4794, -10.8]
+      Rotation: [0, 13.63, 0]
+      Scale: [0.9588, 0.9588, 0.9588]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 17455130855402918884
+    TagComponent:
+      Tag: Cone 15_5
+    TransformComponent:
+      Translation: [15.6, 0.4417, -8.4]
+      Rotation: [0, 325.6, 0]
+      Scale: [0.8834, 0.8834, 0.8834]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 7302737699231298576
+    TagComponent:
+      Tag: Cylinder 15_6
+    TransformComponent:
+      Translation: [15.6, 0.4854, -6]
+      Rotation: [0, 269.1, 0]
+      Scale: [0.9709, 0.9709, 0.9709]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 4852468481525992012
+    TagComponent:
+      Tag: Torus 15_7
+    TransformComponent:
+      Translation: [15.6, 0.2025, -3.6]
+      Rotation: [0, 98.25, 0]
+      Scale: [0.6751, 0.6751, 0.6751]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 17259960985087685673
+    TagComponent:
+      Tag: Capsule 15_8
+    TransformComponent:
+      Translation: [15.6, 0.3696, -1.2]
+      Rotation: [0, 65.78, 0]
+      Scale: [0.7392, 0.7392, 0.7392]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 1401583397884213766
+    TagComponent:
+      Tag: Cube 15_9
+    TransformComponent:
+      Translation: [15.6, 0.4577, 1.2]
+      Rotation: [0, 96.41, 0]
+      Scale: [0.9154, 0.9154, 0.9154]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 6492281274164725865
+    TagComponent:
+      Tag: Sphere 15_10
+    TransformComponent:
+      Translation: [15.6, 0.3251, 3.6]
+      Rotation: [0, 117, 0]
+      Scale: [0.6502, 0.6502, 0.6502]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 14057668649350101192
+    TagComponent:
+      Tag: Cone 15_11
+    TransformComponent:
+      Translation: [15.6, 0.5466, 6]
+      Rotation: [0, 194.1, 0]
+      Scale: [1.093, 1.093, 1.093]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 13588345005674403598
+    TagComponent:
+      Tag: Cylinder 15_12
+    TransformComponent:
+      Translation: [15.6, 0.4268, 8.4]
+      Rotation: [0, 14.72, 0]
+      Scale: [0.8536, 0.8536, 0.8536]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 3816374485502562167
+    TagComponent:
+      Tag: Torus 15_13
+    TransformComponent:
+      Translation: [15.6, 0.2376, 10.8]
+      Rotation: [0, 215.2, 0]
+      Scale: [0.7921, 0.7921, 0.7921]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 8543456242816621903
+    TagComponent:
+      Tag: Capsule 15_14
+    TransformComponent:
+      Translation: [15.6, 0.521, 13.2]
+      Rotation: [0, 244, 0]
+      Scale: [1.042, 1.042, 1.042]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 16309279688601644163
+    TagComponent:
+      Tag: Cube 15_15
+    TransformComponent:
+      Translation: [15.6, 0.369, 15.6]
+      Rotation: [0, 302.8, 0]
+      Scale: [0.7379, 0.7379, 0.7379]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 18169976395510064476
+    TagComponent:
+      Tag: Sphere 15_16
+    TransformComponent:
+      Translation: [15.6, 0.4091, 18]
+      Rotation: [0, 215.8, 0]
+      Scale: [0.8181, 0.8181, 0.8181]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 10623115583415699703
+    TagComponent:
+      Tag: Cone 15_17
+    TransformComponent:
+      Translation: [15.6, 0.4502, 20.4]
+      Rotation: [0, 294, 0]
+      Scale: [0.9004, 0.9004, 0.9004]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 3823149076291285262
+    TagComponent:
+      Tag: Torus 16_0
+    TransformComponent:
+      Translation: [18, 0.3149, -20.4]
+      Rotation: [0, 14.43, 0]
+      Scale: [1.05, 1.05, 1.05]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 6462288826215161617
+    TagComponent:
+      Tag: Capsule 16_1
+    TransformComponent:
+      Translation: [18, 0.542, -18]
+      Rotation: [0, 200.8, 0]
+      Scale: [1.084, 1.084, 1.084]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 12988822230131932235
+    TagComponent:
+      Tag: Cube 16_2
+    TransformComponent:
+      Translation: [18, 0.422, -15.6]
+      Rotation: [0, 324.2, 0]
+      Scale: [0.8441, 0.8441, 0.8441]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 11058027342860265932
+    TagComponent:
+      Tag: Sphere 16_3
+    TransformComponent:
+      Translation: [18, 0.4067, -13.2]
+      Rotation: [0, 347.9, 0]
+      Scale: [0.8134, 0.8134, 0.8134]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 827749693772580782
+    TagComponent:
+      Tag: Cone 16_4
+    TransformComponent:
+      Translation: [18, 0.3324, -10.8]
+      Rotation: [0, 140.1, 0]
+      Scale: [0.6648, 0.6648, 0.6648]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 3198635871108515513
+    TagComponent:
+      Tag: Cylinder 16_5
+    TransformComponent:
+      Translation: [18, 0.4116, -8.4]
+      Rotation: [0, 349.3, 0]
+      Scale: [0.8232, 0.8232, 0.8232]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 1793723950283798514
+    TagComponent:
+      Tag: Torus 16_6
+    TransformComponent:
+      Translation: [18, 0.2495, -6]
+      Rotation: [0, 151.5, 0]
+      Scale: [0.8317, 0.8317, 0.8317]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 9510177772666839620
+    TagComponent:
+      Tag: Capsule 16_7
+    TransformComponent:
+      Translation: [18, 0.4459, -3.6]
+      Rotation: [0, 349.7, 0]
+      Scale: [0.8918, 0.8918, 0.8918]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 8475020649308997981
+    TagComponent:
+      Tag: Cube 16_8
+    TransformComponent:
+      Translation: [18, 0.4145, -1.2]
+      Rotation: [0, 173.5, 0]
+      Scale: [0.829, 0.829, 0.829]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 9547284567940079912
+    TagComponent:
+      Tag: Sphere 16_9
+    TransformComponent:
+      Translation: [18, 0.4294, 1.2]
+      Rotation: [0, 209.7, 0]
+      Scale: [0.8588, 0.8588, 0.8588]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 14131570752557217362
+    TagComponent:
+      Tag: Cone 16_10
+    TransformComponent:
+      Translation: [18, 0.3291, 3.6]
+      Rotation: [0, 37.12, 0]
+      Scale: [0.6582, 0.6582, 0.6582]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 3361380887354699226
+    TagComponent:
+      Tag: Cylinder 16_11
+    TransformComponent:
+      Translation: [18, 0.3919, 6]
+      Rotation: [0, 6.691, 0]
+      Scale: [0.7838, 0.7838, 0.7838]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 15848963608062151331
+    TagComponent:
+      Tag: Torus 16_12
+    TransformComponent:
+      Translation: [18, 0.258, 8.4]
+      Rotation: [0, 243.7, 0]
+      Scale: [0.8598, 0.8598, 0.8598]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 8166012781164100084
+    TagComponent:
+      Tag: Capsule 16_13
+    TransformComponent:
+      Translation: [18, 0.323, 10.8]
+      Rotation: [0, 216.2, 0]
+      Scale: [0.646, 0.646, 0.646]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 8031224253653590070
+    TagComponent:
+      Tag: Cube 16_14
+    TransformComponent:
+      Translation: [18, 0.5392, 13.2]
+      Rotation: [0, 289.8, 0]
+      Scale: [1.078, 1.078, 1.078]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 10872286342929412916
+    TagComponent:
+      Tag: Sphere 16_15
+    TransformComponent:
+      Translation: [18, 0.3048, 15.6]
+      Rotation: [0, 119.3, 0]
+      Scale: [0.6095, 0.6095, 0.6095]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 5386830160404583982
+    TagComponent:
+      Tag: Cone 16_16
+    TransformComponent:
+      Translation: [18, 0.5487, 18]
+      Rotation: [0, 220.9, 0]
+      Scale: [1.097, 1.097, 1.097]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 11575055712130241425
+    TagComponent:
+      Tag: Cylinder 16_17
+    TransformComponent:
+      Translation: [18, 0.4062, 20.4]
+      Rotation: [0, 292.5, 0]
+      Scale: [0.8125, 0.8125, 0.8125]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 17303496794828116316
+    TagComponent:
+      Tag: Capsule 17_0
+    TransformComponent:
+      Translation: [20.4, 0.3018, -20.4]
+      Rotation: [0, 16.87, 0]
+      Scale: [0.6036, 0.6036, 0.6036]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 2273984306878443520
+    TagComponent:
+      Tag: Cube 17_1
+    TransformComponent:
+      Translation: [20.4, 0.3702, -18]
+      Rotation: [0, 350.2, 0]
+      Scale: [0.7405, 0.7405, 0.7405]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 10901040668529671105
+    TagComponent:
+      Tag: Sphere 17_2
+    TransformComponent:
+      Translation: [20.4, 0.462, -15.6]
+      Rotation: [0, 280.6, 0]
+      Scale: [0.924, 0.924, 0.924]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 16793115815079516260
+    TagComponent:
+      Tag: Cone 17_3
+    TransformComponent:
+      Translation: [20.4, 0.4273, -13.2]
+      Rotation: [0, 205.4, 0]
+      Scale: [0.8547, 0.8547, 0.8547]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 14625579168291150881
+    TagComponent:
+      Tag: Cylinder 17_4
+    TransformComponent:
+      Translation: [20.4, 0.3556, -10.8]
+      Rotation: [0, 51.82, 0]
+      Scale: [0.7112, 0.7112, 0.7112]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 16280032431653189156
+    TagComponent:
+      Tag: Torus 17_5
+    TransformComponent:
+      Translation: [20.4, 0.2027, -8.4]
+      Rotation: [0, 73.07, 0]
+      Scale: [0.6755, 0.6755, 0.6755]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 13697894939034528389
+    TagComponent:
+      Tag: Capsule 17_6
+    TransformComponent:
+      Translation: [20.4, 0.4865, -6]
+      Rotation: [0, 203, 0]
+      Scale: [0.973, 0.973, 0.973]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 12739321247190056468
+    TagComponent:
+      Tag: Cube 17_7
+    TransformComponent:
+      Translation: [20.4, 0.4091, -3.6]
+      Rotation: [0, 164.9, 0]
+      Scale: [0.8182, 0.8182, 0.8182]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 6272454241625530156
+    TagComponent:
+      Tag: Sphere 17_8
+    TransformComponent:
+      Translation: [20.4, 0.5449, -1.2]
+      Rotation: [0, 176.2, 0]
+      Scale: [1.09, 1.09, 1.09]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 17110760189786198443
+    TagComponent:
+      Tag: Cone 17_9
+    TransformComponent:
+      Translation: [20.4, 0.3399, 1.2]
+      Rotation: [0, 21.08, 0]
+      Scale: [0.6798, 0.6798, 0.6798]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 18078294756061896345
+    TagComponent:
+      Tag: Cylinder 17_10
+    TransformComponent:
+      Translation: [20.4, 0.514, 3.6]
+      Rotation: [0, 352.5, 0]
+      Scale: [1.028, 1.028, 1.028]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 13895943184435437366
+    TagComponent:
+      Tag: Torus 17_11
+    TransformComponent:
+      Translation: [20.4, 0.2657, 6]
+      Rotation: [0, 116.4, 0]
+      Scale: [0.8858, 0.8858, 0.8858]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 18289604260267577381
+    TagComponent:
+      Tag: Capsule 17_12
+    TransformComponent:
+      Translation: [20.4, 0.3029, 8.4]
+      Rotation: [0, 355.1, 0]
+      Scale: [0.6057, 0.6057, 0.6057]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 12362874945860571527
+    TagComponent:
+      Tag: Cube 17_13
+    TransformComponent:
+      Translation: [20.4, 0.4611, 10.8]
+      Rotation: [0, 284.2, 0]
+      Scale: [0.9221, 0.9221, 0.9221]
+    MeshComponent:
+      AssetHandle: 12564026686276911499
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 1830411329635889374
+    TagComponent:
+      Tag: Sphere 17_14
+    TransformComponent:
+      Translation: [20.4, 0.4361, 13.2]
+      Rotation: [0, 327.4, 0]
+      Scale: [0.8721, 0.8721, 0.8721]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 4854278588803735927
+    TagComponent:
+      Tag: Cone 17_15
+    TransformComponent:
+      Translation: [20.4, 0.3697, 15.6]
+      Rotation: [0, 216.8, 0]
+      Scale: [0.7394, 0.7394, 0.7394]
+    MeshComponent:
+      AssetHandle: 1720459075752301013
+      MaterialTable:
+        0: 12993531669711063834
+  - Entity: 1119915649582320841
+    TagComponent:
+      Tag: Cylinder 17_16
+    TransformComponent:
+      Translation: [20.4, 0.3724, 18]
+      Rotation: [0, 309.9, 0]
+      Scale: [0.7448, 0.7448, 0.7448]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 1637538572693653158
+    TagComponent:
+      Tag: Torus 17_17
+    TransformComponent:
+      Translation: [20.4, 0.3217, 20.4]
+      Rotation: [0, 325.8, 0]
+      Scale: [1.072, 1.072, 1.072]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 2436282198861488718
+    TagComponent:
+      Tag: Stack0_0
+    TransformComponent:
+      Translation: [10.13, 0.5, -15.12]
+      Rotation: [0, 316.1, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 14656110815536101700
+    TagComponent:
+      Tag: Stack0_1
+    TransformComponent:
+      Translation: [10.13, 1.55, -15.12]
+      Rotation: [0, 231.3, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 18343010497340801114
+    TagComponent:
+      Tag: Stack0_2
+    TransformComponent:
+      Translation: [10.13, 2.6, -15.12]
+      Rotation: [0, 301.5, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 17980284680602895217
+    TagComponent:
+      Tag: Stack0_3
+    TransformComponent:
+      Translation: [10.13, 3.65, -15.12]
+      Rotation: [0, 205.5, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 4976879769303527530
+    TagComponent:
+      Tag: Stack1_0
+    TransformComponent:
+      Translation: [7.276, 0.5, -8.867]
+      Rotation: [0, 8.462, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 17892780289846088582
+    TagComponent:
+      Tag: Stack1_1
+    TransformComponent:
+      Translation: [7.276, 1.55, -8.867]
+      Rotation: [0, 314.3, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 16059898888331562502
+    TagComponent:
+      Tag: Stack1_2
+    TransformComponent:
+      Translation: [7.276, 2.6, -8.867]
+      Rotation: [0, 243, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 16325829578568073086
+    TagComponent:
+      Tag: Stack1_3
+    TransformComponent:
+      Translation: [7.276, 3.65, -8.867]
+      Rotation: [0, 31.13, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 12196099351729432919
+    TagComponent:
+      Tag: Stack2_0
+    TransformComponent:
+      Translation: [13.81, 0.5, 3.427]
+      Rotation: [0, 235.3, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 13813212472993288060
+    TagComponent:
+      Tag: Stack2_1
+    TransformComponent:
+      Translation: [13.81, 1.55, 3.427]
+      Rotation: [0, 19.82, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 15544579360021593565
+    TagComponent:
+      Tag: Stack2_2
+    TransformComponent:
+      Translation: [13.81, 2.6, 3.427]
+      Rotation: [0, 235.5, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 16503337574015604964
+    TagComponent:
+      Tag: Stack2_3
+    TransformComponent:
+      Translation: [13.81, 3.65, 3.427]
+      Rotation: [0, 98.67, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 15920720471492719368
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 16853810520147781061
+    TagComponent:
+      Tag: Stack3_0
+    TransformComponent:
+      Translation: [0.05414, 0.5, -16.48]
+      Rotation: [0, 220.4, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 4200309301482500079
+    TagComponent:
+      Tag: Stack3_1
+    TransformComponent:
+      Translation: [0.05414, 1.55, -16.48]
+      Rotation: [0, 36.75, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 14247841347131106388
+  - Entity: 301706678748101816
+    TagComponent:
+      Tag: Stack3_2
+    TransformComponent:
+      Translation: [0.05414, 2.6, -16.48]
+      Rotation: [0, 186.5, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 7118303737358808468
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 1835262958462981575
+    TagComponent:
+      Tag: Stack4_0
+    TransformComponent:
+      Translation: [-7.855, 0.5, -9.152]
+      Rotation: [0, 358, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 9660177350853496217
+    TagComponent:
+      Tag: Stack4_1
+    TransformComponent:
+      Translation: [-7.855, 1.55, -9.152]
+      Rotation: [0, 30.08, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 1744771994756237661
+    TagComponent:
+      Tag: Stack4_2
+    TransformComponent:
+      Translation: [-7.855, 2.6, -9.152]
+      Rotation: [0, 308.5, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 13320110743362929840
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 14199315575432658885
+    TagComponent:
+      Tag: Stack5_0
+    TransformComponent:
+      Translation: [17.36, 0.5, -15.94]
+      Rotation: [0, 177.5, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 10016311578918116111
+  - Entity: 953338570738235164
+    TagComponent:
+      Tag: Stack5_1
+    TransformComponent:
+      Translation: [17.36, 1.55, -15.94]
+      Rotation: [0, 165.2, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 3441989012872340998
+  - Entity: 1960269651336177393
+    TagComponent:
+      Tag: Stack5_2
+    TransformComponent:
+      Translation: [17.36, 2.6, -15.94]
+      Rotation: [0, 90.49, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 15046323249873381628
+    TagComponent:
+      Tag: Stack5_3
+    TransformComponent:
+      Translation: [17.36, 3.65, -15.94]
+      Rotation: [0, 312.3, 0]
+      Scale: [1, 1, 1]
+    MeshComponent:
+      AssetHandle: 8757625777158712952
+      MaterialTable:
+        0: 8124064055642612827
+  - Entity: 9039343977810311875
+    TagComponent:
+      Tag: Key Light
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [135, -35, 0]
+      Scale: [1, 1, 1]
+    DirectionalLightComponent:
+      Radiance: [1.0, 0.95, 0.85]
+      Intensity: 3.2
+  - Entity: 2620339272094343454
+    TagComponent:
+      Tag: Fill Light
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [135, 140, 0]
+      Scale: [1, 1, 1]
+    DirectionalLightComponent:
+      Radiance: [0.6, 0.7, 1.0]
+      Intensity: 0.8
+  - Entity: 14894183639287358167
+    TagComponent:
+      Tag: Rim Light
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [135, 60, 40]
+      Scale: [1, 1, 1]
+    DirectionalLightComponent:
+      Radiance: [1.0, 0.6, 0.4]
+      Intensity: 1.2
+  - Entity: 7462886399134321450
+    TagComponent:
+      Tag: Sky Light
+    TransformComponent:
+      Translation: [0, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    SkyLightComponent:
+      AssetHandle: 5757263951125114725
+      Intensity: 1.0
+      SampleLOD: 1
