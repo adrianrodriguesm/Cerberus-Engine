@@ -1,18 +1,20 @@
 #pragma once
 
-#include "Renderer/SceneRenderer/SceneRenderer.h"
+#include "Renderer/Descriptor/BindGroup.h"
 #include "Renderer/RHI/Framebuffer.h"
 #include "Renderer/RHI/Pipeline/Pipeline.h"
-#include "Renderer/Scene/RenderScene.h"
-#include "Renderer/Descriptor/BindGroup.h"
 #include "Renderer/RHI/Buffers/StorageBufferSet.h"
 #include "Renderer/RHI/Buffers/UniformBufferSet.h"
+#include "Renderer/Scene/RenderScene.h"
+#include "Renderer/SceneRenderer/SceneRenderer.h"
+#include "Renderer/SceneRenderer/Forward/Passes/ForwardPass.h"
+#include "Renderer/SceneRenderer/Forward/Passes/SkyPass.h"
 
 namespace cerberus
 {
-	// Modern raster reference renderer. It intentionally starts as one forward
-	// pass so GraphicsCommandList and RenderScene can be validated before the
-	// work is split into reusable passes and, later, scheduled by RenderGraph.
+	// Modern raster reference renderer. The SceneRenderer owns frame/rendering-scope
+	// state while logical passes only record their specific draw work. RenderGraph
+	// can take over pass scheduling and rendering-scope management later.
 	class ForwardSceneRenderer final : public SceneRenderer
 	{
 	public:
@@ -76,15 +78,14 @@ namespace cerberus
 		SceneRendererCamera m_SceneRendererCamera{};
 		Scope<RenderScene> m_RenderScene;
 
-		Handle<RenderPass> m_RenderPass;
-		Handle<Framebuffer> m_Framebuffer;
-		Handle<GraphicsPipeline> m_SkyPipeline;
-		Handle<GraphicsPipeline> m_GeometryPipeline;
+		Handle<RenderPass> m_ForwardRenderPass;
+		Handle<Framebuffer> m_ForwardFramebuffer;
+
+		SkyPassResources m_SkyPassResources;
+		ForwardPassResources m_ForwardPassResources;
 
 		Handle<BindGroupLayout> m_SkyBindGroupLayout;
-		Handle<BindGroup> m_SkyBindGroup;
 		Handle<BindGroupLayout> m_GeometryBindGroupLayout;
-		Handle<BindGroup> m_GeometryBindGroup;
 
 		Ref<UniformBufferSet> m_CameraBufferSet;
 		Ref<UniformBufferSet> m_LightingBufferSet;

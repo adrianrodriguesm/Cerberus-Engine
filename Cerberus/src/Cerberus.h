@@ -28,8 +28,8 @@
 //// Renderer
 /////////////////////////////////////////////
 #include "Renderer/Core/Renderer.h"
-#include "Renderer/SceneRenderer/ForwardSceneRenderer.h"
-#include "Renderer/SceneRenderer/PathTracerSceneRenderer.h"
+#include "Renderer/SceneRenderer/Forward/ForwardSceneRenderer.h"
+#include "Renderer/SceneRenderer/PathTracer/PathTracerSceneRenderer.h"
 #include "Renderer/SceneRenderer/SceneRendererType.h"
 /////////////////////////////////////////////
 //// Scene

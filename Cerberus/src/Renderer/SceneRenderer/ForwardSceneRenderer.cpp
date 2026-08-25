@@ -120,11 +120,11 @@ namespace cerberus
 			{ "Forward Color", ImageFormat::RGBA16F, LOAD_OP::CLEAR, STORE_OP::STORE, BlendMode::OneZero, false, true },
 			{ "Forward Depth", ImageFormat::DEPTH32F, LOAD_OP::CLEAR, STORE_OP::STORE, BlendMode::None, false, true }
 		};
-		m_RenderPass = ResourceManager::CreateRenderPass(renderPassSpecification);
+		m_ForwardRenderPass = ResourceManager::CreateRenderPass(renderPassSpecification);
 
 		FramebufferSpecification framebufferSpecification;
 		framebufferSpecification.DebugName = "Forward";
-		framebufferSpecification.RenderPass = m_RenderPass;
+		framebufferSpecification.RenderPass = m_ForwardRenderPass;
 		framebufferSpecification.Width = m_ViewportResolution.x;
 		framebufferSpecification.Height = m_ViewportResolution.y;
 		framebufferSpecification.IsResizable = true;
@@ -146,21 +146,21 @@ namespace cerberus
 		depthTarget.Resizable = true;
 		depthTarget.ShaderResource = false;
 		framebufferSpecification.RenderTargetsInfo = { colorTarget, depthTarget };
-		m_Framebuffer = ResourceManager::CreateFramebuffer(framebufferSpecification);
+		m_ForwardFramebuffer = ResourceManager::CreateFramebuffer(framebufferSpecification);
 
 		PipelineSpecification skyPipelineSpecification;
 		skyPipelineSpecification.DebugName = "Forward Sky";
 		skyPipelineSpecification.Shader = shaderLibrary.Get("ForwardSky");
-		skyPipelineSpecification.RenderPass = m_RenderPass;
+		skyPipelineSpecification.RenderPass = m_ForwardRenderPass;
 		skyPipelineSpecification.CullMode = CullMode::None;
 		skyPipelineSpecification.DepthTest = false;
 		skyPipelineSpecification.DepthWrite = false;
-		m_SkyPipeline = ResourceManager::CreateGraphicsPipeline(skyPipelineSpecification);
+		m_SkyPassResources.Pipeline = ResourceManager::CreateGraphicsPipeline(skyPipelineSpecification);
 
 		PipelineSpecification geometryPipelineSpecification;
 		geometryPipelineSpecification.DebugName = "Forward Geometry";
 		geometryPipelineSpecification.Shader = shaderLibrary.Get("ForwardPBR");
-		geometryPipelineSpecification.RenderPass = m_RenderPass;
+		geometryPipelineSpecification.RenderPass = m_ForwardRenderPass;
 		geometryPipelineSpecification.CullMode = CullMode::Back;
 		geometryPipelineSpecification.DepthOperator = DepthCompareOperator::LessOrEqual;
 		geometryPipelineSpecification.DepthTest = true;
@@ -172,7 +172,7 @@ namespace cerberus
 			{ ShaderDataType::Float3, "a_Binormal" },
 			{ ShaderDataType::Float2, "a_TexCoord" }
 		};
-		m_GeometryPipeline = ResourceManager::CreateGraphicsPipeline(geometryPipelineSpecification);
+		m_ForwardPassResources.Pipeline = ResourceManager::CreateGraphicsPipeline(geometryPipelineSpecification);
 
 		UniformBufferSetSpecification cameraBufferSpecification;
 		cameraBufferSpecification.Frames = ResourceManager::GetFramesInFlight();
@@ -207,7 +207,7 @@ namespace cerberus
 			ImageBinding("EnvironmentRadiance", ForwardRadianceBinding, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
 		};
 		m_SkyBindGroupLayout = ResourceManager::CreateBindGroupLayout(skyLayout);
-		m_SkyBindGroup = ResourceManager::CreateBindGroup({ m_SkyBindGroupLayout, DescriptorAllocationLifetime::Persistent });
+		m_SkyPassResources.BindGroup = ResourceManager::CreateBindGroup({ m_SkyBindGroupLayout, DescriptorAllocationLifetime::Persistent });
 
 		BindGroupLayout::BindGroupLayoutInfo geometryLayout;
 		geometryLayout.Set = 0;
@@ -224,10 +224,10 @@ namespace cerberus
 			ImageBinding("EnvironmentIrradiance", ForwardIrradianceBinding, 1, VK_SHADER_STAGE_FRAGMENT_BIT)
 		};
 		m_GeometryBindGroupLayout = ResourceManager::CreateBindGroupLayout(geometryLayout);
-		m_GeometryBindGroup = ResourceManager::CreateBindGroup({ m_GeometryBindGroupLayout, DescriptorAllocationLifetime::Persistent });
+		m_ForwardPassResources.BindGroup = ResourceManager::CreateBindGroup({ m_GeometryBindGroupLayout, DescriptorAllocationLifetime::Persistent });
 
-		BindGroup* skyBindGroup = ResourceManager::GetBindGroup(m_SkyBindGroup);
-		BindGroup* geometryBindGroup = ResourceManager::GetBindGroup(m_GeometryBindGroup);
+		BindGroup* skyBindGroup = ResourceManager::GetBindGroup(m_SkyPassResources.BindGroup);
+		BindGroup* geometryBindGroup = ResourceManager::GetBindGroup(m_ForwardPassResources.BindGroup);
 		CORE_ASSERT(skyBindGroup && geometryBindGroup, "Failed to create Forward bind groups");
 		skyBindGroup->SetUniformBuffer(m_CameraBufferSet, ForwardCameraBinding);
 		skyBindGroup->SetUniformBuffer(m_LightingBufferSet, ForwardLightingBinding);
@@ -241,36 +241,36 @@ namespace cerberus
 
 	void ForwardSceneRenderer::DestroyRasterResources()
 	{
-		if (m_GeometryBindGroup.IsValid())
-			ResourceManager::DestroyBindGroup(m_GeometryBindGroup);
-		if (m_SkyBindGroup.IsValid())
-			ResourceManager::DestroyBindGroup(m_SkyBindGroup);
+		if (m_ForwardPassResources.BindGroup.IsValid())
+			ResourceManager::DestroyBindGroup(m_ForwardPassResources.BindGroup);
+		if (m_SkyPassResources.BindGroup.IsValid())
+			ResourceManager::DestroyBindGroup(m_SkyPassResources.BindGroup);
 		if (m_GeometryBindGroupLayout.IsValid())
 			ResourceManager::DestroyBindGroupLayout(m_GeometryBindGroupLayout);
 		if (m_SkyBindGroupLayout.IsValid())
 			ResourceManager::DestroyBindGroupLayout(m_SkyBindGroupLayout);
 
-		if (m_GeometryPipeline.IsValid())
-			ResourceManager::DestroyGraphicsPipeline(m_GeometryPipeline);
-		if (m_SkyPipeline.IsValid())
-			ResourceManager::DestroyGraphicsPipeline(m_SkyPipeline);
-		if (m_Framebuffer.IsValid())
-			ResourceManager::DestroyFramebuffer(m_Framebuffer);
-		if (m_RenderPass.IsValid())
-			ResourceManager::DestroyRenderPass(m_RenderPass);
+		if (m_ForwardPassResources.Pipeline.IsValid())
+			ResourceManager::DestroyGraphicsPipeline(m_ForwardPassResources.Pipeline);
+		if (m_SkyPassResources.Pipeline.IsValid())
+			ResourceManager::DestroyGraphicsPipeline(m_SkyPassResources.Pipeline);
+		if (m_ForwardFramebuffer.IsValid())
+			ResourceManager::DestroyFramebuffer(m_ForwardFramebuffer);
+		if (m_ForwardRenderPass.IsValid())
+			ResourceManager::DestroyRenderPass(m_ForwardRenderPass);
 
 		m_CameraBufferSet.reset();
 		m_LightingBufferSet.reset();
 		m_MaterialBufferSet.reset();
 
-		m_GeometryBindGroup = {};
-		m_SkyBindGroup = {};
+		m_ForwardPassResources.BindGroup = {};
+		m_SkyPassResources.BindGroup = {};
 		m_GeometryBindGroupLayout = {};
 		m_SkyBindGroupLayout = {};
-		m_GeometryPipeline = {};
-		m_SkyPipeline = {};
-		m_Framebuffer = {};
-		m_RenderPass = {};
+		m_ForwardPassResources.Pipeline = {};
+		m_SkyPassResources.Pipeline = {};
+		m_ForwardFramebuffer = {};
+		m_ForwardRenderPass = {};
 
 		auto& shaderLibrary = RendererResources::GetShaderLibrary();
 		shaderLibrary.Unload("ForwardPBR");
@@ -283,7 +283,7 @@ namespace cerberus
 			return;
 
 		m_ViewportResolution = { width, height };
-		Framebuffer* framebuffer = ResourceManager::GetFramebuffer(m_Framebuffer);
+		Framebuffer* framebuffer = ResourceManager::GetFramebuffer(m_ForwardFramebuffer);
 		CORE_ASSERT(framebuffer, "Forward framebuffer is invalid");
 		framebuffer->Resize(width, height);
 	}
@@ -404,7 +404,7 @@ namespace cerberus
 		}
 
 		Texture2D* fallbackTexture = ResourceManager::GetTexture2D(RendererResources::GetWhiteTexture());
-		BindGroup* geometryBindGroup = ResourceManager::GetBindGroup(m_GeometryBindGroup);
+		BindGroup* geometryBindGroup = ResourceManager::GetBindGroup(m_ForwardPassResources.BindGroup);
 		CORE_ASSERT(fallbackTexture && geometryBindGroup, "Invalid Forward material fallback resources");
 		geometryBindGroup->SetImageViewArray(
 			imageViews,
@@ -424,8 +424,8 @@ namespace cerberus
 
 		TextureCube* radiance = ResourceManager::GetTextureCube(radianceHandle);
 		TextureCube* irradiance = ResourceManager::GetTextureCube(irradianceHandle);
-		BindGroup* skyBindGroup = ResourceManager::GetBindGroup(m_SkyBindGroup);
-		BindGroup* geometryBindGroup = ResourceManager::GetBindGroup(m_GeometryBindGroup);
+		BindGroup* skyBindGroup = ResourceManager::GetBindGroup(m_SkyPassResources.BindGroup);
+		BindGroup* geometryBindGroup = ResourceManager::GetBindGroup(m_ForwardPassResources.BindGroup);
 		CORE_ASSERT(radiance && irradiance && skyBindGroup && geometryBindGroup,
 			"Invalid Forward environment resources");
 
@@ -444,8 +444,8 @@ namespace cerberus
 		UpdateEnvironmentBindings();
 
 		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
-		BindGroup* skyBindGroup = ResourceManager::GetBindGroup(m_SkyBindGroup);
-		BindGroup* geometryBindGroup = ResourceManager::GetBindGroup(m_GeometryBindGroup);
+		BindGroup* skyBindGroup = ResourceManager::GetBindGroup(m_SkyPassResources.BindGroup);
+		BindGroup* geometryBindGroup = ResourceManager::GetBindGroup(m_ForwardPassResources.BindGroup);
 		CORE_ASSERT(skyBindGroup && geometryBindGroup, "Invalid Forward bind groups");
 		skyBindGroup->Update(frameIndex);
 		geometryBindGroup->Update(frameIndex);
@@ -457,17 +457,22 @@ namespace cerberus
 		GraphicsCommandList graphics(
 			commandBuffer->GetRecordingView(frameIndex),
 			&Renderer::GetFrameStatistics());
-		graphics.BeginRendering(m_RenderPass, m_Framebuffer);
-		graphics.DrawFullscreen(m_SkyPipeline, m_SkyBindGroup);
+		graphics.BeginRendering(m_ForwardRenderPass, m_ForwardFramebuffer);
 
-		DrawArea geometryDrawArea;
-		geometryDrawArea.GraphicsPipeline = m_GeometryPipeline;
-		geometryDrawArea.Framebuffer = m_Framebuffer;
-		geometryDrawArea.BindGroup0 = m_GeometryBindGroup;
-		graphics.RenderMeshInstances(
-			geometryDrawArea,
-			m_RenderScene->GetRasterMeshInstances(),
-			m_RenderScene->GetMaterialProxies());
+		RenderSkyPass(
+			graphics,
+			m_SkyPassResources);
+
+		const ForwardPassParameters forwardPassParameters
+		{
+			.MeshInstances = m_RenderScene->GetRasterMeshInstances(),
+			.MaterialProxies = m_RenderScene->GetMaterialProxies()
+		};
+		RenderForwardPass(
+			graphics,
+			m_ForwardPassResources,
+			forwardPassParameters);
+
 		graphics.EndRendering();
 
 		commandBuffer->EndRenderThread();
@@ -498,7 +503,7 @@ namespace cerberus
 
 	Handle<ImageView> ForwardSceneRenderer::GetFinalPassImage() const
 	{
-		Framebuffer* framebuffer = ResourceManager::GetFramebuffer(m_Framebuffer);
+		Framebuffer* framebuffer = ResourceManager::GetFramebuffer(m_ForwardFramebuffer);
 		if (!framebuffer || framebuffer->GetColorAttachmentCount() == 0)
 			return {};
 

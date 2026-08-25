@@ -1,6 +1,6 @@
 #pragma once
 #include "Asset/Asset.h"
-
+#include "Asset/Assets/MaterialAsset.h"
 namespace cerberus
 {
 	// RenderScene-owned, render-friendly representation of a MaterialAsset.
