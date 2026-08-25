@@ -10,13 +10,14 @@ namespace cerberus
 		const ForwardPassResources& resources,
 		const ForwardPassParameters& parameters)
 	{
+		if (parameters.DrawCount == 0)
+			return;
+
 		DrawArea drawArea;
 		drawArea.GraphicsPipeline = resources.Pipeline;
 		drawArea.BindGroup0 = resources.BindGroup;
+		drawArea.DrawCount = parameters.DrawCount;
 
-		commandList.RenderMeshInstances(
-			drawArea,
-			parameters.MeshInstances,
-			parameters.MaterialProxies);
+		commandList.ExecuteDrawStream(drawArea, parameters.DrawStream);
 	}
 }

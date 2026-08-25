@@ -94,6 +94,14 @@ namespace cerberus
 		const MaterialProxy* GetMaterialProxy(uint32_t materialProxyIndex) const;
 		const std::vector<Handle<Texture2D>>& GetMaterialTextures() const { return m_MeshRegister.GPUTextures; }
 		const std::vector<Handle<Texture2D>>& GetRayTracingTextures() const { return GetMaterialTextures(); }
+
+		// Encodes every registered raster mesh instance into one DrawStreamBuilder
+		// stream (see DrawStreamBuilder.h). Rebuilt once per frame by the raster
+		// SceneRenderer and then replayed as many times as needed (PreDepth, each
+		// shadow cascade, Forward) instead of each pass re-walking mesh instances.
+		void BuildDrawStream();
+		std::span<const uint32_t> GetDrawStream() const { return m_DrawStream; }
+		uint32_t GetDrawStreamCount() const { return m_DrawStreamCount; }
 		const std::vector<RayTracingInstanceData>& GetRayTracingInstances() const { return m_RayTracingInstances; }
 		const SkyLightProxy& GetSkyLight() const { return m_SkyLight; }
 		const std::array<DirectionalLightProxy, MaxDirectionalLightCount>& GetDirectionalLights() const { return m_DirectionalLights; }
@@ -182,5 +190,8 @@ namespace cerberus
 		SkyLightProxy m_SkyLight;
 		std::array<DirectionalLightProxy, MaxDirectionalLightCount> m_DirectionalLights{};
 		uint32_t m_DirectionalLightCount = 0;
+
+		std::vector<uint32_t> m_DrawStream;
+		uint32_t m_DrawStreamCount = 0;
 	};
 }

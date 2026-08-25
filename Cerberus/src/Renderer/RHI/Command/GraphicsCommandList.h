@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Renderer/RHI/Command/CommandList.h"
-#include "Renderer/DrawStreamBuilder.h"
+#include "Renderer/Draw/DrawStreamBuilder.h"
 #include "Renderer/RHI/RenderingInfo.h"
 
 namespace cerberus
@@ -23,6 +23,16 @@ namespace cerberus
 		// whose RenderTargetTexture is a shader resource into a shader-read layout,
 		// mirroring the finalLayout behaviour the legacy VkRenderPass used to provide.
 		void EndRendering();
+
+		// Same vkCmdBeginRendering/vkCmdEndRendering pair as BeginRendering/
+		// EndRendering, without inserting any barrier: the caller (RenderGraph)
+		// has already recorded the exact barrier it computed for every
+		// attachment beforehand, from real per-frame access history rather than
+		// BeginRendering's conservative guess. Only RenderGraph::Execute calls
+		// these; anything not recorded through the graph should keep using
+		// BeginRendering/EndRendering.
+		void BeginRenderingAttachments(const RenderingInfo& renderingInfo);
+		void EndRenderingAttachments();
 
 		void BindGraphicsPipeline(Handle<GraphicsPipeline> pipeline);
 		void BindVertexBuffer(
@@ -57,11 +67,23 @@ namespace cerberus
 			uint32_t firstInstance = 0);
 
 		void DrawFullscreen(Handle<GraphicsPipeline> pipeline, Handle<BindGroup> bindGroup = {});
+		// Replays a stream encoded by DrawStreamBuilder, pushing { WorldTransform,
+		// MaterialIndex } once per draw. Every vertex shader that consumes a
+		// DrawStream (PreDepth, Shadow, Forward) declares the identical
+		// push_constant block shape, even where a stage ignores MaterialIndex, so
+		// pipeline-layout reflection produces the same range everywhere and this
+		// can push unconditionally without special-casing per pipeline.
 		void ExecuteDrawStream(const DrawArea& drawArea, std::span<const uint32_t> drawStream);
-		void RenderMeshInstances(
-			const DrawArea& drawArea,
-			std::span<const Handle<MeshInstanceProxy>> meshInstances,
-			std::span<const MaterialProxy> materialProxies);
+
+		// Pushes against the currently bound pipeline's layout (set by the most
+		// recent BindGraphicsPipeline/ExecuteDrawStream call). Lets a pass push
+		// data beyond the shared DrawStream shape, e.g. ShadowPass pushing one
+		// cascade's light-space matrix once per cascade rather than per draw.
+		using CommandListBase::PushConstants;
+		void PushConstants(
+			VkShaderStageFlags shaderStages,
+			std::span<const std::byte> data,
+			uint32_t offset = 0);
 
 	private:
 		VkPipelineLayout m_BoundPipelineLayout = VK_NULL_HANDLE;

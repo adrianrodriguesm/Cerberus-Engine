@@ -48,7 +48,10 @@ namespace cerberus
 		entt::registry m_Registry;
 		uint32_t m_Width, m_Heigth;
 		std::string m_Name;
-		SceneRendererType m_RendererType = SceneRendererType::PathTracer;
+		// Defaulted to Forward for now while it's under active development and
+		// gets loaded on every test launch; flip back to PathTracer once Forward
+		// is done, or once scenes are re-saved with an explicit Renderer field.
+		SceneRendererType m_RendererType = SceneRendererType::Forward;
 
 		LightEnvironment m_LightEnvironment;
 		std::vector<RenderObjectID> m_MeshToRemoved;

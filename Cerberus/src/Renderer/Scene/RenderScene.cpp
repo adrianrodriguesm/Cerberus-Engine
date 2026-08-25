@@ -6,6 +6,7 @@
 #include "Renderer/RHI/ResourceManager.h"
 #include "Renderer/Core/RendererResources.h"
 #include "Renderer/RHI/Texture.h"
+#include "Renderer/Draw/DrawStreamBuilder.h"
 #include "Asset/Assets/TextureAsset.h"
 #include "Asset/AssetManager.h"
 
@@ -25,6 +26,46 @@ namespace cerberus
 			return nullptr;
 
 		return &m_MeshRegister.MaterialProxies[materialProxyIndex];
+	}
+
+	void RenderScene::BuildDrawStream()
+	{
+		DrawStreamBuilder builder;
+		Handle<MeshSourceProxy> activeMeshSource;
+
+		for (Handle<MeshInstanceProxy> meshInstanceHandle : m_MeshRegister.RasterMeshInstances)
+		{
+			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
+			CORE_ASSERT(meshInstance, "Invalid MeshInstanceProxy");
+
+			MeshSourceProxy* meshSource = ResourceManager::GetMeshSourceProxy(meshInstance->MeshSource);
+			CORE_ASSERT(meshSource, "MeshInstanceProxy references an invalid MeshSourceProxy");
+			CORE_ASSERT(meshSource->VertexBuffer && meshSource->IndexBuffer, "MeshSourceProxy has invalid geometry buffers");
+			CORE_ASSERT(meshInstance->SubmeshIndex < meshSource->Submeshes.size(), "MeshInstanceProxy references an invalid submesh");
+
+			if (meshInstance->MeshSource != activeMeshSource)
+			{
+				builder.SetVertexBuffer(meshSource->VertexBuffer->GetGPUBuffer());
+				builder.SetIndexBuffer(meshSource->IndexBuffer->GetGPUBuffer());
+				activeMeshSource = meshInstance->MeshSource;
+			}
+
+			const SubmeshSourceProxy& submesh = meshSource->Submeshes[meshInstance->SubmeshIndex];
+			CORE_ASSERT(meshInstance->MaterialProxyIndex < m_MeshRegister.MaterialProxies.size(), "MeshInstanceProxy references an invalid raster MaterialProxy");
+			const MaterialProxy& materialProxy = m_MeshRegister.MaterialProxies[meshInstance->MaterialProxyIndex];
+			CORE_ASSERT(materialProxy.GPUMaterialIndex != InvalidMaterialProxyIndex, "Raster MaterialProxy has no GPU index");
+
+			builder.SetVertexBufferOffset(submesh.BaseVertex);
+			builder.SetIndexBufferOffset(submesh.BaseIndex);
+			builder.SetIndexBufferCount(submesh.IndexCount);
+			builder.SetWorldTransform(meshInstance->WorldTransform);
+			builder.SetMaterialIndex(materialProxy.GPUMaterialIndex);
+			builder.Draw();
+		}
+
+		const std::span<const uint32_t> stream = builder.GetStream();
+		m_DrawStream.assign(stream.begin(), stream.end());
+		m_DrawStreamCount = builder.GetDrawCount();
 	}
 
 	void RenderScene::SetSkyLight(const Ref<EnvironmentMap>& environment, float intensity, uint32_t sampleLOD)

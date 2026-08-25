@@ -17,9 +17,6 @@ layout(std140, set = 0, binding = 0) uniform CameraData
 layout(push_constant) uniform u_Renderer
 {
     mat4 WorldTransform;
-    vec4 NormalColumn0;
-    vec4 NormalColumn1;
-    vec4 NormalColumn2;
     uint MaterialIndex;
 } Draw;
 
@@ -33,10 +30,9 @@ layout(location = 5) flat out uint v_MaterialIndex;
 void main()
 {
     vec4 worldPosition = Draw.WorldTransform * vec4(a_Position, 1.0);
-    mat3 normalMatrix = mat3(
-        Draw.NormalColumn0.xyz,
-        Draw.NormalColumn1.xyz,
-        Draw.NormalColumn2.xyz);
+    // Non-uniform scale needs the inverse-transpose; computed here instead of
+    // CPU-side so every DrawStream consumer can share one push-constant shape.
+    mat3 normalMatrix = transpose(inverse(mat3(Draw.WorldTransform)));
 
     v_WorldPosition = worldPosition.xyz;
     v_WorldNormal = normalize(normalMatrix * a_Normal);

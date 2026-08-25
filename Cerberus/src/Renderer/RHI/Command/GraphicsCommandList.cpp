@@ -10,19 +10,19 @@ namespace cerberus
 {
 	namespace
 	{
-		// One vertex-stage range keeps the current Shader push-constant reflection
-		// deterministic. The material index is forwarded flat to the fragment shader.
-		struct RasterDrawPushConstants
+		// Shared vertex-stage push-constant shape for every DrawStream consumer.
+		// Depth-only pipelines (PreDepth, Shadow) declare a push-constant range
+		// covering only the leading mat4; Forward's covers the whole struct. Normal
+		// matrices are derived in ForwardPBR.vert from WorldTransform instead of
+		// being precomputed CPU-side, so this stays the one shape every pass shares.
+		struct DrawStreamPushConstants
 		{
 			glm::mat4 WorldTransform = glm::mat4(1.0f);
-			glm::vec4 NormalColumn0 = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
-			glm::vec4 NormalColumn1 = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
-			glm::vec4 NormalColumn2 = glm::vec4(0.0f, 0.0f, 1.0f, 0.0f);
 			uint32_t MaterialIndex = 0;
 		};
 
-		static_assert(sizeof(RasterDrawPushConstants) == 116,
-			"RasterDrawPushConstants must match ForwardPBR.vert");
+		static_assert(sizeof(DrawStreamPushConstants) == 68,
+			"DrawStreamPushConstants must match the Forward/PreDepth/Shadow vertex shaders");
 	}
 
 	GraphicsCommandList::GraphicsCommandList(
@@ -80,6 +80,65 @@ namespace cerberus
 			range.layerCount = 1;
 			return range;
 		}
+
+		// Shared by BeginRendering (which barriers each attachment itself) and
+		// BeginRenderingAttachments (which assumes the caller already did).
+		VkRenderingAttachmentInfo BuildColorAttachmentInfo(
+			const RenderingAttachmentInfo& colorAttachmentInfo)
+		{
+			RenderTargetTexture* target = ResourceManager::GetRenderTarget(colorAttachmentInfo.Target);
+			CORE_ASSERT(target, "Rendering scope received an invalid color attachment");
+			ImageView* imageView = ResourceManager::GetImageView(target->GetImageView());
+			CORE_ASSERT(imageView, "Color attachment render target has no image view");
+
+			VkRenderingAttachmentInfo attachment{};
+			attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+			attachment.imageView = imageView->GetHandle();
+			attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			attachment.resolveMode = VK_RESOLVE_MODE_NONE;
+			attachment.loadOp = VulkanLoadOp(colorAttachmentInfo.LoadOp);
+			attachment.storeOp = VulkanStoreOp(colorAttachmentInfo.StoreOp);
+			const glm::vec4 clearColor = target->GetClearColor();
+			attachment.clearValue.color = { { clearColor.r, clearColor.g, clearColor.b, clearColor.a } };
+			return attachment;
+		}
+
+		VkRenderingAttachmentInfo BuildDepthAttachmentInfo(
+			const RenderingAttachmentInfo& depthAttachmentInfo)
+		{
+			RenderTargetTexture* target = ResourceManager::GetRenderTarget(depthAttachmentInfo.Target);
+			CORE_ASSERT(target, "Rendering scope received an invalid depth attachment");
+			ImageView* imageView = ResourceManager::GetImageView(target->GetImageView());
+			CORE_ASSERT(imageView, "Depth attachment render target has no image view");
+
+			VkRenderingAttachmentInfo attachment{};
+			attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+			attachment.imageView = imageView->GetHandle();
+			attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			attachment.resolveMode = VK_RESOLVE_MODE_NONE;
+			attachment.loadOp = VulkanLoadOp(depthAttachmentInfo.LoadOp);
+			attachment.storeOp = VulkanStoreOp(depthAttachmentInfo.StoreOp);
+			// Matches the depth clear the Framebuffer wrapper used unconditionally.
+			attachment.clearValue.depthStencil = { 1.0f, 0 };
+			return attachment;
+		}
+
+		void SetViewportAndScissor(GraphicsCommandList& commandList, uint32_t width, uint32_t height)
+		{
+			VkViewport viewport{};
+			viewport.x = 0.0f;
+			viewport.y = 0.0f;
+			viewport.width = static_cast<float>(width);
+			viewport.height = static_cast<float>(height);
+			viewport.minDepth = 0.0f;
+			viewport.maxDepth = 1.0f;
+			commandList.SetViewport(viewport);
+
+			VkRect2D scissor{};
+			scissor.offset = { 0, 0 };
+			scissor.extent = { width, height };
+			commandList.SetScissor(scissor);
+		}
 	}
 
 	void GraphicsCommandList::BeginRendering(const RenderingInfo& renderingInfo)
@@ -103,12 +162,16 @@ namespace cerberus
 			ImageView* imageView = ResourceManager::GetImageView(target->GetImageView());
 			CORE_ASSERT(imageView, "Color attachment render target has no image view");
 
+			// The previous state may be either another frame's shader-read (after
+			// EndRendering transitioned it) or, within the same frame, another
+			// pass's attachment write reused via LOAD_OP::LOAD. Cover both so the
+			// barrier is correct regardless of which produced the current contents.
 			image->InsertImageMemoryBarrier(
 				*this,
-				0,
+				VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
 				VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
 				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 				VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
 				ColorSubresourceRange());
 
@@ -137,12 +200,15 @@ namespace cerberus
 			ImageView* imageView = ResourceManager::GetImageView(target->GetImageView());
 			CORE_ASSERT(imageView, "Depth attachment render target has no image view");
 
+			// See the color-attachment barrier above: the previous writer may be a
+			// prior frame (shader-read) or, within the same frame, an earlier pass
+			// such as PreDepth writing the same SceneDepth via LOAD_OP::LOAD.
 			image->InsertImageMemoryBarrier(
 				*this,
-				0,
+				VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
 				VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
 				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
 				VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
 				DepthSubresourceRange());
 
@@ -232,6 +298,38 @@ namespace cerberus
 		m_ActiveDepthAttachment.reset();
 	}
 
+	void GraphicsCommandList::BeginRenderingAttachments(const RenderingInfo& renderingInfo)
+	{
+		CORE_ASSERT(renderingInfo.Width > 0 && renderingInfo.Height > 0, "BeginRenderingAttachments received an empty render area");
+
+		std::vector<VkRenderingAttachmentInfo> colorAttachments;
+		colorAttachments.reserve(renderingInfo.ColorAttachments.size());
+		for (const RenderingAttachmentInfo& colorAttachmentInfo : renderingInfo.ColorAttachments)
+			colorAttachments.push_back(BuildColorAttachmentInfo(colorAttachmentInfo));
+
+		VkRenderingAttachmentInfo depthAttachment{};
+		const bool hasDepthAttachment = renderingInfo.DepthAttachment.has_value();
+		if (hasDepthAttachment)
+			depthAttachment = BuildDepthAttachmentInfo(*renderingInfo.DepthAttachment);
+
+		VkRenderingInfo vulkanRenderingInfo{};
+		vulkanRenderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+		vulkanRenderingInfo.renderArea.offset = { 0, 0 };
+		vulkanRenderingInfo.renderArea.extent = { renderingInfo.Width, renderingInfo.Height };
+		vulkanRenderingInfo.layerCount = 1;
+		vulkanRenderingInfo.colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size());
+		vulkanRenderingInfo.pColorAttachments = colorAttachments.data();
+		vulkanRenderingInfo.pDepthAttachment = hasDepthAttachment ? &depthAttachment : nullptr;
+
+		vkCmdBeginRendering(GetNative(), &vulkanRenderingInfo);
+		SetViewportAndScissor(*this, renderingInfo.Width, renderingInfo.Height);
+	}
+
+	void GraphicsCommandList::EndRenderingAttachments()
+	{
+		vkCmdEndRendering(GetNative());
+	}
+
 	void GraphicsCommandList::BindGraphicsPipeline(Handle<GraphicsPipeline> pipelineHandle)
 	{
 		GraphicsPipeline* pipeline = ResourceManager::GetGraphicsPipeline(pipelineHandle);
@@ -239,6 +337,15 @@ namespace cerberus
 
 		vkCmdBindPipeline(GetNative(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->GetHandle());
 		m_BoundPipelineLayout = pipeline->GetVulkanPipelineLayout();
+	}
+
+	void GraphicsCommandList::PushConstants(
+		VkShaderStageFlags shaderStages,
+		std::span<const std::byte> data,
+		uint32_t offset)
+	{
+		CORE_ASSERT(m_BoundPipelineLayout != VK_NULL_HANDLE, "PushConstants requires a bound pipeline");
+		CommandListBase::PushConstants(m_BoundPipelineLayout, shaderStages, data, offset);
 	}
 
 	void GraphicsCommandList::BindVertexBuffer(
@@ -369,71 +476,26 @@ namespace cerberus
 				draw.IndexOffset = stream.Read<uint32_t>();
 			if (dirtyFlags & DrawStreamFlags::INDEX_COUNT)
 				draw.IndexCount = stream.Read<uint32_t>();
-			if (dirtyFlags & DrawStreamFlags::BIND_GROUP_MAT)
-			{
-				draw.MaterialBindGroup = stream.Read<Handle<BindGroup>>();
-				BindDescriptorSets(draw.MaterialBindGroup, drawArea.MaterialBindGroupSet);
-			}
+			if (dirtyFlags & DrawStreamFlags::WORLD_TRANSFORM)
+				draw.WorldTransform = stream.Read<glm::mat4>();
+			if (dirtyFlags & DrawStreamFlags::MATERIAL_INDEX)
+				draw.MaterialIndex = stream.Read<uint32_t>();
 
 			CORE_ASSERT(draw.VertexBuffer.IsValid(), "Draw stream has no vertex-buffer state");
 			CORE_ASSERT(draw.IndexBuffer.IsValid(), "Draw stream has no index-buffer state");
 			CORE_ASSERT(draw.IndexCount > 0, "Draw stream has no index-count state");
-			DrawIndexed(draw.IndexCount, 1, draw.IndexOffset, static_cast<int32_t>(draw.VertexOffset), 0);
-		}
-	}
 
-	void GraphicsCommandList::RenderMeshInstances(
-		const DrawArea& drawArea,
-		std::span<const Handle<MeshInstanceProxy>> meshInstances,
-		std::span<const MaterialProxy> materialProxies)
-	{
-		if (meshInstances.empty())
-			return;
-
-		BindGraphicsPipeline(drawArea.GraphicsPipeline);
-		if (drawArea.BindGroup0.IsValid())
-			BindDescriptorSets(drawArea.BindGroup0, 0);
-		if (drawArea.BindGroup1.IsValid())
-			BindDescriptorSets(drawArea.BindGroup1, 1);
-		Handle<MeshSourceProxy> activeMeshSource;
-
-		for (Handle<MeshInstanceProxy> meshInstanceHandle : meshInstances)
-		{
-			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
-			CORE_ASSERT(meshInstance, "Invalid MeshInstanceProxy");
-
-			MeshSourceProxy* meshSource = ResourceManager::GetMeshSourceProxy(meshInstance->MeshSource);
-			CORE_ASSERT(meshSource, "MeshInstanceProxy references an invalid MeshSourceProxy");
-			CORE_ASSERT(meshSource->VertexBuffer && meshSource->IndexBuffer, "MeshSourceProxy has invalid geometry buffers");
-			CORE_ASSERT(meshInstance->SubmeshIndex < meshSource->Submeshes.size(), "MeshInstanceProxy references an invalid submesh");
-
-			if (meshInstance->MeshSource != activeMeshSource)
-			{
-				BindVertexBuffer(meshSource->VertexBuffer->GetGPUBuffer());
-				BindIndexBuffer(meshSource->IndexBuffer->GetGPUBuffer());
-				activeMeshSource = meshInstance->MeshSource;
-			}
-
-			const SubmeshSourceProxy& submesh = meshSource->Submeshes[meshInstance->SubmeshIndex];
-			CORE_ASSERT(meshInstance->MaterialProxyIndex < materialProxies.size(), "MeshInstanceProxy references an invalid raster MaterialProxy");
-			const MaterialProxy& materialProxy = materialProxies[meshInstance->MaterialProxyIndex];
-			CORE_ASSERT(materialProxy.GPUMaterialIndex != InvalidMaterialProxyIndex, "Raster MaterialProxy has no GPU index");
-			RasterDrawPushConstants pushConstants;
-			pushConstants.WorldTransform = meshInstance->WorldTransform;
-			const glm::mat3 worldTransform3x3(meshInstance->WorldTransform);
-			const float determinant = glm::determinant(worldTransform3x3);
-			const glm::mat3 normalTransform = std::abs(determinant) > 0.000001f
-				? glm::transpose(glm::inverse(worldTransform3x3))
-				: worldTransform3x3;
-			pushConstants.NormalColumn0 = glm::vec4(normalTransform[0], 0.0f);
-			pushConstants.NormalColumn1 = glm::vec4(normalTransform[1], 0.0f);
-			pushConstants.NormalColumn2 = glm::vec4(normalTransform[2], 0.0f);
-			pushConstants.MaterialIndex = materialProxy.GPUMaterialIndex;
+			// Every DrawStream-consuming vertex shader declares this same
+			// push_constant block shape (see the ExecuteDrawStream declaration), so
+			// this push is valid against whichever pipeline is currently bound.
+			DrawStreamPushConstants pushConstants;
+			pushConstants.WorldTransform = draw.WorldTransform;
+			pushConstants.MaterialIndex = draw.MaterialIndex;
 			PushConstants(
 				m_BoundPipelineLayout,
 				VK_SHADER_STAGE_VERTEX_BIT,
 				AsBytes(pushConstants));
-			DrawIndexed(submesh.IndexCount, 1, submesh.BaseIndex, submesh.BaseVertex, 0);
+			DrawIndexed(draw.IndexCount, 1, draw.IndexOffset, static_cast<int32_t>(draw.VertexOffset), 0);
 		}
 	}
 }

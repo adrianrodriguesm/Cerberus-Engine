@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Renderer/Descriptor/BindGroup.h"
+#include "Renderer/RenderGraph/RenderGraph.h"
 #include "Renderer/RHI/RenderingInfo.h"
 #include "Renderer/RHI/Pipeline/Pipeline.h"
 #include "Renderer/RHI/Buffers/StorageBufferSet.h"
@@ -9,12 +10,15 @@
 #include "Renderer/SceneRenderer/SceneRenderer.h"
 #include "Renderer/SceneRenderer/Forward/Passes/ForwardPass.h"
 #include "Renderer/SceneRenderer/Forward/Passes/SkyPass.h"
+#include "Renderer/SceneRenderer/Forward/Passes/PreDepthPass.h"
+#include "Renderer/SceneRenderer/Forward/Passes/ShadowPass.h"
+#include "Renderer/SceneRenderer/Forward/Passes/CompositePass.h"
 
 namespace cerberus
 {
-	// Modern raster reference renderer. It intentionally starts as one forward
-	// pass so GraphicsCommandList and RenderScene can be validated before the
-	// work is split into reusable passes and, later, scheduled by RenderGraph.
+	// Modern raster reference renderer: PreDepth -> Shadow (CSM) -> Sky/Forward
+	// -> Composite, ordered and barriered by a RenderGraph rather than each
+	// scope hand-writing its own BeginRendering/EndRendering transitions.
 	class ForwardSceneRenderer final : public SceneRenderer
 	{
 	public:
@@ -41,9 +45,11 @@ namespace cerberus
 		void DestroyRasterResources();
 		void UpdateCameraBuffer();
 		void UpdateLightingBuffer();
+		void UpdateShadowBuffer();
 		void UpdateMaterialBuffer();
 		void UpdateTextureTable();
 		void UpdateEnvironmentBindings();
+		void UpdateCompositeBindings();
 
 	private:
 		struct CameraUB
@@ -72,6 +78,15 @@ namespace cerberus
 		};
 		static_assert(sizeof(ForwardLightingUB) == 160, "ForwardLightingUB must match the Forward shaders");
 
+		struct ShadowUB
+		{
+			std::array<glm::mat4, ShadowCascadeCount> CascadeViewProjection{};
+			// One component per cascade; distance-from-camera thresholds, not
+			// view-space Z, so the fragment shader doesn't need a view matrix.
+			glm::vec4 CascadeSplitDepths = glm::vec4(0.0f);
+		};
+		static_assert(sizeof(ShadowUB) == 272, "ShadowUB must match ForwardPBR.frag");
+
 		SceneRendererSpecification m_Specification;
 		glm::uvec2 m_ViewportResolution = glm::uvec2(1u);
 		Ref<Scene> m_Scene;
@@ -79,20 +94,35 @@ namespace cerberus
 		Scope<RenderScene> m_RenderScene;
 
 		// Dynamic Rendering has no framebuffer object; the SceneRenderer owns its
-		// render targets directly so future passes (e.g. a PreDepth pass) can
-		// reference the same SceneDepth target.
+		// render targets directly so passes can reference the same target, e.g.
+		// PreDepth and Forward both target SceneDepth.
 		Handle<RenderTargetTexture> m_SceneColor;
 		Handle<RenderTargetTexture> m_SceneDepth;
+		Handle<RenderTargetTexture> m_CompositeOutput;
+		std::array<Handle<RenderTargetTexture>, ShadowCascadeCount> m_ShadowMaps;
+		std::array<ShadowCascadeData, ShadowCascadeCount> m_ShadowCascades;
+		Handle<GraphicsPipeline> m_PreDepthPipeline;
+		Handle<GraphicsPipeline> m_ShadowPipeline;
 		Handle<GraphicsPipeline> m_SkyPipeline;
 		Handle<GraphicsPipeline> m_GeometryPipeline;
+		Handle<GraphicsPipeline> m_CompositePipeline;
 
+		Handle<BindGroupLayout> m_PreDepthBindGroupLayout;
+		Handle<BindGroup> m_PreDepthBindGroup;
 		Handle<BindGroupLayout> m_SkyBindGroupLayout;
 		Handle<BindGroup> m_SkyBindGroup;
 		Handle<BindGroupLayout> m_GeometryBindGroupLayout;
 		Handle<BindGroup> m_GeometryBindGroup;
+		Handle<BindGroupLayout> m_CompositeBindGroupLayout;
+		Handle<BindGroup> m_CompositeBindGroup;
 
 		Ref<UniformBufferSet> m_CameraBufferSet;
 		Ref<UniformBufferSet> m_LightingBufferSet;
+		Ref<UniformBufferSet> m_ShadowBufferSet;
 		Ref<StorageBufferSet> m_MaterialBufferSet;
+
+		// Pass ordering and barriers for this renderer's frame; rebuilt (Reset()
+		// then re-added) every Render() call rather than reconstructed.
+		RenderGraph m_RenderGraph;
 	};
 }

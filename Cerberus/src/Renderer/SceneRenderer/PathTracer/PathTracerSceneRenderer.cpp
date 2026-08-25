@@ -557,45 +557,42 @@ namespace cerberus
 		CommandBuffer* commandBuffer = Renderer::GetMainCommandBuffer(m_Specification.SwapChainTarget);
 		CORE_ASSERT(commandBuffer, "Invalid main command buffer");
 
+		// Ray tracing dispatch: iterative path integration -> storage image. The
+		// accumulation image's previous-dispatch writes must be visible before
+		// this dispatch reads and updates the running average; the layout
+		// intentionally stays GENERAL across dispatches and frames, so this is a
+		// memory dependency, not a layout transition -- ImportImage's
+		// initialAccess reproduces the exact source scope every dispatch used to
+		// hard-code, and RenderGraph resolves every later frame's barrier the
+		// same way from this pass's own declared access.
+		m_RenderGraph.Reset();
+		const RGTextureHandle accumulationImageRG = m_RenderGraph.ImportImage(
+			m_RT_AccumulationImage,
+			"RTAccumulation",
+			RGAccessState{ VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR });
+
+		const glm::ivec2 viewportResolution = m_ViewportResolution;
+		m_RenderGraph.AddRayTracingPass(
+			"PathTrace",
+			[accumulationImageRG](RenderGraphBuilder& builder)
+			{
+				builder.ReadWriteStorageImage(accumulationImageRG, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
+			},
+			[this, viewportResolution](RayTracingCommandList& rayTracing)
+			{
+				rayTracing.BindRayTracingPipeline(m_RT_Pipeline);
+				rayTracing.BindDescriptorSets(m_RT_BindGroup);
+				rayTracing.TraceRays(
+					*m_ShaderBindingTable,
+					(uint32_t)viewportResolution.x,
+					(uint32_t)viewportResolution.y,
+					1);
+			});
+
+		m_RenderGraph.Compile();
+
 		commandBuffer->BeginRenderThread();
-
-		// Ray tracing dispatch: iterative path integration -> storage image.
-		{
-			RayTracingCommandList rayTracing(
-				commandBuffer->GetRecordingView(frameIndex),
-				&Renderer::GetFrameStatistics());
-			rayTracing.BindRayTracingPipeline(m_RT_Pipeline);
-			rayTracing.BindDescriptorSets(m_RT_BindGroup);
-
-			// Preserve storage-image writes from the previous dispatch before this
-			// dispatch reads and updates the running average. The layout intentionally
-			// remains GENERAL; this is a memory dependency, not a layout transition.
-			Image* accumulationImage = ResourceManager::GetImage(m_RT_AccumulationImage);
-			CORE_ASSERT(accumulationImage, "Invalid RT accumulation image");
-
-			VkImageSubresourceRange accumulationRange{};
-			accumulationRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			accumulationRange.baseMipLevel = 0;
-			accumulationRange.levelCount = 1;
-			accumulationRange.baseArrayLayer = 0;
-			accumulationRange.layerCount = 1;
-
-			accumulationImage->InsertImageMemoryBarrier(
-				rayTracing,
-				VK_ACCESS_SHADER_WRITE_BIT,
-				VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
-				VK_IMAGE_LAYOUT_GENERAL,
-				VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-				VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
-				accumulationRange);
-
-			rayTracing.TraceRays(
-				*m_ShaderBindingTable,
-				(uint32_t)m_ViewportResolution.x,
-				(uint32_t)m_ViewportResolution.y,
-				1);
-		}
-
+		m_RenderGraph.Execute(*commandBuffer, frameIndex, &Renderer::GetFrameStatistics());
 		commandBuffer->EndRenderThread();
 		commandBuffer->SubmitRenderThread();
 

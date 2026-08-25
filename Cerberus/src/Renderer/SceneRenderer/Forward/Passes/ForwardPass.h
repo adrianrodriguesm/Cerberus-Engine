@@ -1,9 +1,8 @@
 #pragma once
 
 #include "Core/Handle.h"
-#include "Renderer/Scene/Proxies/MaterialProxy.h"
-#include "Renderer/Scene/Proxies/MeshProxy.h"
 
+#include <cstdint>
 #include <span>
 
 namespace cerberus
@@ -20,8 +19,8 @@ namespace cerberus
 
 	struct ForwardPassParameters
 	{
-		std::span<const Handle<MeshInstanceProxy>> MeshInstances;
-		std::span<const MaterialProxy> MaterialProxies;
+		std::span<const uint32_t> DrawStream;
+		uint32_t DrawCount = 0;
 	};
 
 	void RenderForwardPass(

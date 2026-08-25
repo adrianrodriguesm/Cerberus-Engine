@@ -46,6 +46,15 @@ layout(std140, set = 0, binding = 5) uniform ForwardLightingData
     DirectionalLight DirectionalLights[4];
 } Lighting;
 
+// Cascaded shadow map for DirectionalLights[0] only (the primary/first light).
+layout(std140, set = 0, binding = 6) uniform ShadowData
+{
+    mat4 CascadeViewProjection[4];
+    // One component per cascade; distance-from-camera thresholds.
+    vec4 CascadeSplitDepths;
+} Shadow;
+layout(set = 0, binding = 7) uniform sampler2D ShadowMaps[4];
+
 layout(location = 0) in vec3 v_WorldPosition;
 layout(location = 1) in vec3 v_WorldNormal;
 layout(location = 2) in vec3 v_WorldTangent;
@@ -122,14 +131,65 @@ vec3 EvaluatePBR(
     return diffuse + specular;
 }
 
-vec3 ACESFilm(vec3 color)
+// 16-tap Poisson disk, subset of a larger distribution used for percentage-
+// closer filtering. Fixed filter radius rather than full PCSS blocker-search:
+// PCSS's penumbra-scaling formula assumes a perspective light projection, and
+// directional lights here are orthographic, so blocker-search distance doesn't
+// change the penumbra size the way it would for a spot/point light.
+const vec2 PoissonDisk[16] = vec2[](
+    vec2(-0.884081, 0.124488), vec2(-0.714377, 0.027940), vec2(-0.747945, 0.227922),
+    vec2(-0.939609, 0.243634), vec2(-0.985465, 0.045534), vec2(-0.861367, -0.136222),
+    vec2(-0.466938, 0.014526), vec2(-0.558207, 0.212662), vec2(-0.578447, -0.095822),
+    vec2(-0.319776, -0.312166), vec2(-0.243704, -0.186378), vec2(-0.100006, -0.229116),
+    vec2(0.071650, -0.384284), vec2(0.163314, -0.217231), vec2(0.132993, 0.085170),
+    vec2(0.183621, -0.713242)
+);
+
+float SampleShadowCascade(uint cascadeIndex, vec2 uv, float compareDepth, float bias)
 {
-    const float a = 2.51;
-    const float b = 0.03;
-    const float c = 2.43;
-    const float d = 0.59;
-    const float e = 0.14;
-    return clamp((color * (a * color + b)) / (color * (c * color + d) + e), 0.0, 1.0);
+    vec2 texelSize = 1.0 / vec2(textureSize(ShadowMaps[nonuniformEXT(cascadeIndex)], 0));
+    float lit = 0.0;
+    for (int i = 0; i < 16; ++i)
+    {
+        vec2 offset = PoissonDisk[i] * texelSize * 2.0;
+        float closestDepth = texture(ShadowMaps[nonuniformEXT(cascadeIndex)], uv + offset).r;
+        lit += (compareDepth - bias) <= closestDepth ? 1.0 : 0.0;
+    }
+    return lit / 16.0;
+}
+
+// Percentage-closer-filtered shadow lookup for DirectionalLights[0]. Cascade
+// selection uses distance from the camera rather than exact view-space Z, so
+// the fragment shader doesn't need a separate view matrix.
+float EvaluateShadow(vec3 worldPosition, vec3 normal, vec3 lightDirection, float distanceFromCamera)
+{
+    uint cascadeIndex = 3u;
+    for (uint i = 0u; i < 3u; ++i)
+    {
+        if (distanceFromCamera < Shadow.CascadeSplitDepths[i])
+        {
+            cascadeIndex = i;
+            break;
+        }
+    }
+
+    vec4 shadowClip = Shadow.CascadeViewProjection[cascadeIndex] * vec4(worldPosition, 1.0);
+    vec3 shadowCoords = shadowClip.xyz / shadowClip.w;
+    if (shadowCoords.z < 0.0 || shadowCoords.z > 1.0)
+        return 1.0;
+
+    vec2 shadowUV = shadowCoords.xy * 0.5 + 0.5;
+    if (shadowUV.x < 0.0 || shadowUV.x > 1.0 || shadowUV.y < 0.0 || shadowUV.y > 1.0)
+        return 1.0;
+
+    // Slope-scaled bias: grows as the surface tilts away from the light, to
+    // avoid self-shadowing (shadow acne) without over-biasing head-on surfaces.
+    // Each cascade's ortho depth range spans tens to 100+ world units
+    // (2*radius + 15), so a bias this small in normalized [0,1] depth space
+    // corresponds to a fraction of a world unit -- too little to avoid acne.
+    const float minimumBias = 0.006;
+    float bias = max(minimumBias * (1.0 - dot(normal, lightDirection)), minimumBias * 0.25);
+    return SampleShadowCascade(cascadeIndex, shadowUV, shadowCoords.z, bias);
 }
 
 void main()
@@ -168,6 +228,15 @@ void main()
         DirectionalLight light = Lighting.DirectionalLights[lightIndex];
         vec3 lightDirection = normalize(light.DirectionAndIntensity.xyz);
         float normalDotLight = max(dot(normal, lightDirection), 0.0);
+
+        // Only DirectionalLights[0] casts shadows for now (see ShadowPass.h).
+        float shadowFactor = 1.0;
+        if (lightIndex == 0u)
+        {
+            float distanceFromCamera = length(v_WorldPosition - Camera.CameraPosition.xyz);
+            shadowFactor = EvaluateShadow(v_WorldPosition, normal, lightDirection, distanceFromCamera);
+        }
+
         radiance += EvaluatePBR(
             viewDirection,
             lightDirection,
@@ -175,7 +244,7 @@ void main()
             albedo,
             roughness,
             metalness) *
-            normalDotLight * light.Radiance.rgb * light.DirectionAndIntensity.w;
+            normalDotLight * light.Radiance.rgb * light.DirectionAndIntensity.w * shadowFactor;
     }
 
     float skyIntensity = Lighting.SkyLightParameters.x;
@@ -193,5 +262,7 @@ void main()
     radiance += (diffuseIBL + specularIBL) * skyIntensity;
     radiance += albedo * max(material.Parameters.z, 0.0);
 
-    o_Color = vec4(ACESFilm(radiance * max(Camera.Presentation.x, 0.0)), 1.0);
+    // SceneColor stays linear HDR; tonemap/exposure/gamma happen once in the
+    // Composite pass instead of being duplicated in every shading shader.
+    o_Color = vec4(radiance, 1.0);
 }

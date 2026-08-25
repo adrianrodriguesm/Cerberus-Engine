@@ -1,8 +1,8 @@
 # Cerberus Renderer Architecture
 
-Last updated: 2026-08-21
+Last updated: 2026-08-25
 
-This document defines the current renderer ownership model, the target command-recording architecture, and the migration plan that must be completed before introducing a RenderGraph.
+This document defines the current renderer ownership model, the command-recording architecture, and the RenderGraph that now orders passes and derives barriers for both scene renderers.
 
 The immediate priority is stability: the path tracer, modern forward renderer, editor, scene data, materials, environment lighting, and GPU object lifetime must remain reliable while pass boundaries are made explicit.
 
@@ -210,31 +210,38 @@ It bridges logical scene data and render passes without performing asset seriali
 
 `SceneRenderer` orchestrates rendering for one scene and view. Concrete renderers consume `RenderScene`, prepare view/output state, and execute typed passes.
 
-`PathTracerSceneRenderer` currently performs too much inline work. Its target responsibility is:
+`PathTracerSceneRenderer` owns the path-tracing view/output state, path-tracing
+settings and accumulation state, and requests acceleration-structure preparation
+from `RenderScene` before each frame. Its per-frame GPU work is a single logical
+pass — one `RayTracingCommandList::TraceRays` dispatch into the accumulation
+image — registered as one `RenderGraph` ray-tracing pass (see "RenderGraph"
+below). TLAS build stays outside the graph: it submits through
+`TransientCommandExecutor` on its own command buffer, the same category as
+`EnvironmentMapBaker` (setup/asset-processing work, not a frame render pass).
 
-- own the path-tracing view/output state;
-- update path-tracing settings and accumulation state;
-- request acceleration-structure preparation from `RenderScene`;
-- invoke `PathTracePass` and later composition/post-processing passes.
+The forward renderer implements the full intended pipeline:
 
-The same pass separation applies to the forward renderer. The old disabled
-implementation was deleted rather than ported line by line. Its modern replacement
-now validates the new architecture as a deliberately compact renderer:
+```text
+ForwardSceneRenderer
+    Prepare frame data (camera/lighting/shadow/material buffers, draw stream)
+    PreDepth                 -- writes SceneDepth
+    Shadow x N cascades      -- one graph pass per cascade, each its own target
+    ForwardOpaque             -- Sky + Forward geometry, one shared Dynamic Rendering scope
+    Composite                 -- ACES tonemap + exposure + gamma -> LDR output
+```
 
-- owns a dedicated HDR color/depth output;
-- consumes `RenderScene` mesh instances and material proxies;
-- uploads the shared GPU material table and fixed material texture table;
-- evaluates normal, albedo, roughness, metalness, emission, analytic directional lights, and environment lighting;
+- owns SceneColor, SceneDepth, CompositeOutput, and one shadow-map render target per cascade directly (Dynamic Rendering has no framebuffer object to hold them instead);
+- consumes `RenderScene` mesh instances and material proxies through one `DrawStreamBuilder`-encoded stream, replayed by PreDepth, every shadow cascade, and Forward geometry;
+- evaluates normal, albedo, roughness, metalness, emission, up to `MaxDirectionalLightCount` analytic directional lights (the first casts cascaded shadow maps), and environment lighting;
 - renders the radiance cubemap as the background and uses irradiance/radiance for IBL;
-- records exclusively through `GraphicsCommandList`;
-- owns and unloads only its two renderer-specific shaders.
+- records exclusively through `GraphicsCommandList`/`RenderGraph`;
+- owns and unloads its five renderer-specific shaders (PreDepth, Shadow, ForwardPBR, ForwardSky, Composite).
 
-It is still one orchestration class for validation. Its next extraction produces:
-
-- `ForwardGeometryPass`;
-- `SkyboxPass`;
-- optional depth/shadow passes;
-- `CompositePass` where required.
+Sky and Forward are separate logical passes registered as one `RenderGraph` pass
+so they keep sharing one Dynamic Rendering scope; there is no dependency between
+them that requires a scope boundary. Automatic multi-pass scope merging (declaring
+them as two passes and having the graph detect a mergeable, identical attachment
+set) is a later graph refinement, not required for this to be correct.
 
 The inactive raster-test path that previously lived inside `PathTracerSceneRenderer` has been removed. It is not the modern forward renderer.
 
@@ -403,6 +410,121 @@ transient.SubmitAndWait();
 
 The transient scope owns the command-buffer lease. `ComputeCommandList` only borrows the common recording view. The executor continues to access the native handle internally for Vulkan allocation, begin/end, submission, and recycling; that backend access is ownership infrastructure, not duplicated recording API.
 
+## RenderGraph
+
+`RenderGraph` (`Renderer/RenderGraph/RenderGraph.h`/`.cpp`) owns per-frame pass
+ordering and barrier computation for both `ForwardSceneRenderer` and
+`PathTracerSceneRenderer`. This is increment 1 of the graph the "RenderGraph
+gate" below describes: **pass ordering and precise, per-resource barriers
+derived from declared reads/writes.** Transient/aliased resource allocation is
+an explicitly separate, later increment — every resource the graph touches is
+still imported from a `Handle<RenderTargetTexture>`/`Handle<Image>` the owning
+`SceneRenderer` created and destroys itself, exactly as before the graph
+existed.
+
+Researched against Frostbite's FrameGraph (GDC17), Unreal Engine 5's RDG, and
+Granite's Vulkan render graph before designing this; all three converge on a
+lambda-based `AddPass(name, setup, execute)` builder over a Setup -> Compile ->
+Execute lifecycle, with barriers derived from declared access rather than
+hand-written per call site. Cerberus keeps its four typed command-list domains
+(`GraphicsCommandList`/`ComputeCommandList`/`TransferCommandList`/
+`RayTracingCommandList`) instead of Unreal's one untyped `FRHICommandList`, so
+`AddPass` is split per domain: `AddGraphicsPass`, `AddComputePass`,
+`AddRayTracingPass`.
+
+### API shape
+
+```cpp
+RGTextureHandle sceneColor = graph.ImportRenderTarget(m_SceneColor, "SceneColor");
+RGTextureHandle sceneDepth = graph.ImportRenderTarget(m_SceneDepth, "SceneDepth");
+
+graph.AddGraphicsPass(
+    "ForwardOpaque",
+    [=](RenderGraphBuilder& builder)
+    {
+        builder.WriteColorAttachment(sceneColor, LOAD_OP::CLEAR, STORE_OP::STORE);
+        builder.WriteDepthAttachment(sceneDepth, LOAD_OP::LOAD, STORE_OP::STORE);
+    },
+    [=](GraphicsCommandList& graphics)
+    {
+        RenderSkyPass(graphics, ...);
+        RenderForwardPass(graphics, ...);
+    });
+
+graph.Compile();
+graph.Execute(*commandBuffer, frameIndex, &statistics);
+```
+
+`ImportRenderTarget`/`ImportImage` are called once per resource per frame, on
+the graph itself, before any pass that reads/writes it — not inside a pass's
+setup. A `RenderGraphBuilder` instance is scoped to one pass's setup call, and
+the same underlying resource is typically touched by several passes (PreDepth
+and Forward both write SceneDepth; Forward and Composite both touch
+SceneColor), so importing it per-pass would hand out a distinct
+`RGTextureHandle` to each call and break dependency tracking between them.
+
+`RGTextureHandle` is a per-graph, per-frame handle distinct from
+`Handle<RenderTargetTexture>`/`Handle<Image>`: it indexes the graph's own
+access-history table, not `ResourceManager`'s generational pools.
+
+This is a deliberate, explicit exception to the "no closures, no virtual
+interfaces" convention the Dynamic Rendering migration otherwise follows — the
+lambda-based builder was chosen over a free-function-only alternative because
+it matches every major engine's actual graph API and keeps a pass's resource
+declarations next to the code that uses them.
+
+### Compile and Execute
+
+`Compile()` builds a dependency graph from declared accesses (a pass depends on
+every earlier pass that wrote a resource it reads or writes, and on every
+earlier reader of a resource it writes), then topologically sorts it (Kahn's
+algorithm, ties broken by registration order — so passes with no
+cross-dependency, such as the shadow cascades, which each write a different
+target, keep the order they were registered in). It then walks resources in
+that compiled order to resolve each access's exact `Before`/`After`
+synchronization scope from real per-frame history.
+
+This replaces the conservative, always-identical barrier
+`GraphicsCommandList::BeginRendering` used to hard-code for every call (an
+access mask covering both "a previous frame's shader-read" and "another pass's
+attachment write reused via `LOAD_OP::LOAD`" simultaneously, because it had no
+visibility into which one actually happened). A resource's first touch within a
+frame still uses that same conservative mask — the graph has no cross-frame
+history for it either — but every later access within the same frame now gets
+the exact producer access/stage instead of a guess. `Image`'s own
+`m_CurrentImgLayout` tracking still resolves each barrier's old layout, exactly
+as it does for code that is not on the graph.
+
+`Execute()` records every pass's resolved barriers, then its execute callback,
+in compiled order, into one `CommandBuffer` recording — still one
+`BeginRenderThread`/`EndRenderThread`/`SubmitRenderThread` per frame at the call
+site, no per-pass submission. A graphics pass with declared attachment writes
+records through `GraphicsCommandList::BeginRenderingAttachments`/
+`EndRenderingAttachments` — the same `vkCmdBeginRendering`/`vkCmdEndRendering`
+pair as `BeginRendering`/`EndRendering`, but without inserting a barrier itself,
+since `Execute()` already recorded the graph-resolved one immediately before.
+Only `RenderGraph::Execute` calls these; any code not yet on the graph keeps
+using the self-barriering `BeginRendering`/`EndRendering`.
+
+A shader-resource render target nothing in the graph reads back (Forward's
+`CompositeOutput`, sampled later by the editor viewport outside this graph) gets
+one closing transition to a shader-read layout after the last pass, mirroring
+what `EndRendering` used to do unconditionally for every shader-resource
+attachment when its scope closed.
+
+### Explicitly deferred
+
+- Transient/aliased resource allocation — the graph taking over render-target
+  creation/destruction and reusing memory across non-overlapping resource
+  lifetimes. This is increment 2, once increment 1 is proven in production use.
+- Automatic consecutive-pass Dynamic Rendering scope merging (Sky+Forward is
+  hand-merged into one registered pass instead, see above).
+- Pass culling beyond what the dependency graph naturally excludes; there is no
+  priority- or cost-based scheduling.
+- Async compute / cross-queue scheduling — still gated on explicit queue-family
+  ownership tracking, independent of the graph (see "Compute policy before
+  RenderGraph" below).
+
 ## Compute policy before RenderGraph
 
 Phase 2C.4 does not introduce true asynchronous compute.
@@ -447,8 +569,8 @@ Responsibilities are divided as follows:
 - `DrawStreamReader` decodes the stream with bounds validation.
 - Handle values wider than one word are encoded/decoded without truncation or aliasing violations.
 - `GraphicsCommandList::ExecuteDrawStream` consumes the encoded stream and emits Vulkan draw commands.
-- `RenderMeshInstances` remains a higher-level mesh-instance submission path during migration, but ultimately funnels into `GraphicsCommandList` rather than issuing Vulkan calls through `Renderer`.
-- Material bind-group changes are represented explicitly in the stream.
+- `RenderScene::BuildDrawStream` builds the stream once per frame; `ForwardSceneRenderer` replays the same stream for PreDepth, every shadow cascade, and the Forward geometry pass instead of re-encoding it per pass. There is no separate mesh-instance submission path left — `RenderMeshInstances`/`RasterDrawPushConstants` were removed once every raster pass moved onto the stream.
+- Per-draw state is `{ WorldTransform, MaterialIndex }`, pushed once per draw via a push constant every DrawStream-consuming vertex shader (PreDepth, Shadow, ForwardPBR) declares identically, so `ExecuteDrawStream` can push it unconditionally without special-casing per pipeline. Normal matrices are derived in-shader from `WorldTransform` rather than precomputed CPU-side.
 - Draw statistics are incremented only when `Draw`/`DrawIndexed` is emitted.
 
 The builder contains no Vulkan calls and owns no GPU resources.
@@ -577,20 +699,22 @@ void PushConstants(std::span<const std::byte> data);
 
 ### 2C.4B - Rebuild raster rendering
 
-- **Implemented baseline:** new `ForwardSceneRenderer` against `RenderScene` and material proxies;
-- **Implemented baseline:** modern resource handles, persistent bind groups, HDR/depth output, environment/direct lighting, material texture sampling, and typed graphics recording;
-- **Implemented baseline:** exclusive editor switching with per-scene serialization and complete inactive-renderer teardown;
-- **Pending validation:** Windows/MSVC build, shader compilation, Vulkan validation layers, and visual comparison against the path tracer;
-- **Next:** extract explicit `ForwardGeometryPass` and `SkyboxPass` without changing output;
-- **Next:** validate `DrawStreamBuilder` batching against the same direct mesh-instance output.
+- **Implemented:** new `ForwardSceneRenderer` against `RenderScene` and material proxies;
+- **Implemented:** modern resource handles, persistent bind groups, HDR/depth output, environment/direct lighting, material texture sampling, and typed graphics recording;
+- **Implemented:** exclusive editor switching with per-scene serialization and complete inactive-renderer teardown;
+- **Implemented:** Windows/MSVC build, shader compilation, and Vulkan validation layers clean across Forward, PathTracer, and switching between them;
+- **Implemented:** Dynamic Rendering migration (`0d09b4d`) — `GraphicsCommandList::BeginRendering`/`EndRendering` replace `VkRenderPass`/`VkFramebuffer` entirely;
+- **Implemented:** explicit `PreDepth`, `Shadow` (cascaded shadow maps), `Sky`, `Forward`, and `Composite` passes, all consuming one `DrawStreamBuilder`-encoded stream per frame (see "Scene renderer and pass boundaries" and "DrawStream and mesh submission" above);
+- **Implemented:** RenderGraph increment 1 — pass ordering and precise barrier derivation for both `ForwardSceneRenderer` and `PathTracerSceneRenderer` (see "RenderGraph" above);
+- **Next:** shadow visual quality (bias/flicker tuning) is an open, parked issue, independent of pass/graph structure.
 
 ### Later phases
 
-1. Validate renderer switching, material parity, lighting, resource destruction, and descriptor lifetime on Windows/Vulkan.
-2. Extract `ForwardGeometryPass`, `SkyboxPass`, and `PathTracePass` without changing renderer ownership.
+1. ~~Validate renderer switching, material parity, lighting, resource destruction, and descriptor lifetime on Windows/Vulkan.~~ Done.
+2. ~~Extract `ForwardGeometryPass`, `SkyboxPass`, and `PathTracePass` without changing renderer ownership.~~ Done — PreDepth/Shadow/Sky/Forward/Composite are explicit passes for the forward renderer; the path tracer's per-frame work is one ray-tracing pass.
 3. Build the deferred-hybrid renderer from explicit GBuffer, lighting, RT effect, and composite passes while keeping the full path tracer as a reference renderer.
-4. Introduce the RenderGraph skeleton only when multiple real passes can declare reads/writes and demonstrate barrier/transient-resource value.
-5. Add dependency tracking, automatic barriers, transient aliasing, and optional async-compute scheduling incrementally.
+4. ~~Introduce the RenderGraph skeleton only when multiple real passes can declare reads/writes and demonstrate barrier/transient-resource value.~~ Done — see "RenderGraph" above.
+5. Add transient-resource aliasing and optional async-compute scheduling incrementally. (Dependency tracking and automatic barriers are done as of increment 1.)
 
 ## Phase 2C.4A definition of done
 
@@ -608,7 +732,7 @@ void PushConstants(std::span<const std::byte> data);
 
 ## RenderGraph gate
 
-RenderGraph remains frozen until all of the following are true:
+The graph was gated on all of the following, which are now true:
 
 - renderer ownership is clean;
 - legacy renderer code is gone;
@@ -618,7 +742,10 @@ RenderGraph remains frozen until all of the following are true:
 - transient execution is centralized;
 - statistics and frame indices are reliable.
 
-Only then should the graph add pass ordering, declared resource reads/writes, barriers, transient-resource allocation, and optional cross-queue scheduling.
+Increment 1 (pass ordering, declared resource reads/writes, precise
+per-resource barriers) is implemented for both scene renderers — see
+"RenderGraph" above. Transient-resource allocation and optional cross-queue
+scheduling remain future increments.
 
 ## Windows/Vulkan validation checklist for Phase 2C.4B
 
@@ -632,6 +759,7 @@ Before submitting the Forward baseline:
 6. In Path Tracer, verify accumulation, TLAS instances, duplicate mesh actors, material edits, and light/environment edits still work after a switch.
 7. Resize and maximize/restore the viewport in both renderers; verify the displayed image view remains valid.
 
-Expected limitation of this baseline: Forward has no shadow pass yet and uses an
-approximate split-sum-free specular IBL term. Those are renderer features, not
-reasons to retain any legacy implementation.
+Expected limitation of this baseline: Forward uses an approximate
+split-sum-free specular IBL term. That is a renderer feature, not a reason to
+retain any legacy implementation. Cascaded shadow maps are implemented; visual
+quality (bias/flicker under some view angles) is a separate, tracked follow-up.

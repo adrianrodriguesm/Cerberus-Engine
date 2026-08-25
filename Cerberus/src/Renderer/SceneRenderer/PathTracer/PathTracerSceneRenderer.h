@@ -2,6 +2,7 @@
 
 #include "Renderer/SceneRenderer/SceneRenderer.h"
 #include "Renderer/Descriptor/BindGroup.h"
+#include "Renderer/RenderGraph/RenderGraph.h"
 #include "Renderer/RHI/Pipeline/Pipeline.h"
 #include "Renderer/Scene/RenderScene.h"
 #include "Renderer/RayTracing/ShaderBindingTable.h"
@@ -143,5 +144,9 @@ namespace cerberus
 		glm::mat4 m_PreviousProjection = glm::mat4(1.0f);
 
 		Scope<ShaderBindingTable> m_ShaderBindingTable;
+
+		// Single ray-tracing dispatch pass, ordered/barriered the same way as
+		// ForwardSceneRenderer's graph; rebuilt every FlushRenderPasses() call.
+		RenderGraph m_RenderGraph;
 	};
 }
