@@ -3,12 +3,15 @@
 
 namespace cerberus
 {
+	static constexpr size_t s_CommandBufferSize = 10 * 1024 * 1024; // 10 MB
+
 	RenderQueue::RenderQueue()
-		: m_CommandCount(0)
+		: m_WriteOffset(0)
+		, m_ReadOffset(0)
+		, m_ExecuteDepth(0)
 	{
-		m_CommandBuffer = new uint8_t[10 * 1024 * 1024]; // 10 MB
-		m_CommandPtr = m_CommandBuffer;
-		memset(m_CommandBuffer, 0, 10 * 1024 * 1024);
+		m_CommandBuffer = new uint8_t[s_CommandBufferSize];
+		memset(m_CommandBuffer, 0, s_CommandBufferSize);
 	}
 	RenderQueue::~RenderQueue()
 	{
@@ -17,46 +20,70 @@ namespace cerberus
 
 	void* RenderQueue::Allocate(RenderCommandFn function, uint32_t size)
 	{
+		const size_t entrySize = sizeof(RenderCommandFn) + sizeof(uint32_t) + size;
+		CORE_ASSERT(m_WriteOffset + entrySize <= s_CommandBufferSize, "RenderQueue command buffer is full");
+
+		uint8_t* commandPtr = m_CommandBuffer + m_WriteOffset;
 		// Store the Render Command
-		*(RenderCommandFn*)m_CommandPtr = function;
-		m_CommandPtr += sizeof(RenderCommandFn);
+		*(RenderCommandFn*)commandPtr = function;
+		commandPtr += sizeof(RenderCommandFn);
 		// Store the size of the function that will be executed by the render command
-		*(uint32_t*)m_CommandPtr = size;
-		m_CommandPtr += sizeof(uint32_t);
+		*(uint32_t*)commandPtr = size;
+		commandPtr += sizeof(uint32_t);
 		// Point to the memory of the function
-		void* functionMemory = m_CommandPtr;
-		// Store the function (empty) with their respective size
-		m_CommandPtr += size;
-		// Update the number of render command to execute
-		m_CommandCount++;
-		// Return the function memory
+		void* functionMemory = commandPtr;
+		// Reserve the function's (empty) storage
+		m_WriteOffset += entrySize;
 		return functionMemory;
 	}
 
 	void RenderQueue::Execute()
 	{
-		if (m_CommandCount == 0)
-			return;
-		// Point to the beggining of the buffer
-		uint8_t* commandBuffer = m_CommandBuffer;
-		for (uint32_t i = 0; i < m_CommandCount; i++)
+		// Depth-tracked and offset-based (not "walk from the start, then
+		// reset to the start") specifically so this is safe to call again
+		// from inside a command this same call is currently running --
+		// e.g. EnvironmentMapBaker::Bake() forcing its own just-submitted
+		// ComputePipeline::Invalidate() to run immediately instead of
+		// waiting for the frame's normal flush, when Bake() itself was
+		// reached from inside an already-executing queued command (a
+		// SkyLightComponent's EnvironmentMap resolving lazily mid-draw,
+		// while the whole ImGui frame is itself one such command). The
+		// previous implementation always restarted from the buffer's start
+		// and reset it to empty when done, so a nested call while an outer
+		// one was mid-walk re-ran already-executed commands and then wiped
+		// out the outer call's remaining ones out from under it.
+		m_ExecuteDepth++;
+
+		while (m_ReadOffset < m_WriteOffset)
 		{
+			uint8_t* commandPtr = m_CommandBuffer + m_ReadOffset;
 			// Get the Render Command Function
-			RenderCommandFn renderCommandFn = *(RenderCommandFn*)commandBuffer;
-			// Move the pointer and get function size
-			commandBuffer += sizeof(RenderCommandFn);
-			uint32_t functionSize = *(uint32_t*)commandBuffer;
-			// Move the pointer to the beginning of the function 
-			commandBuffer += sizeof(uint32_t);
+			RenderCommandFn renderCommandFn = *(RenderCommandFn*)commandPtr;
+			commandPtr += sizeof(RenderCommandFn);
+			uint32_t functionSize = *(uint32_t*)commandPtr;
+			commandPtr += sizeof(uint32_t);
+			// Advance the shared read cursor before invoking the command --
+			// not after -- so a command that recursively calls Execute()
+			// (from Submit()'d work of its own) sees this one as already
+			// consumed and starts reading from the next one, rather than
+			// re-reading this same entry's still-live bytes as a fresh
+			// command header.
+			m_ReadOffset += sizeof(RenderCommandFn) + sizeof(uint32_t) + functionSize;
 			// Execute the render command
-			renderCommandFn(commandBuffer);
-			// Move the pointer in the buffer to the end of the function
-			commandBuffer += functionSize;
+			renderCommandFn(commandPtr);
 		}
-		// Reset
-		m_CommandPtr = m_CommandBuffer;
-		m_CommandCount = 0;
+
+		m_ExecuteDepth--;
+
+		// Only the outermost call may rewind the buffer, and only once the
+		// queue is confirmed empty -- re-checked here rather than assumed,
+		// since a nested call made from the last command this loop ran could
+		// have appended more after that command returned but before this
+		// point.
+		if (m_ExecuteDepth == 0 && m_ReadOffset == m_WriteOffset)
+		{
+			m_ReadOffset = 0;
+			m_WriteOffset = 0;
+		}
 	}
-
-
 }

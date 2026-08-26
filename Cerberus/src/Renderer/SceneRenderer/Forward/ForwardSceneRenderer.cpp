@@ -822,6 +822,8 @@ namespace cerberus
 			ImGui::TextUnformatted("Active renderer: Forward");
 			ImGui::Text("Mesh instances: %zu",
 				m_RenderScene ? m_RenderScene->GetRasterMeshInstances().size() : size_t{ 0 });
+			ImGui::Text("Triangles: %u",
+				m_RenderScene ? m_RenderScene->GetTotalTriangleCount() : 0u);
 			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
 				1000.0f / ImGui::GetIO().Framerate,
 				ImGui::GetIO().Framerate);

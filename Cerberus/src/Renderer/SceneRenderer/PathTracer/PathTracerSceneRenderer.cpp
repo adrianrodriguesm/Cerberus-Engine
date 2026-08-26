@@ -747,6 +747,8 @@ namespace cerberus
 				ImGui::Text("Path tracer samples: %u", m_AccumulatedFrames);
 				if (m_RenderScene)
 				{
+					ImGui::Text("Mesh instances: %zu", m_RenderScene->GetRasterMeshInstances().size());
+					ImGui::Text("Triangles: %u", m_RenderScene->GetTotalTriangleCount());
 					const SkyLightProxy& skyLight = m_RenderScene->GetSkyLight();
 					ImGui::Text("SkyLight intensity: %.3f", skyLight.Intensity);
 					ImGui::Text("SkyLight radiance LOD: %.0f", skyLight.SampleLOD);

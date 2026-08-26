@@ -389,33 +389,79 @@ namespace cerberus
 		bounds.Max = glm::vec3(std::numeric_limits<float>::lowest());
 		const auto& vertices = meshSource->GetVertices();
 		std::vector<MeshBounds> submeshBounds;
+		std::vector<MeshBounds> rawSubmeshBounds;
 		submeshBounds.reserve(meshSource->GetSubmeshes().size());
+		rawSubmeshBounds.reserve(meshSource->GetSubmeshes().size());
 		for (const Submesh& submesh : meshSource->GetSubmeshes())
 		{
 			MeshBounds currentSubmeshBounds;
 			currentSubmeshBounds.Min = glm::vec3(std::numeric_limits<float>::max());
 			currentSubmeshBounds.Max = glm::vec3(std::numeric_limits<float>::lowest());
+			MeshBounds currentRawSubmeshBounds;
+			currentRawSubmeshBounds.Min = glm::vec3(std::numeric_limits<float>::max());
+			currentRawSubmeshBounds.Max = glm::vec3(std::numeric_limits<float>::lowest());
 			const size_t firstVertex = submesh.BaseVertex;
 			const size_t vertexEnd = std::min(firstVertex + static_cast<size_t>(submesh.VertexCount), vertices.size());
 			for (size_t vertexIndex = firstVertex; vertexIndex < vertexEnd; ++vertexIndex)
 			{
-				const glm::vec3 position = glm::vec3(submesh.Transform * glm::vec4(vertices[vertexIndex].Position, 1.0f));
+				const glm::vec3& rawPosition = vertices[vertexIndex].Position;
+				const glm::vec3 position = glm::vec3(submesh.Transform * glm::vec4(rawPosition, 1.0f));
 				bounds.Min = glm::min(bounds.Min, position);
 				bounds.Max = glm::max(bounds.Max, position);
 				bounds.Valid = true;
 				currentSubmeshBounds.Min = glm::min(currentSubmeshBounds.Min, position);
 				currentSubmeshBounds.Max = glm::max(currentSubmeshBounds.Max, position);
 				currentSubmeshBounds.Valid = true;
+				currentRawSubmeshBounds.Min = glm::min(currentRawSubmeshBounds.Min, rawPosition);
+				currentRawSubmeshBounds.Max = glm::max(currentRawSubmeshBounds.Max, rawPosition);
+				currentRawSubmeshBounds.Valid = true;
 			}
 			submeshBounds.emplace_back(currentSubmeshBounds);
+			rawSubmeshBounds.emplace_back(currentRawSubmeshBounds);
 		}
 
 		if (meshSource->Handle)
 		{
 			m_MeshBoundsCache[meshSource->Handle] = bounds;
 			m_SubmeshBoundsCache[meshSource->Handle] = std::move(submeshBounds);
+			m_RawSubmeshBoundsCache[meshSource->Handle] = std::move(rawSubmeshBounds);
 		}
 		return bounds;
+	}
+
+	glm::vec3 EditorLayer::GetEntityGizmoPivotOffset(Entity entity)
+	{
+		if (!entity || !entity.HasComponent<MeshComponent>())
+			return glm::vec3(0.0f);
+
+		const auto& meshComponent = entity.GetComponent<MeshComponent>();
+		Ref<Mesh> mesh = AssetManager::GetAsset<Mesh>(meshComponent.MeshHandle);
+		Ref<MeshSource> meshSource = mesh ? mesh->GetMeshSource() : nullptr;
+		if (!meshSource)
+			return glm::vec3(0.0f);
+
+		// A split entity's own TransformComponent already bakes in its
+		// submesh's node Transform (see CreateSplitMeshEntitiesFromDrop), and
+		// the renderer does not reapply it -- so the relevant bounds are the
+		// *raw* submesh bounds, not the whole mesh's. A normal (unfiltered)
+		// entity renders every submesh with its node Transform applied on top
+		// of one shared entity transform, so the whole mesh's own bounds
+		// (which already include each submesh's Transform) are what its local
+		// space actually looks like.
+		if (meshComponent.SubmeshIndex >= 0)
+		{
+			GetMeshBounds(meshSource); // ensures the raw cache below is populated
+			const auto rawBoundsIt = m_RawSubmeshBoundsCache.find(meshSource->Handle);
+			if (rawBoundsIt == m_RawSubmeshBoundsCache.end() ||
+				(size_t)meshComponent.SubmeshIndex >= rawBoundsIt->second.size())
+				return glm::vec3(0.0f);
+
+			const MeshBounds& bounds = rawBoundsIt->second[meshComponent.SubmeshIndex];
+			return bounds.Valid ? (bounds.Min + bounds.Max) * 0.5f : glm::vec3(0.0f);
+		}
+
+		const MeshBounds bounds = GetMeshBounds(meshSource);
+		return bounds.Valid ? (bounds.Min + bounds.Max) * 0.5f : glm::vec3(0.0f);
 	}
 
 	bool EditorLayer::RaycastScene(const ViewportRay& ray, ViewportHit& closestHit)
@@ -1002,7 +1048,19 @@ namespace cerberus
 				// centroid to compute and maintain. For a single selection this
 				// is just that one entity's world transform.
 				Entity pivotEntity = m_SelectedEntities.back();
-				glm::mat4 pivotWorldTransform = m_Scene->GetWorldSpaceTransform(pivotEntity);
+				// Anchor the widget to the mesh's own AABB center rather than
+				// the entity's raw transform origin -- an imported mesh's
+				// origin is frequently off to one side (or, for a split
+				// submesh entity, wherever that submesh's node happened to
+				// sit), which otherwise shows the gizmo floating away from
+				// the geometry it's meant to manipulate. Offsetting only the
+				// pivot's translation (leaving its rotation/scale basis alone)
+				// and still applying deltaMatrix to each entity's own actual
+				// world transform below means rotate/scale correctly pivot
+				// around that AABB center without changing what gets stored.
+				const glm::vec3 pivotLocalOffset = GetEntityGizmoPivotOffset(pivotEntity);
+				glm::mat4 pivotWorldTransform = m_Scene->GetWorldSpaceTransform(pivotEntity)
+					* glm::translate(glm::mat4(1.0f), pivotLocalOffset);
 
 				// Snap value
 				glm::vec3 snap = { 0.f, 0.f, 0.f };

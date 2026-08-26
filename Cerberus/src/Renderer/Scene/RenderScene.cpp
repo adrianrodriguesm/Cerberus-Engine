@@ -29,6 +29,24 @@ namespace cerberus
 		return &m_MeshRegister.MaterialProxies[materialProxyIndex];
 	}
 
+	uint32_t RenderScene::GetTotalTriangleCount() const
+	{
+		uint32_t triangleCount = 0;
+		for (Handle<MeshInstanceProxy> meshInstanceHandle : m_MeshRegister.RasterMeshInstances)
+		{
+			const MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
+			if (!meshInstance)
+				continue;
+
+			const MeshSourceProxy* meshSourceProxy = ResourceManager::GetMeshSourceProxy(meshInstance->MeshSource);
+			if (!meshSourceProxy || meshInstance->SubmeshIndex >= meshSourceProxy->Submeshes.size())
+				continue;
+
+			triangleCount += meshSourceProxy->Submeshes[meshInstance->SubmeshIndex].IndexCount / 3;
+		}
+		return triangleCount;
+	}
+
 	void RenderScene::BuildDrawStream()
 	{
 		CORE_PROFILE_FUNCTION();
@@ -361,6 +379,7 @@ namespace cerberus
 		MeshRegister::RegisteredMeshInstance& registeredInstance = registeredIt->second;
 		registeredInstance.MeshAssetHandle = mesh->Handle;
 		registeredInstance.MeshSourceAssetHandle = meshSourceAssetHandle;
+		registeredInstance.SubmeshFiltered = submeshFilter >= 0;
 		registeredInstance.SubmeshInstances.reserve(submeshesProxy.size());
 		m_MeshRegister.MeshSourceReferenceCounts[meshSourceAssetHandle]++;
 
@@ -550,7 +569,9 @@ namespace cerberus
 			CORE_ASSERT(meshInstance->SubmeshIndex < meshSourceProxy->Submeshes.size(), "MeshInstanceProxy references an invalid submesh");
 
 			const SubmeshSourceProxy& submeshProxy = meshSourceProxy->Submeshes[meshInstance->SubmeshIndex];
-			meshInstance->WorldTransform = transform * submeshProxy.Transform;
+			meshInstance->WorldTransform = registeredInstance.SubmeshFiltered
+				? transform
+				: transform * submeshProxy.Transform;
 		}
 	}
 

@@ -1,6 +1,6 @@
 # Cerberus Renderer Architecture
 
-Last updated: 2026-08-25
+Last updated: 2026-08-26
 
 This document defines the current renderer ownership model, the command-recording architecture, and the RenderGraph that now orders passes and derives barriers for both scene renderers.
 
@@ -110,6 +110,25 @@ They must not capture:
 
 `RenderQueueManager` owns CPU-side render command execution. It does not own GPU resources, descriptor lifetime, or deferred destruction.
 
+`RenderQueue::Execute()` is reentrant: it is valid to call it again from inside
+a command it is currently running. This matters because `ImGuiRenderer::Render()`
+submits the entire ImGui frame (`NewFrame` -> `Application::OnImGuiRender` ->
+`ImGui::Render`/`EndFrame`) as a single queued command, and arbitrary panel
+code running inside `OnImGuiRender` — a lazily-loaded asset resolving, for
+example — can need GPU setup work to complete immediately rather than waiting
+for the frame's own flush (`EnvironmentMapBaker::Bake()` forcing its
+just-submitted `ComputePipeline::Invalidate()` to run now is the concrete case
+that surfaced this). The queue uses a persistent read cursor and an
+execute-depth counter rather than always restarting from the buffer's start
+and rewinding it to empty when done: a nested call shares the outer call's
+exact read position, so it can never re-run a command the outer call already
+executed, and only the outermost call is allowed to rewind the buffer, and
+only once every command — including any a nested call appended — has actually
+been read. The underlying command buffer stays one fixed-size allocation,
+never reallocated mid-frame; a command's captured closure lives at a fixed
+address for the duration of its own execution, so nothing that runs from
+inside it can invalidate that address out from under it.
+
 ### ImGuiRenderer
 
 `ImGuiRenderer` owns Dear ImGui backend state:
@@ -181,6 +200,34 @@ or renderer-specific shader modules.
 - BLAS/TLAS data required by ray tracing.
 
 It bridges logical scene data and render passes without performing asset serialization or global renderer lifecycle work.
+
+`RegisterMesh`'s optional `submeshIndex` filters registration down to one
+submesh instead of every submesh in the mesh — the editor's "split a
+multi-submesh mesh into per-submesh entities" feature uses this so each
+resulting entity independently registers, transforms, and (via `MeshComponent
+::SubmeshIndex`) reselects only its own submesh. A filtered instance's
+`MeshInstanceProxy::WorldTransform` is the caller's transform alone: the
+entity's own `TransformComponent` already bakes in that submesh's node
+`Transform` at creation time (see `EditorLayer::CreateSplitMeshEntitiesFromDrop`),
+so reapplying it here would double it up. `RegisterMesh` and `UpdateMeshTransform`
+must therefore agree on whether a given `RenderObjectID` was filtered —
+`MeshRegister::RegisteredMeshInstance::SubmeshFiltered` records that decision
+once at registration time and both call sites read it, rather than each
+re-deriving it independently and risking disagreement (this was a real bug:
+`UpdateMeshTransform` used to always reapply the submesh `Transform`,
+double-applying it and desyncing a split entity's render position from its
+`TransformComponent` the moment the entity moved after creation).
+
+`GetTotalTriangleCount()` sums each registered instance's own submesh
+`IndexCount` once, independent of how many raster passes actually draw it.
+This is deliberately not derived from `RendererFrameStatistics::DrawCallCount`
+or a per-draw triangle tally in `GraphicsCommandList` — the Forward renderer
+draws every instance multiple times a frame (PreDepth, each shadow cascade,
+Forward geometry), so a draw-time sum would count scene geometry once per
+pass instead of once per instance and report a number with no fixed
+relationship to actual scene complexity. See "Statistics policy" below for
+where the per-draw counters this deliberately does not use are reset and
+incremented.
 
 ### Material ownership and render proxies
 
@@ -606,6 +653,14 @@ CPU renderer statistics are frame-scoped.
 - Keep Vulkan timestamp and pipeline-statistics query ownership in persistent `CommandBuffer` infrastructure.
 
 This makes statistics independent of how many passes are executed in a frame.
+
+`RenderScene::GetTotalTriangleCount()` and `GetRasterMeshInstances().size()`
+are a separate category: scene-geometry counts, not frame-execution counts.
+They are not part of `RendererFrameStatistics` and are never reset per frame
+— they are recomputed on demand from the current mesh-instance registration,
+so they stay correct across any number of passes without needing a reset
+point at all. Both scene renderers show them in their "Renderer" window's
+"Statistics" section, alongside the existing FPS/VRAM readout.
 
 ## Instrumentation
 

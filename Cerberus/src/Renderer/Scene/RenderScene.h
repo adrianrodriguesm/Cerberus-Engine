@@ -91,6 +91,14 @@ namespace cerberus
 		{
 			return m_MeshRegister.RasterMeshInstances;
 		}
+		// Total triangles across every registered submesh instance -- scene
+		// geometric complexity, not a per-frame rasterization count. A raster
+		// pass may draw the same instance several times a frame (PreDepth,
+		// each shadow cascade, Forward), which would inflate a draw-time sum
+		// well past what the scene actually contains; this instead reflects
+		// each instance's own submesh IndexCount exactly once, the same way
+		// for both scene renderers regardless of how many passes they run.
+		uint32_t GetTotalTriangleCount() const;
 		const MaterialProxy* GetMaterialProxy(uint32_t materialProxyIndex) const;
 		const std::vector<Handle<Texture2D>>& GetMaterialTextures() const { return m_MeshRegister.GPUTextures; }
 		const std::vector<Handle<Texture2D>>& GetRayTracingTextures() const { return GetMaterialTextures(); }
@@ -137,6 +145,13 @@ namespace cerberus
 				MeshHandle MeshAssetHandle = 0;
 				MeshSourceHandle MeshSourceAssetHandle = 0;
 				std::vector<Handle<MeshInstanceProxy>> SubmeshInstances;
+				// Mirrors RegisterMesh's submeshFilter >= 0 case: the caller's
+				// transform already bakes in that one submesh's node Transform,
+				// so UpdateMeshTransform must not reapply it either -- it used
+				// to unconditionally reapply it for every instance, which
+				// re-rotated/re-scaled a split entity on top of its already-
+				// baked pose the moment it moved.
+				bool SubmeshFiltered = false;
 			};
 
 			struct AccelerationStructureInfo
