@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "ForwardSceneRenderer.h"
 
+#include "Core/Profiler.h"
 #include "ImGui/ImGuiUI.h"
 #include "Renderer/RHI/Command/GraphicsCommandList.h"
 #include "Renderer/Core/RenderQueueManager.h"
@@ -478,10 +479,11 @@ namespace cerberus
 		RenderObjectID renderObjectID,
 		const Ref<Mesh>& mesh,
 		const Ref<MaterialTable>& materialTable,
-		const glm::mat4& transform)
+		const glm::mat4& transform,
+		int32_t submeshIndex)
 	{
 		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
-		return m_RenderScene->RegisterMesh(renderObjectID, mesh, materialTable, transform);
+		return m_RenderScene->RegisterMesh(renderObjectID, mesh, materialTable, transform, submeshIndex);
 	}
 
 	bool ForwardSceneRenderer::UnregisterMesh(RenderObjectID renderObjectID)
@@ -641,13 +643,18 @@ namespace cerberus
 
 	void ForwardSceneRenderer::Render(const SceneRendererCamera& sceneRendererCamera)
 	{
+		CORE_PROFILE_FUNCTION();
+
 		m_SceneRendererCamera = sceneRendererCamera;
-		UpdateCameraBuffer();
-		UpdateLightingBuffer();
-		UpdateMaterialBuffer();
-		UpdateTextureTable();
-		UpdateEnvironmentBindings();
-		UpdateCompositeBindings();
+		{
+			CORE_PROFILE_SCOPE("UpdateBuffersAndBindings");
+			UpdateCameraBuffer();
+			UpdateLightingBuffer();
+			UpdateMaterialBuffer();
+			UpdateTextureTable();
+			UpdateEnvironmentBindings();
+			UpdateCompositeBindings();
+		}
 		m_RenderScene->BuildDrawStream();
 
 		// Primary-light-only shadows for now: cascades are a pure function of the
@@ -791,10 +798,20 @@ namespace cerberus
 
 		CommandBuffer* commandBuffer = Renderer::GetMainCommandBuffer(m_Specification.SwapChainTarget);
 		CORE_ASSERT(commandBuffer, "Invalid Forward main command buffer");
-		commandBuffer->BeginRenderThread();
-		m_RenderGraph.Execute(*commandBuffer, frameIndex, &Renderer::GetFrameStatistics());
-		commandBuffer->EndRenderThread();
-		commandBuffer->SubmitRenderThread();
+		{
+			CORE_PROFILE_SCOPE("GraphExecute");
+			commandBuffer->BeginRenderThread();
+			m_RenderGraph.Execute(*commandBuffer, frameIndex, &Renderer::GetFrameStatistics());
+			commandBuffer->EndRenderThread();
+		}
+		{
+			// SubmitRenderThread's vkWaitForFences blocks here until the GPU
+			// finishes this frame-in-flight slot's previous use -- isolated in
+			// its own scope specifically to confirm whether that wait is what
+			// dominates Render()'s total time.
+			CORE_PROFILE_SCOPE("SubmitRenderThread");
+			commandBuffer->SubmitRenderThread();
+		}
 	}
 
 	void ForwardSceneRenderer::OnImGuiRender()

@@ -11,7 +11,7 @@ namespace cerberus
 		virtual void Shutdown() = 0;
 		virtual void OnImGuiRender(bool& isOpen) = 0;
 		virtual void SetSceneContext(const Ref<Scene>& context) {}
-		virtual void SetSelectionContext(const Entity& context) {}
+		virtual void SetSelectionContext(const std::vector<Entity>& context) {}
 	};
 
 	struct PanelData
@@ -53,7 +53,7 @@ namespace cerberus
 		}
 
 
-		void SetSelectionContext(const Entity& context)
+		void SetSelectionContext(const std::vector<Entity>& context)
 		{
 			for (auto& [id, panelData] : m_Panels)
 				panelData.Panel->SetSelectionContext(context);

@@ -22,7 +22,7 @@ namespace cerberus
 
 		virtual void Render(const SceneRendererCamera& sceneRendererCamera) override;
 
-		virtual bool RegisterMesh(RenderObjectID renderObjectID, const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) override;
+		virtual bool RegisterMesh(RenderObjectID renderObjectID, const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform, int32_t submeshIndex = -1) override;
 		virtual bool UnregisterMesh(RenderObjectID renderObjectID) override;
 		virtual void UpdateMeshTransform(RenderObjectID renderObjectID, const glm::mat4& transform) override;
 		virtual bool UpdateMeshMaterials(RenderObjectID renderObjectID, const Ref<MaterialTable>& materialTable) override;

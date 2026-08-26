@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Swapchain.h"
+#include "Core/Profiler.h"
 #include "Renderer/Core/Renderer.h"
 #include "Renderer/RHI/ResourceManager.h"
 #include "Renderer/Core/RenderQueueManager.h"
@@ -43,7 +44,14 @@ namespace cerberus
 
 		// Get index of next image to be drawn to, and signal semaphore when ready to be drawn to
 		// By setting timeout to UINT64_MAX we will always wait until the next image has been acquired or an actual error is thrown
-		VkResult result = vkAcquireNextImageKHR(vulkanDevice, m_Swapchain, UINT64_MAX, m_Semaphores.PresentComplete, VK_NULL_HANDLE, &m_CurrentImageIndex);
+		VkResult result;
+		{
+			// Blocks until a swapchain image is free -- under FIFO/vsync
+			// present modes this is where "waiting for the display" actually
+			// shows up, not in Present() itself.
+			CORE_PROFILE_SCOPE("AcquireNextImage");
+			result = vkAcquireNextImageKHR(vulkanDevice, m_Swapchain, UINT64_MAX, m_Semaphores.PresentComplete, VK_NULL_HANDLE, &m_CurrentImageIndex);
+		}
 		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
 			RecreateSwapchain();
 		else if (result != VK_SUCCESS)

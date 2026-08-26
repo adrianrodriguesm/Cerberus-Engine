@@ -31,7 +31,9 @@ namespace cerberus
 		virtual void SetViewportSize(uint32_t width, uint32_t height) = 0;
 
 		virtual bool IsRegistered(RenderObjectID renderObjectID) = 0;
-		virtual bool RegisterMesh(RenderObjectID renderObjectID, const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) = 0;
+		// submeshIndex: -1 registers every submesh (default). >= 0 filters
+		// registration down to that single submesh index.
+		virtual bool RegisterMesh(RenderObjectID renderObjectID, const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform, int32_t submeshIndex = -1) = 0;
 		virtual bool UnregisterMesh(RenderObjectID renderObjectID) = 0;
 		virtual void UpdateMeshTransform(RenderObjectID renderObjectID, const glm::mat4& transform) = 0;
 		virtual bool UpdateMeshMaterials(RenderObjectID renderObjectID, const Ref<MaterialTable>& materialTable) = 0;

@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "PathTracerSceneRenderer.h"
+#include "Core/Profiler.h"
 #include "Renderer/Core/Renderer.h"
 #include "Renderer/Core/RendererResources.h"
 #include "Asset/AssetManager.h"
@@ -620,10 +621,11 @@ namespace cerberus
 		RenderObjectID renderObjectID,
 		const Ref<Mesh>& mesh,
 		const Ref<MaterialTable>& materialTable,
-		const glm::mat4& transform)
+		const glm::mat4& transform,
+		int32_t submeshIndex)
 	{
 		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
-		const bool registered = m_RenderScene->RegisterMesh(renderObjectID, mesh, materialTable, transform);
+		const bool registered = m_RenderScene->RegisterMesh(renderObjectID, mesh, materialTable, transform, submeshIndex);
 		if (registered)
 			ResetAccumulation();
 		return registered;
@@ -631,6 +633,8 @@ namespace cerberus
 
 	void PathTracerSceneRenderer::Render(const SceneRendererCamera& sceneRendererCamera)
 	{
+		CORE_PROFILE_FUNCTION();
+
 		if (HasCameraChanged(sceneRendererCamera))
 		{
 			ResetAccumulation();

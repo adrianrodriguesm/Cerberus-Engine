@@ -40,8 +40,12 @@ namespace cerberus
 		virtual void OnEvent(Event& event) override;
 		virtual void OnUpdate(Timestep ts) override;
 
-		void SelectEntity(const Entity& entity);
+		void SelectEntities(const std::vector<Entity>& entities);
+		// Convenience wrapper for the many call sites that only ever select one
+		// entity at a time.
+		void SelectEntity(const Entity& entity) { SelectEntities({ entity }); }
 		void DuplicateSelectedEntity();
+		void DeleteSelectedEntities();
 		void FocusEntity(Entity entity);
 
 		void NewScene();
@@ -62,19 +66,27 @@ namespace cerberus
 		bool RaycastScene(const ViewportRay& ray, ViewportHit& closestHit);
 		MeshBounds GetMeshBounds(const Ref<MeshSource>& meshSource);
 		AssetHandle ResolveDroppedMesh(AssetHandle assetHandle);
-		Entity CreateMeshEntityFromDrop(AssetHandle meshHandle, const ViewportRay& ray, const ViewportHit* surfaceHit);
+		glm::vec3 ComputeDropPlacement(const ViewportRay& ray, const ViewportHit* surfaceHit) const;
+		Entity CreateMeshEntityFromDrop(AssetHandle meshHandle, const glm::vec3& placement, Entity parent = {});
+		Entity CreateSplitMeshEntitiesFromDrop(AssetHandle meshHandle, const glm::vec3& placement, Entity parent = {});
+		void RenderSubmeshSplitPopup();
+		// Dropping a mesh asset onto an existing Scene Hierarchy node instead of
+		// the viewport -- same resolve/split-popup flow, but parented under the
+		// dropped-on entity at identity local transform instead of root-level at
+		// a ray/hit position.
+		void OnAssetDroppedOnEntity(AssetHandle assetHandle, Entity parent);
 		bool ApplyMaterialFromDrop(AssetHandle materialHandle, const ViewportHit& hit);
 		void RequestSceneRenderer(SceneRendererType rendererType);
 		void RecreateSceneRenderer();
 
 		Ref<Scene> m_Scene;
-		Entity m_SelectedEntity;
+		std::vector<Entity> m_SelectedEntities;
 
 		int m_GizmoType = -1;
 		bool m_ViewportPanelMouseOver = false, m_ViewportPanelFocused = false;
 		bool m_IsViewportMaximized = false;
 
-		std::function<void(Entity)> m_SelectionChangedCallback = [&](const Entity& entity) { SelectEntity(entity); };
+		std::function<void(const std::vector<Entity>&)> m_SelectionChangedCallback = [&](const std::vector<Entity>& entities) { SelectEntities(entities); };
 
 		// The editor owns exactly one concrete renderer. Scope prevents inactive
 		// renderers from remaining alive through shared references.
@@ -88,5 +100,13 @@ namespace cerberus
 		std::vector<Entity> m_Entities;
 		std::unordered_map<AssetHandle, MeshBounds> m_MeshBoundsCache;
 		std::unordered_map<AssetHandle, std::vector<MeshBounds>> m_SubmeshBoundsCache;
+
+		// Stashed between opening "Split Into Submeshes?" and the user's choice
+		// on a later frame.
+		AssetHandle m_PendingSplitMeshHandle = 0;
+		glm::vec3 m_PendingSplitPlacement = glm::vec3(0.0f);
+		// Valid only when the split was triggered by dropping onto a Hierarchy
+		// node rather than the viewport.
+		Entity m_PendingSplitParent;
 	};
 }

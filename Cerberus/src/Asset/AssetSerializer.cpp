@@ -166,6 +166,18 @@ namespace cerberus
 		out << YAML::BeginMap; // Entity
 		out << YAML::Key << "Entity" << YAML::Value << entity.GetComponent<IDComponent>().ID;
 
+		{
+			auto& relationship = entity.GetComponent<RelationshipComponent>();
+			out << YAML::Key << "RelationshipComponent";
+			out << YAML::BeginMap; // RelationshipComponent
+			out << YAML::Key << "Parent" << YAML::Value << (uint64_t)relationship.Parent;
+			out << YAML::Key << "Children" << YAML::Value << YAML::BeginSeq;
+			for (UUID childID : relationship.Children)
+				out << (uint64_t)childID;
+			out << YAML::EndSeq;
+			out << YAML::EndMap; // RelationshipComponent
+		}
+
 		if (entity.HasComponent<TagComponent>())
 		{
 			out << YAML::Key << "TagComponent";
@@ -206,6 +218,8 @@ namespace cerberus
 			out << YAML::BeginMap; // MeshComponent
 			auto& meshComponent = entity.GetComponent<MeshComponent>();
 			out << YAML::Key << "AssetHandle" << YAML::Value << meshComponent.MeshHandle;
+			if (meshComponent.SubmeshIndex != -1)
+				out << YAML::Key << "SubmeshIndex" << YAML::Value << meshComponent.SubmeshIndex;
 			auto materialTable = meshComponent.MaterialTable;
 			if (materialTable->GetMaterialCount() > 0)
 			{
@@ -332,8 +346,22 @@ namespace cerberus
 
 				NV_CORE_TRACE("Deserialized entity with ID = {0}, name = {1}", uuid, name);
 
-				Entity deserializedEntity = scene->CreateEntity(name);
-				deserializedEntity.GetComponent<IDComponent>().ID = UUID(uuid);
+				// CreateEntityWithUUID (not CreateEntity + overwriting the ID
+				// afterward) so Scene::m_EntityMap is keyed by the real UUID from
+				// the moment the entity exists -- RelationshipComponent below
+				// references other entities by this same UUID.
+				Entity deserializedEntity = scene->CreateEntityWithUUID(UUID(uuid), name);
+
+				auto relationshipComponent = entity["RelationshipComponent"];
+				if (relationshipComponent)
+				{
+					auto& rc = deserializedEntity.GetComponent<RelationshipComponent>();
+					if (relationshipComponent["Parent"])
+						rc.Parent = UUID(relationshipComponent["Parent"].as<uint64_t>());
+					if (relationshipComponent["Children"])
+						for (auto childNode : relationshipComponent["Children"])
+							rc.Children.push_back(UUID(childNode.as<uint64_t>()));
+				}
 
 				auto transformComponent = entity["TransformComponent"];
 				if (transformComponent)
@@ -350,6 +378,7 @@ namespace cerberus
 				{
 					auto& mc = deserializedEntity.AddComponent<MeshComponent>();
 					mc.MeshHandle = meshComponent["AssetHandle"].as<uint64_t>();
+					mc.SubmeshIndex = meshComponent["SubmeshIndex"] ? meshComponent["SubmeshIndex"].as<int32_t>() : -1;
 					mc.MaterialTable = CreateRef<MaterialTable>();
 					if (meshComponent["MaterialTable"])
 					{

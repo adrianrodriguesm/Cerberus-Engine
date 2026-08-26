@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "EditorLayer.h"
 #include "Core/Application.h"
+#include "Core/Profiler.h"
+#include "Renderer/Core/Renderer.h"
 #include <imgui/imgui.h>
 #include <algorithm>
 #include <cmath>
@@ -132,6 +134,10 @@ namespace cerberus
 		{
 			FocusEntity(entity);
 		});
+		sceneHierarchyPanel->SetAssetDroppedOnEntityCallback([this](AssetHandle assetHandle, Entity target)
+		{
+			OnAssetDroppedOnEntity(assetHandle, target);
+		});
 		m_EditorPanelManager = CreateRef<EditorPanelManager>();
 		m_EditorPanelManager->AddPanel("ScenePropertiesPanel", { true, scenePropertiesPanel });
 		m_EditorPanelManager->AddPanel("SceneHierarchyPanel", { true, sceneHierarchyPanel });
@@ -166,6 +172,7 @@ namespace cerberus
 
 		if (m_SceneRenderer)
 			m_SceneRenderer->OnImGuiRender();
+		Profiler::OnImGuiRender(Renderer::GetMainCommandBuffer());
 		m_EditorPanelManager->OnImGuiRender();
 		AssetEditorManager::OnImGuiRender();
 	}
@@ -251,20 +258,37 @@ namespace cerberus
 		NV_CORE_INFO("Active SceneRenderer: {0}", std::string(SceneRendererTypeToString(m_ActiveRendererType)));
 	}
 
-	void EditorLayer::SelectEntity(const Entity& entity)
+	void EditorLayer::SelectEntities(const std::vector<Entity>& entities)
 	{
-		m_SelectedEntity = entity;
-		m_EditorPanelManager->SetSelectionContext(entity);
+		m_SelectedEntities = entities;
+		m_EditorPanelManager->SetSelectionContext(entities);
 	}
 
 	void EditorLayer::DuplicateSelectedEntity()
 	{
-		if (!m_Scene || !m_SelectedEntity)
+		if (!m_Scene || m_SelectedEntities.empty())
 			return;
 
-		Entity duplicateEntity = m_Scene->DuplicateEntity(m_SelectedEntity);
-		if (duplicateEntity)
-			SelectEntity(duplicateEntity);
+		std::vector<Entity> duplicates;
+		for (Entity entity : m_SelectedEntities)
+		{
+			Entity duplicateEntity = m_Scene->DuplicateEntity(entity);
+			if (duplicateEntity)
+				duplicates.push_back(duplicateEntity);
+		}
+		if (!duplicates.empty())
+			SelectEntities(duplicates);
+	}
+
+	void EditorLayer::DeleteSelectedEntities()
+	{
+		if (!m_Scene || m_SelectedEntities.empty())
+			return;
+
+		std::vector<Entity> entitiesToDelete = m_SelectedEntities;
+		SelectEntities({});
+		for (Entity entity : entitiesToDelete)
+			m_Scene->DestroyEntity(entity);
 	}
 
 	void EditorLayer::FocusEntity(Entity entity)
@@ -502,7 +526,17 @@ namespace cerberus
 		return mesh->Handle;
 	}
 
-	Entity EditorLayer::CreateMeshEntityFromDrop(AssetHandle meshHandle, const ViewportRay& ray, const ViewportHit* surfaceHit)
+	glm::vec3 EditorLayer::ComputeDropPlacement(const ViewportRay& ray, const ViewportHit* surfaceHit) const
+	{
+		if (surfaceHit)
+			return surfaceHit->Position;
+
+		const float cameraTargetDistance = glm::distance(m_Camera.GetPosition(), m_Camera.GetTarget());
+		const float placementDistance = glm::max(cameraTargetDistance, 5.0f);
+		return ray.Origin + ray.Direction * placementDistance;
+	}
+
+	Entity EditorLayer::CreateMeshEntityFromDrop(AssetHandle meshHandle, const glm::vec3& placement, Entity parent)
 	{
 		Ref<Mesh> mesh = AssetManager::GetAsset<Mesh>(meshHandle);
 		if (!m_Scene || !mesh)
@@ -511,18 +545,133 @@ namespace cerberus
 		const AssetMetadata& metadata = AssetManager::GetMetadata(meshHandle);
 		const std::string entityName = metadata.IsValid() ? metadata.FilePath.stem().string() : "Mesh";
 		Entity entity = m_Scene->CreateEntity(entityName);
-		auto& transform = entity.GetComponent<TransformComponent>();
-		if (surfaceHit)
-			transform.SetTranslation(surfaceHit->Position);
-		else
-		{
-			const float cameraTargetDistance = glm::distance(m_Camera.GetPosition(), m_Camera.GetTarget());
-			const float placementDistance = glm::max(cameraTargetDistance, 5.0f);
-			transform.SetTranslation(ray.Origin + ray.Direction * placementDistance);
-		}
+		entity.GetComponent<TransformComponent>().SetTranslation(placement);
 		entity.AddComponent<MeshComponent>(meshHandle);
+		if (parent)
+			m_Scene->ParentEntity(entity, parent);
 		SelectEntity(entity);
 		return entity;
+	}
+
+	Entity EditorLayer::CreateSplitMeshEntitiesFromDrop(AssetHandle meshHandle, const glm::vec3& placement, Entity parent)
+	{
+		Ref<Mesh> mesh = AssetManager::GetAsset<Mesh>(meshHandle);
+		Ref<MeshSource> meshSource = mesh ? mesh->GetMeshSource() : nullptr;
+		if (!m_Scene || !meshSource)
+			return {};
+
+		const AssetMetadata& metadata = AssetManager::GetMetadata(meshHandle);
+		const std::string baseName = metadata.IsValid() ? metadata.FilePath.stem().string() : "Mesh";
+
+		// Pure group node: no MeshComponent of its own, carries the drop
+		// placement so every child (whose own local transform is the
+		// submesh's baked node offset, set below) ends up exactly where the
+		// whole mesh would have landed.
+		Entity group = m_Scene->CreateEntity(baseName);
+		group.GetComponent<TransformComponent>().SetTranslation(placement);
+		if (parent)
+			m_Scene->ParentEntity(group, parent);
+
+		const auto& submeshes = meshSource->GetSubmeshes();
+		for (uint32_t i = 0; i < submeshes.size(); i++)
+		{
+			const std::string childName = baseName + "_" + (submeshes[i].NodeName.empty()
+				? std::to_string(i) : submeshes[i].NodeName);
+			Entity child = m_Scene->CreateEntity(childName);
+			// Bake the submesh's own node transform (its offset within the
+			// imported model's node hierarchy) into the child's local
+			// TransformComponent, rather than leaving it identity -- the
+			// renderer skips re-applying it for a submesh-filtered instance
+			// (RenderScene::RegisterMesh), so the entity's transform must be
+			// the whole story or the gizmo desyncs from the rendered mesh.
+			glm::vec3 translation, rotation, scale;
+			math::DecomposeTransform(submeshes[i].Transform, translation, rotation, scale);
+			auto& tc = child.GetComponent<TransformComponent>();
+			tc.SetTranslation(translation);
+			tc.SetRotation(glm::degrees(rotation));
+			tc.SetScale(scale);
+			auto& mc = child.AddComponent<MeshComponent>(meshHandle);
+			mc.SubmeshIndex = (int32_t)i;
+			m_Scene->ParentEntity(child, group);
+		}
+
+		SelectEntity(group);
+		return group;
+	}
+
+	void EditorLayer::RenderSubmeshSplitPopup()
+	{
+		if (ImGui::BeginPopupModal("Split Into Submeshes?", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			if (!m_PendingSplitMeshHandle)
+			{
+				ImGui::CloseCurrentPopup();
+				ImGui::EndPopup();
+				return;
+			}
+
+			Ref<Mesh> mesh = AssetManager::GetAsset<Mesh>(m_PendingSplitMeshHandle);
+			Ref<MeshSource> meshSource = mesh ? mesh->GetMeshSource() : nullptr;
+			const size_t submeshCount = meshSource ? meshSource->GetSubmeshes().size() : 0;
+			ImGui::Text("This mesh has %zu submeshes. Break it into separate entities?", submeshCount);
+
+			const float columnWidth = ImGui::GetContentRegionAvailWidth() / 4;
+			ImGui::Columns(4, 0, false);
+			ImGui::SetColumnWidth(0, columnWidth);
+			ImGui::SetColumnWidth(1, columnWidth);
+			ImGui::SetColumnWidth(2, columnWidth);
+			ImGui::SetColumnWidth(3, columnWidth);
+			ImGui::NextColumn();
+
+			if (ImGui::Button("Yes", ImVec2(columnWidth, 0)))
+			{
+				CreateSplitMeshEntitiesFromDrop(m_PendingSplitMeshHandle, m_PendingSplitPlacement, m_PendingSplitParent);
+				m_PendingSplitMeshHandle = 0;
+				m_PendingSplitParent = {};
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::NextColumn();
+			ImGui::SetItemDefaultFocus();
+			if (ImGui::Button("No", ImVec2(columnWidth, 0)))
+			{
+				CreateMeshEntityFromDrop(m_PendingSplitMeshHandle, m_PendingSplitPlacement, m_PendingSplitParent);
+				m_PendingSplitMeshHandle = 0;
+				m_PendingSplitParent = {};
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::NextColumn();
+			ImGui::EndPopup();
+		}
+	}
+
+	void EditorLayer::OnAssetDroppedOnEntity(AssetHandle assetHandle, Entity parent)
+	{
+		const AssetMetadata& metadata = AssetManager::GetMetadata(assetHandle);
+		// Only meshes have a defined meaning here -- there's no viewport
+		// surface hit to apply a Material to, and no scene-open action makes
+		// sense for a hierarchy node.
+		if (metadata.Type != AssetType::Mesh && metadata.Type != AssetType::MeshSource)
+			return;
+
+		const AssetHandle meshHandle = ResolveDroppedMesh(assetHandle);
+		if (!meshHandle)
+			return;
+
+		Ref<Mesh> mesh = AssetManager::GetAsset<Mesh>(meshHandle);
+		Ref<MeshSource> meshSource = mesh ? mesh->GetMeshSource() : nullptr;
+		if (meshSource && meshSource->GetSubmeshes().size() > 1)
+		{
+			m_PendingSplitMeshHandle = meshHandle;
+			m_PendingSplitPlacement = glm::vec3(0.0f);
+			m_PendingSplitParent = parent;
+			ImGui::OpenPopup("Split Into Submeshes?");
+		}
+		else
+		{
+			CreateMeshEntityFromDrop(meshHandle, glm::vec3(0.0f), parent);
+		}
 	}
 
 	bool EditorLayer::ApplyMaterialFromDrop(AssetHandle materialHandle, const ViewportHit& hit)
@@ -554,7 +703,7 @@ namespace cerberus
 		m_Scene = CreateRef<Scene>("New Scene");
 		m_PendingRendererType = m_Scene->GetRendererType();
 		m_RendererRecreationRequested = true;
-		SelectEntity({});
+		SelectEntities({});
 		m_EditorPanelManager->SetSceneContext(m_Scene);
 	}
 
@@ -573,7 +722,7 @@ namespace cerberus
 			m_Scene->SetName(relativePath.stem().string());
 			m_PendingRendererType = m_Scene->GetRendererType();
 			m_RendererRecreationRequested = true;
-			SelectEntity({});
+			SelectEntities({});
 			m_EditorPanelManager->SetSceneContext(m_Scene);
 
 		}
@@ -587,7 +736,7 @@ namespace cerberus
 		m_Scene = scene;
 		m_PendingRendererType = m_Scene->GetRendererType();
 		m_RendererRecreationRequested = true;
-		SelectEntity({});
+		SelectEntities({});
 		m_EditorPanelManager->SetSceneContext(m_Scene);
 	}
 
@@ -659,6 +808,9 @@ namespace cerberus
 				DuplicateSelectedEntity();
 			break;
 		}
+		case Key::Delete:
+			DeleteSelectedEntities();
+			break;
 		// Gizmos
 		case Key::Q:
 			m_GizmoType = -1;
@@ -804,7 +956,22 @@ namespace cerberus
 							{
 								const AssetHandle meshHandle = ResolveDroppedMesh(assetHandle);
 								if (meshHandle)
-									CreateMeshEntityFromDrop(meshHandle, ray, hasSurfaceHit ? &hit : nullptr);
+								{
+									const glm::vec3 placement = ComputeDropPlacement(ray, hasSurfaceHit ? &hit : nullptr);
+									Ref<Mesh> droppedMesh = AssetManager::GetAsset<Mesh>(meshHandle);
+									Ref<MeshSource> droppedMeshSource = droppedMesh ? droppedMesh->GetMeshSource() : nullptr;
+									if (droppedMeshSource && droppedMeshSource->GetSubmeshes().size() > 1)
+									{
+										m_PendingSplitMeshHandle = meshHandle;
+										m_PendingSplitPlacement = placement;
+										m_PendingSplitParent = {};
+										ImGui::OpenPopup("Split Into Submeshes?");
+									}
+									else
+									{
+										CreateMeshEntityFromDrop(meshHandle, placement);
+									}
+								}
 							}
 							else if (metadata.Type == AssetType::Material && hasSurfaceHit)
 							{
@@ -816,8 +983,10 @@ namespace cerberus
 				ImGui::EndDragDropTarget();
 			}
 
+			RenderSubmeshSplitPopup();
+
 			// ImGuizmo
-			if (m_SelectedEntity && m_GizmoType != -1)
+			if (!m_SelectedEntities.empty() && m_GizmoType != -1)
 			{
 				ImGuizmo::SetOrthographic(false);
 				// ImGuizmo works in absolute ImGui screen coordinates. Match the
@@ -825,10 +994,16 @@ namespace cerberus
 				// that are not part of the SceneRenderer viewport.
 				ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
 				ImGuizmo::SetRect(viewportPosition.x, viewportPosition.y, viewportSize.x, viewportSize.y);
-				// 3 Draw Gizmo
-				// -- Entity Transfom
-				auto& tc = m_SelectedEntity.GetComponent<TransformComponent>();
-				glm::mat4 transform = tc.GetTransform();
+
+				// The gizmo is shown/edited in world space (it's drawn against
+				// the camera's view/projection) using the last-selected entity
+				// as the pivot -- the "active object" convention other editors
+				// use for a multi-selection gizmo, avoiding a separate group
+				// centroid to compute and maintain. For a single selection this
+				// is just that one entity's world transform.
+				Entity pivotEntity = m_SelectedEntities.back();
+				glm::mat4 pivotWorldTransform = m_Scene->GetWorldSpaceTransform(pivotEntity);
+
 				// Snap value
 				glm::vec3 snap = { 0.f, 0.f, 0.f };
 				if (Input::IsKeyPressed(Key::LeftControl))
@@ -839,22 +1014,37 @@ namespace cerberus
 						snap = { 0.5f, 0.5f, 0.5f }; // 0.5m for translation and scale
 				}
 
-				// Render the gizmo
-				ImGuizmo::Manipulate(glm::value_ptr(m_Camera.GetViewMatrix()), 
+				// deltaMatrix is this frame's incremental WORLD-space transform
+				// applied to the pivot -- applying the same delta to every
+				// selected entity's own world transform moves/rotates/scales
+				// the whole selection together around the pivot.
+				glm::mat4 deltaMatrix(1.0f);
+				ImGuizmo::Manipulate(glm::value_ptr(m_Camera.GetViewMatrix()),
 					glm::value_ptr(m_Camera.GetProjection()),
-					(ImGuizmo::OPERATION)m_GizmoType, 
-					ImGuizmo::LOCAL /* Local space */, 
-					glm::value_ptr(transform),
-					nullptr, 
+					(ImGuizmo::OPERATION)m_GizmoType,
+					ImGuizmo::LOCAL /* Local space */,
+					glm::value_ptr(pivotWorldTransform),
+					glm::value_ptr(deltaMatrix),
 					glm::value_ptr(snap));
 
 				if (ImGuizmo::IsUsing())
 				{
-					glm::vec3 translation, rotation, scale;
-					math::DecomposeTransform(transform, translation, rotation, scale);
-					tc.SetTranslation(translation);
-					tc.SetRotation(tc.GetRotation() + glm::degrees(rotation) - tc.GetRotation());
-					tc.SetScale(scale);
+					for (Entity entity : m_SelectedEntities)
+					{
+						const glm::mat4 newWorldTransform = deltaMatrix * m_Scene->GetWorldSpaceTransform(entity);
+						const UUID parentID = entity.GetComponent<RelationshipComponent>().Parent;
+						const glm::mat4 parentWorldTransform = parentID
+							? m_Scene->GetWorldSpaceTransform(m_Scene->GetEntityByUUID(parentID))
+							: glm::mat4(1.0f);
+						const glm::mat4 newLocalTransform = glm::inverse(parentWorldTransform) * newWorldTransform;
+
+						auto& tc = entity.GetComponent<TransformComponent>();
+						glm::vec3 translation, rotation, scale;
+						math::DecomposeTransform(newLocalTransform, translation, rotation, scale);
+						tc.SetTranslation(translation);
+						tc.SetRotation(glm::degrees(rotation));
+						tc.SetScale(scale);
+					}
 				}
 			}
 
@@ -867,7 +1057,7 @@ namespace cerberus
 				if (BuildViewportRay(viewportPosition, viewportSize, ray) && RaycastScene(ray, hit))
 					SelectEntity(hit.HitEntity);
 				else
-					SelectEntity({});
+					SelectEntities({});
 			}
 		}
 

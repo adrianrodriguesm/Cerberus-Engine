@@ -46,11 +46,11 @@ namespace cerberus
 		operator entt::entity() const { return m_EntityHandle; }
 		operator bool() const { return m_EntityHandle != entt::null && m_Scene; }
 
-		const bool operator == (const Entity& other)
+		bool operator == (const Entity& other) const
 		{
 			return m_EntityHandle == other.m_EntityHandle && m_Scene == other.m_Scene;
 		}
-		const bool operator != (const Entity& other)
+		bool operator != (const Entity& other) const
 		{
 			return !(*this == other);
 		}

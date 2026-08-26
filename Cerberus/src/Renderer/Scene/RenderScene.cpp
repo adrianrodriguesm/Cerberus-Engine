@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "RenderScene.h"
 
+#include "Core/Profiler.h"
 #include "Renderer/Memory/DeferredResourceDeletionQueue.h"
 #include "Renderer/Core/RendererContext.h"
 #include "Renderer/RHI/ResourceManager.h"
@@ -30,6 +31,8 @@ namespace cerberus
 
 	void RenderScene::BuildDrawStream()
 	{
+		CORE_PROFILE_FUNCTION();
+
 		DrawStreamBuilder builder;
 		Handle<MeshSourceProxy> activeMeshSource;
 
@@ -296,7 +299,8 @@ namespace cerberus
 		RenderObjectID renderObjectID,
 		const Ref<Mesh>& mesh,
 		const Ref<MaterialTable>& materialTable,
-		const glm::mat4& transform)
+		const glm::mat4& transform,
+		int32_t submeshFilter)
 	{
 		if (!renderObjectID || !mesh)
 			return false;
@@ -365,8 +369,13 @@ namespace cerberus
 
 		const Ref<MaterialTable> effectiveMaterialTable = materialTable ? materialTable : mesh->GetMaterialTable();
 
+		CORE_ASSERT(submeshFilter < 0 || (uint32_t)submeshFilter < submeshesProxy.size(), "submeshFilter out of range");
+
 		for (uint32_t submeshIndex = 0; submeshIndex < submeshesProxy.size(); submeshIndex++)
 		{
+			if (submeshFilter >= 0 && submeshIndex != (uint32_t)submeshFilter)
+				continue;
+
 			const uint32_t materialSlot = submeshesProxy[submeshIndex].MaterialIndex;
 			Ref<MaterialAsset> materialAsset = ResolveMaterialAsset(meshSource, effectiveMaterialTable, materialSlot);
 			const uint32_t materialProxyIndex = RegisterMaterialProxy(materialAsset);
@@ -378,7 +387,16 @@ namespace cerberus
 			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
 			CORE_ASSERT(meshInstance, "Invalid MeshInstanceProxy");
 
-			meshInstance->WorldTransform = transform * submeshesProxy[submeshIndex].Transform;
+			// When filtered to a single submesh, the caller's entity transform
+			// already bakes in that submesh's own node transform (its editor
+			// TransformComponent is set from it at creation time) -- applying it
+			// again here would double it up and desync the gizmo from the
+			// rendered position. The whole-mesh (unfiltered) case still needs it:
+			// every submesh instance shares one entity transform and relies on
+			// its own node transform to reproduce the imported model's structure.
+			meshInstance->WorldTransform = (submeshFilter >= 0)
+				? transform
+				: transform * submeshesProxy[submeshIndex].Transform;
 
 			registeredInstance.SubmeshInstances.push_back(meshInstanceHandle);
 			m_MeshRegister.MeshInstanceMap[meshProxyHandle][submeshIndex].push_back(meshInstanceHandle);
@@ -546,6 +564,8 @@ namespace cerberus
 
 	bool RenderScene::PrepareRayTracing()
 	{
+		CORE_PROFILE_FUNCTION();
+
 		BuildPendingBLAS();
 		BuildOrUpdateTLAS();
 		return HasValidTLAS();

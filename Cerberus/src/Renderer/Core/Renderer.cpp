@@ -12,6 +12,7 @@
 #include "Renderer/Memory/ResourceAllocator.h"
 
 #include "Core/Application.h"
+#include "Core/Profiler.h"
 #include "Core/Window.h"
 #include "ImGui/ImGuiRenderer.h"
 
@@ -117,6 +118,7 @@ namespace cerberus
 		// completed and before any transient descriptor set is allocated.
 		DescriptorManager::ResetTransientFramePools();
 		s_Data->Frame.Statistics = {};
+		Profiler::BeginFrame();
 	}
 
 	void Renderer::EndFrame()

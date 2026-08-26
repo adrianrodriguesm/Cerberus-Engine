@@ -15,7 +15,17 @@ namespace cerberus
 	{
 		UUID ID = 0;
 	};
-	/////////////////////////////////////////////////////////////////////// 
+	///////////////////////////////////////////////////////////////////////
+	/// RelationshipComponent
+	///////////////////////////////////////////////////////////////////////
+	// Parent/child links, referenced by UUID (not entt::entity) so they
+	// survive serialization and remain valid across registry relocation.
+	struct RelationshipComponent
+	{
+		UUID Parent = 0;
+		std::vector<UUID> Children;
+	};
+	///////////////////////////////////////////////////////////////////////
 	/// TagComponent
 	///////////////////////////////////////////////////////////////////////
 	struct TagComponent
@@ -108,6 +118,10 @@ namespace cerberus
 	{
 		AssetHandle MeshHandle = 0;
 		Ref<MaterialTable> MaterialTable;
+		// -1 registers every submesh (today's default behavior). >= 0 filters
+		// registration down to that single submesh index, for entities that
+		// represent one submesh of a split multi-submesh mesh.
+		int32_t SubmeshIndex = -1;
 
 		MeshComponent()
 			: MaterialTable(CreateRef<cerberus::MaterialTable>()),
@@ -120,6 +134,7 @@ namespace cerberus
 			  MaterialTable(other.MaterialTable
 				  ? CreateRef<cerberus::MaterialTable>(other.MaterialTable)
 				  : CreateRef<cerberus::MaterialTable>()),
+			  SubmeshIndex(other.SubmeshIndex),
 			  m_Registered(false)
 		{
 		}
@@ -138,6 +153,7 @@ namespace cerberus
 			MaterialTable = other.MaterialTable
 				? CreateRef<cerberus::MaterialTable>(other.MaterialTable)
 				: CreateRef<cerberus::MaterialTable>();
+			SubmeshIndex = other.SubmeshIndex;
 			m_Registered = false;
 			return *this;
 		}

@@ -607,6 +607,56 @@ CPU renderer statistics are frame-scoped.
 
 This makes statistics independent of how many passes are executed in a frame.
 
+## Instrumentation
+
+`Core/Profiler.h`/`.cpp` is a small, engine-wide CPU+GPU instrumentation
+facility with one runtime switch (`Profiler::IsEnabled`/`SetEnabled`,
+surfaced as the "Enable Profiling" checkbox in the "Profiler" ImGui window,
+`EditorLayer::OnImGuiRender`). It is intentionally a flat per-frame list with
+visual nesting (`CPUProfileEntry::Depth`), not a hierarchical flamegraph or
+timeline — there's no frame track yet, just current-frame scope durations.
+
+- CPU: `CORE_PROFILE_SCOPE(name)`/`CORE_PROFILE_FUNCTION()` construct a
+  `ProfileScope`, an RAII timer (built on `Core/Timer.h`) that records its
+  duration into `Profiler`'s per-frame entry list on destruction.
+  `CPUProfileEntry::Name` stores the raw `const char*` rather than an owned
+  `std::string` -- every call site passes a string literal or `__FUNCTION__`
+  (static storage duration), so there is nothing to copy or allocate.
+  `Profiler::BeginFrame()` (called from `Renderer::BeginFrame`) clears the
+  entry list at the start of each frame. Instrumented today: `Scene::OnUpdate`,
+  `RenderScene::BuildDrawStream`, `RenderScene::PrepareRayTracing`,
+  `ForwardSceneRenderer::Render`/`PathTracerSceneRenderer::Render`, and
+  `Application::Run`'s top-level `ImGuiRender`/`LayerUpdate`/`FrameSubmit`/
+  `Present` phases. Residual cost while the switch is off: `ProfileScope`
+  still constructs its `Timer` member unconditionally (one clock read; a
+  C++ member always constructs), and the constructor's `IsEnabled()` check
+  happens after that -- not literally zero, but no allocation, no vector
+  push, nothing beyond that one clock read.
+- GPU: reuses `CommandBuffer`'s timestamp-query API (see "RenderGraph" above
+  for its queued-vs-immediate distinction). Gated at two levels: `CommandBuffer::
+  BeginRenderThread`/`EndRenderThread`/`SubmitRenderThread` pass
+  `Profiler::IsEnabled()` as `enableQueries`/`collectQueryResults` (so the
+  whole-frame timestamp pair, the pipeline-statistics query, the per-frame
+  `vkCmdResetQueryPool`, and the `vkGetQueryPoolResults` readback are all
+  skipped outright when off -- not just the per-pass ones), and
+  `RenderGraph::Execute()` separately checks `Profiler::IsEnabled()` before
+  each pass's `BeginTimestampQueryRenderThread`/`EndTimestampQueryRenderThread`
+  pair. Every per-pass timestamp Cerberus records uses `TOP_OF_PIPE`/
+  `BOTTOM_OF_PIPE` stages specifically because they don't wait for any actual
+  GPU work to reach that point, avoiding the pipeline-stall risk a timestamp
+  at a mid-pipeline stage (e.g. `FRAGMENT_SHADER`) would carry. The Profiler
+  window shows "Frame Total (GPU)" from the whole-recording timestamp pair
+  (query index 0/1) whenever profiling is on. None of these costs have been
+  measured; the design choices above (cheapest possible timestamp stages,
+  full skip rather than a hidden-but-still-running query when off) are meant
+  to keep the plausible overhead low, not a substitute for actually profiling
+  the profiler.
+- `CommandBuffer::Invalidate`'s timestamp query pool budget (`maxUserQueries`
+  in `CommandBuffer.cpp`) is 64, up from RenderGraph's original 16, with a
+  `CORE_ASSERT` guard in both `BeginTimestampQuery` and
+  `BeginTimestampQueryRenderThread` so exceeding it fails loudly in Debug
+  instead of writing past the query pool.
+
 ## API input policy
 
 Immediate recording APIs that consume contiguous caller-owned data use `std::span` instead of `std::vector` references.

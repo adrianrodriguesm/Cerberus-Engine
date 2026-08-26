@@ -17,15 +17,16 @@ namespace cerberus
 		virtual void OnImGuiRender(bool& isOpen) override;
 		virtual void SetSceneContext(const Ref<Scene>& scene) override;
 
-		virtual void SetSelectionContext(const Entity& selectionContext) override;
+		virtual void SetSelectionContext(const std::vector<Entity>& selectionContext) override;
 		void SetMaterialTableChangedCallback(MaterialTableChangedCallback callback) { m_MaterialTableChangedCallback = std::move(callback); }
 		void SetAssetFocusedCallback(AssetFocusedCallback callback) { m_AssetFocusedCallback = std::move(callback); }
 
 	private:
 		void DrawEntityComponents(Entity entity);
+		void DrawMultiEntityTransform(const std::vector<Entity>& entities);
 	private:
 		Ref<Scene> m_SceneContext;
-		Entity m_SelectionContext;
+		std::vector<Entity> m_SelectionContext;
 		MaterialTableChangedCallback m_MaterialTableChangedCallback;
 		AssetFocusedCallback m_AssetFocusedCallback;
 	};

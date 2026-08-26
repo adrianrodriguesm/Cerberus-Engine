@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Core/Application.h"
+#include "Core/Profiler.h"
 #include "Core/Timer.h"
 #include "Renderer/Core/Renderer.h"
 #include "ImGui/ImGuiRenderer.h"
@@ -77,20 +78,28 @@ namespace cerberus
 			m_TimeStep = timer.ElapsedAndReset();
 			Renderer::BeginFrame();
 			{
-				ImGuiRenderer::Render();
-				
+				{
+					CORE_PROFILE_SCOPE("ImGuiRender");
+					ImGuiRenderer::Render();
+				}
+
+				CORE_PROFILE_SCOPE("LayerUpdate");
 				for (Layer* layer : m_LayerStack)
 					layer->OnUpdate(m_TimeStep);
 
 			}
 			Renderer::EndFrame();
-			
+
 			auto swapChain = m_Window->GetSwapchain();
-			swapChain->UpdateNextImageToRender();
 			{
+				CORE_PROFILE_SCOPE("FrameSubmit");
+				swapChain->UpdateNextImageToRender();
 				RenderQueueManager::ExecuteRenderQueue();
 			}
-			swapChain->Present();
+			{
+				CORE_PROFILE_SCOPE("Present");
+				swapChain->Present();
+			}
 
 			// Process exceptional lifecycle changes only after frame submission/present.
 			// The replacement path performs an explicit device wait before releasing

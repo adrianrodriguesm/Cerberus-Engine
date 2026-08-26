@@ -7,9 +7,19 @@
 #include "Renderer/RHI/ResourceManager.h"
 #include "Utils/FileDialogs.h"
 #include "Utils/FileSystem.h"
+#include <algorithm>
 namespace cerberus
 {
 	static std::filesystem::path s_AssetPath;
+
+	// Copied Transform values, not a live reference -- "copiar y pegar
+	// valores," shared across single- and multi-entity editing below.
+	struct TransformClipboard
+	{
+		bool Filled = false;
+		glm::vec3 Translation{ 0.0f }, Rotation{ 0.0f }, Scale{ 1.0f };
+	};
+	static TransformClipboard s_TransformClipboard;
 	ScenePropertiesPanel::ScenePropertiesPanel(const Ref<Scene>& sceneContext)
 		: m_SceneContext(sceneContext)
 	{
@@ -23,20 +33,30 @@ namespace cerberus
 			return;
 		}
 
+		// Cross-reference against the live registry rather than trusting
+		// m_SelectionContext directly -- a selected entity destroyed elsewhere
+		// this frame would otherwise leave a dangling handle here.
+		std::vector<Entity> liveSelection;
 		m_SceneContext->m_Registry.each([&](const auto& entityID)
 		{
 			Entity entity = { entityID , m_SceneContext.get() };
-			if (m_SelectionContext == entity)
-				DrawEntityComponents(entity);
+			if (std::find(m_SelectionContext.begin(), m_SelectionContext.end(), entity) != m_SelectionContext.end())
+				liveSelection.push_back(entity);
 		});
+
+		if (liveSelection.size() == 1)
+			DrawEntityComponents(liveSelection[0]);
+		else if (liveSelection.size() > 1)
+			DrawMultiEntityTransform(liveSelection);
+
 		ImGui::End();
 	}
 	void ScenePropertiesPanel::SetSceneContext(const Ref<Scene>& scene)
 	{
 		m_SceneContext = scene;
-		m_SelectionContext = {};
+		m_SelectionContext.clear();
 	}
-	void ScenePropertiesPanel::SetSelectionContext(const Entity& selectionContext)
+	void ScenePropertiesPanel::SetSelectionContext(const std::vector<Entity>& selectionContext)
 	{
 		m_SelectionContext = selectionContext;
 	}
@@ -202,7 +222,7 @@ namespace cerberus
 				{
 					if (!entity.HasComponent<MeshComponent>())
 					{
-						m_SelectionContext.AddComponent<MeshComponent>();
+						entity.AddComponent<MeshComponent>();
 					}
 					else
 						NV_CORE_WARN("Entity already have a Mesh Component!");
@@ -210,12 +230,12 @@ namespace cerberus
 				}
 				if (ImGui::MenuItem("Sky Light"))
 				{
-					m_SelectionContext.AddComponent<SkyLightComponent>();
+					entity.AddComponent<SkyLightComponent>();
 					ImGui::CloseCurrentPopup();
 				}
 				if (ImGui::MenuItem("Directional Light"))
 				{
-					m_SelectionContext.AddComponent<DirectionalLightComponent>();
+					entity.AddComponent<DirectionalLightComponent>();
 					ImGui::CloseCurrentPopup();
 				}
 				ImGui::EndPopup();
@@ -225,6 +245,28 @@ namespace cerberus
 
 		DrawComponent<TransformComponent>("TRANSFORM", entity, [](auto& component)
 		{
+			if (ImGui::Button("Copy"))
+			{
+				s_TransformClipboard.Translation = component.GetTranslation();
+				s_TransformClipboard.Rotation = component.GetRotation();
+				s_TransformClipboard.Scale = component.GetScale();
+				s_TransformClipboard.Filled = true;
+			}
+			ImGui::SameLine();
+			if (s_TransformClipboard.Filled)
+			{
+				if (ImGui::Button("Paste"))
+				{
+					component.SetTranslation(s_TransformClipboard.Translation);
+					component.SetRotation(s_TransformClipboard.Rotation);
+					component.SetScale(s_TransformClipboard.Scale);
+				}
+			}
+			else
+			{
+				ImGui::TextDisabled("Paste");
+			}
+
 			// Translation
 			glm::vec3 translation = component.GetTranslation();
 			DrawVec3Control("Translation", translation);
@@ -352,7 +394,95 @@ namespace cerberus
 				component.SampleLOD = static_cast<uint32_t>(sampleLOD);
 			ui::EndPropertyGrid();
 		});
-		
-		
+
+
+	}
+
+	void ScenePropertiesPanel::DrawMultiEntityTransform(const std::vector<Entity>& entities)
+	{
+		ImGui::Text("%zu entities selected", entities.size());
+
+		if (entities.empty())
+			return;
+
+		// "Active object" convention -- same entity the group gizmo in
+		// EditorLayer::UI_Viewport() uses as its pivot, so this panel and the
+		// gizmo agree on which entity's values are being shown.
+		Entity representative = entities.back();
+		auto& representativeTransform = representative.GetComponent<TransformComponent>();
+
+		if (ImGui::Button("Copy"))
+		{
+			s_TransformClipboard.Translation = representativeTransform.GetTranslation();
+			s_TransformClipboard.Rotation = representativeTransform.GetRotation();
+			s_TransformClipboard.Scale = representativeTransform.GetScale();
+			s_TransformClipboard.Filled = true;
+		}
+		ImGui::SameLine();
+		if (s_TransformClipboard.Filled)
+		{
+			// Paste is absolute -- every selected entity gets the exact
+			// copied transform, unlike dragging a field below.
+			if (ImGui::Button("Paste"))
+			{
+				for (Entity entity : entities)
+				{
+					auto& tc = entity.GetComponent<TransformComponent>();
+					tc.SetTranslation(s_TransformClipboard.Translation);
+					tc.SetRotation(s_TransformClipboard.Rotation);
+					tc.SetScale(s_TransformClipboard.Scale);
+				}
+			}
+		}
+		else
+		{
+			ImGui::TextDisabled("Paste");
+		}
+
+		if (!ImGui::CollapsingHeader("TRANSFORM", ImGuiTreeNodeFlags_DefaultOpen))
+			return;
+
+		// Dragging/typing here is a relative (delta) edit applied to every
+		// selected entity, preserving each one's own current value/offset --
+		// the same incremental-transform model the group gizmo already uses,
+		// rather than collapsing every selected entity onto one absolute value.
+		glm::vec3 translation = representativeTransform.GetTranslation();
+		const glm::vec3 oldTranslation = translation;
+		DrawVec3Control("Translation", translation);
+		if (translation != oldTranslation)
+		{
+			const glm::vec3 delta = translation - oldTranslation;
+			for (Entity entity : entities)
+			{
+				auto& tc = entity.GetComponent<TransformComponent>();
+				tc.SetTranslation(tc.GetTranslation() + delta);
+			}
+		}
+
+		glm::vec3 rotation = representativeTransform.GetRotation();
+		const glm::vec3 oldRotation = rotation;
+		DrawVec3Control("Rotation", rotation, 1.f);
+		if (rotation != oldRotation)
+		{
+			const glm::vec3 delta = rotation - oldRotation;
+			for (Entity entity : entities)
+			{
+				auto& tc = entity.GetComponent<TransformComponent>();
+				tc.SetRotation(tc.GetRotation() + delta);
+			}
+		}
+
+		glm::vec3 scale = representativeTransform.GetScale();
+		const glm::vec3 oldScale = scale;
+		DrawVec3Control("Scale", scale, 0.1f, 1.f);
+		if (scale != oldScale)
+		{
+			const glm::vec3 delta = scale - oldScale;
+			for (Entity entity : entities)
+			{
+				auto& tc = entity.GetComponent<TransformComponent>();
+				tc.SetScale(tc.GetScale() + delta);
+			}
+		}
 	}
 }

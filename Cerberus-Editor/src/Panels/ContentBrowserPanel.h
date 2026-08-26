@@ -64,7 +64,7 @@ namespace cerberus
 		virtual void Shutdown() override;
 		virtual void OnImGuiRender(bool& isOpen) override;
 		virtual void SetSceneContext(const Ref<Scene>& context) {}
-		virtual void SetSelectionContext(const Entity& context) {}
+		virtual void SetSelectionContext(const std::vector<Entity>& context) {}
 
 		ContentBrowserItemList& GetCurrentItems() { return m_CurrentItemList; }
 		void Refresh();

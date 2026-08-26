@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "RenderGraph.h"
 
+#include "Core/Profiler.h"
 #include "ImGui/ImGuiUI.h"
 #include "Renderer/RHI/Command/CommandBuffer.h"
 #include "Renderer/RHI/Command/ComputeCommandList.h"
@@ -531,6 +532,12 @@ namespace cerberus
 	{
 		CORE_ASSERT(m_Compiled, "RenderGraph::Execute called before Compile()");
 
+		// When off, every Pass::GPUTimeQueryID stays at its default
+		// InvalidQueryID -- skipped here, not just hidden by the debug panel,
+		// since GPU timestamp queries have real cost even when unused (see
+		// Core/Profiler.h).
+		const bool profilingEnabled = Profiler::IsEnabled();
+
 		GraphicsCommandList graphics(commandBuffer.GetRecordingView(frameIndex), statistics);
 		RayTracingCommandList rayTracing(commandBuffer.GetRecordingView(frameIndex), statistics);
 		ComputeCommandList compute(commandBuffer.GetRecordingView(frameIndex), statistics);
@@ -601,9 +608,11 @@ namespace cerberus
 					for (uint32_t member = orderIndex; member < groupEnd; ++member)
 					{
 						Pass& pass = m_Passes[m_ExecutionOrder[member]];
-						pass.GPUTimeQueryID = commandBuffer.BeginTimestampQueryRenderThread();
+						if (profilingEnabled)
+							pass.GPUTimeQueryID = commandBuffer.BeginTimestampQueryRenderThread();
 						pass.GraphicsExecute(graphics);
-						commandBuffer.EndTimestampQueryRenderThread(pass.GPUTimeQueryID);
+						if (profilingEnabled)
+							commandBuffer.EndTimestampQueryRenderThread(pass.GPUTimeQueryID);
 					}
 					graphics.EndRenderingAttachments();
 				}
@@ -612,9 +621,11 @@ namespace cerberus
 					for (uint32_t member = orderIndex; member < groupEnd; ++member)
 					{
 						Pass& pass = m_Passes[m_ExecutionOrder[member]];
-						pass.GPUTimeQueryID = commandBuffer.BeginTimestampQueryRenderThread();
+						if (profilingEnabled)
+							pass.GPUTimeQueryID = commandBuffer.BeginTimestampQueryRenderThread();
 						pass.GraphicsExecute(graphics);
-						commandBuffer.EndTimestampQueryRenderThread(pass.GPUTimeQueryID);
+						if (profilingEnabled)
+							commandBuffer.EndTimestampQueryRenderThread(pass.GPUTimeQueryID);
 					}
 				}
 			}
@@ -623,12 +634,14 @@ namespace cerberus
 				// Compute/RayTracing passes never merge (see Compile()), so
 				// this group always has exactly one member.
 				Pass& pass = m_Passes[m_ExecutionOrder[orderIndex]];
-				pass.GPUTimeQueryID = commandBuffer.BeginTimestampQueryRenderThread();
+				if (profilingEnabled)
+					pass.GPUTimeQueryID = commandBuffer.BeginTimestampQueryRenderThread();
 				if (pass.Type == Pass::Type::Compute)
 					pass.ComputeExecute(compute);
 				else
 					pass.RayTracingExecute(rayTracing);
-				commandBuffer.EndTimestampQueryRenderThread(pass.GPUTimeQueryID);
+				if (profilingEnabled)
+					commandBuffer.EndTimestampQueryRenderThread(pass.GPUTimeQueryID);
 			}
 
 			orderIndex = groupEnd;

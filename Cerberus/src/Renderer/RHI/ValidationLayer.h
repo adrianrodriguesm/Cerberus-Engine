@@ -10,7 +10,12 @@ namespace cerberus
         static const bool s_EnableValidationLayers = true;
         static const bool s_FullInfo = false;
 #else
-        static const bool s_EnableValidationLayers = true;
+        // Release now actually means "no validation" -- both branches used to
+        // hardcode true, so Vulkan validation's substantial per-call overhead
+        // (state tracking, descriptor/pipeline/barrier checks) was silently
+        // inflating every Release timing measurement, scaling with draw-call
+        // count rather than real GPU cost.
+        static const bool s_EnableValidationLayers = false;
 #endif
 
     public:

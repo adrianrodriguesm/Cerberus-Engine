@@ -266,6 +266,13 @@ with the exact `Before`/`After` barrier `Compile()` resolved for it, and a
 list of anything culled. It reuses `CommandBuffer`'s existing (previously
 unused by real rendering) timestamp-query API — see the paragraph below.
 
+Every pass's GPU timestamp pair is now gated behind the engine-wide
+`Profiler::IsEnabled()` switch (`Core/Profiler.h`) — when off,
+`RenderGraph::Execute()` skips `BeginTimestampQueryRenderThread`/
+`EndTimestampQueryRenderThread` entirely rather than just hiding the result,
+since the queries themselves have real cost. See "Instrumentation" in
+`RendererArchitecture.md`.
+
 GPU-timestamp results lag the frame that recorded them by roughly one
 submission cycle (`CommandBuffer::SubmitInternal` collects the *previous*
 completed use of a frame-in-flight slot's query pool, not the one just

@@ -68,7 +68,7 @@ namespace cerberus
 		RenderScene() = default;
 		~RenderScene();
 
-		bool RegisterMesh(RenderObjectID renderObjectID, const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform);
+		bool RegisterMesh(RenderObjectID renderObjectID, const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform, int32_t submeshIndex = -1);
 		bool UnregisterMesh(RenderObjectID renderObjectID);
 		void UpdateMeshTransform(RenderObjectID renderObjectID, const glm::mat4& transform);
 		bool UpdateMeshMaterials(RenderObjectID renderObjectID, const Ref<MaterialTable>& materialTable);

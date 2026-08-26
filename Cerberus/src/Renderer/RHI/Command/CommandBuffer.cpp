@@ -3,6 +3,7 @@
 #include "Renderer/Core/Renderer.h"
 #include "Renderer/Core/RenderQueueManager.h"
 #include "Renderer/Memory/DeferredResourceDeletionQueue.h"
+#include "Core/Profiler.h"
 #include "Core/Window.h"
 
 namespace cerberus
@@ -132,14 +133,19 @@ namespace cerberus
 		// command-buffer slot.
 		m_TimestampNextAvailableQuery = 2;
 
+		// Gated on Profiler::IsEnabled() so the switch actually removes every
+		// query-related Vulkan call this frame (pool reset, the whole-frame
+		// timestamp pair, pipeline-statistics begin/end, and the readback in
+		// SubmitRenderThread below) -- not just the per-pass ones RenderGraph
+		// separately gates in Execute().
 		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
-		BeginInternal(frameIndex, true);
+		BeginInternal(frameIndex, Profiler::IsEnabled());
 	}
 
 	void CommandBuffer::EndRenderThread()
 	{
 		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
-		EndInternal(frameIndex, true);
+		EndInternal(frameIndex, Profiler::IsEnabled());
 	}
 
 	void CommandBuffer::SubmitRenderThread()
@@ -148,11 +154,13 @@ namespace cerberus
 			return;
 
 		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
-		SubmitInternal(frameIndex, true);
+		SubmitInternal(frameIndex, Profiler::IsEnabled());
 	}
 
 	uint32_t CommandBuffer::BeginTimestampQuery()
 	{
+		CORE_ASSERT(m_TimestampNextAvailableQuery + 1 < m_TimestampQueryCount,
+			"CommandBuffer timestamp query pool exhausted; raise maxUserQueries in Invalidate()");
 		uint32_t queryIndex = m_TimestampNextAvailableQuery;
 		m_TimestampNextAvailableQuery += 2;
 		CommandBuffer* instance = this;
@@ -177,6 +185,8 @@ namespace cerberus
 
 	uint32_t CommandBuffer::BeginTimestampQueryRenderThread()
 	{
+		CORE_ASSERT(m_TimestampNextAvailableQuery + 1 < m_TimestampQueryCount,
+			"CommandBuffer timestamp query pool exhausted; raise maxUserQueries in Invalidate()");
 		const uint32_t queryIndex = m_TimestampNextAvailableQuery;
 		m_TimestampNextAvailableQuery += 2;
 		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
@@ -255,7 +265,14 @@ namespace cerberus
 		VkCommandBuffer commandBuffer = m_CommandBuffers[frameIndex];
 		submitInfo.pCommandBuffers = &commandBuffer;
 
-		VK_CHECK_RESULT(vkWaitForFences(vulkanDevice, 1, &m_WaitFences[frameIndex], VK_TRUE, UINT64_MAX));
+		{
+			// This is the CPU stalling until the GPU finishes this
+			// frame-in-flight slot's *previous* use -- isolated in its own
+			// scope so a large Render()/FrameSubmit total can be attributed
+			// to an actual GPU-completion wait rather than guessed at.
+			CORE_PROFILE_SCOPE("WaitForFence");
+			VK_CHECK_RESULT(vkWaitForFences(vulkanDevice, 1, &m_WaitFences[frameIndex], VK_TRUE, UINT64_MAX));
+		}
 		VK_CHECK_RESULT(vkResetFences(vulkanDevice, 1, &m_WaitFences[frameIndex]));
 		VK_CHECK_RESULT(vkQueueSubmit(device->GetGraphicsQueue(), 1, &submitInfo, m_WaitFences[frameIndex]));
 
@@ -306,7 +323,9 @@ namespace cerberus
 		///////////////////////////////////////////////////////
 		//// Create Query Timestamp Pool
 		///////////////////////////////////////////////////////
-		const uint32_t maxUserQueries = 16;
+		// 16 covered RenderGraph's own ~8 passes; raised so general-purpose CPU/GPU
+		// instrumentation (Core/Profiler.h) has real headroom beyond that.
+		const uint32_t maxUserQueries = 64;
 		m_TimestampQueryCount = 2 + 2 * maxUserQueries;
 		VkQueryPoolCreateInfo queryPoolCreateInfo = {};
 		queryPoolCreateInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;

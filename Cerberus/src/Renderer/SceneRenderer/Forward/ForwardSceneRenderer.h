@@ -28,7 +28,7 @@ namespace cerberus
 		void SetViewportSize(uint32_t width, uint32_t height) override;
 
 		bool IsRegistered(RenderObjectID renderObjectID) override;
-		bool RegisterMesh(RenderObjectID renderObjectID, const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform) override;
+		bool RegisterMesh(RenderObjectID renderObjectID, const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform, int32_t submeshIndex = -1) override;
 		bool UnregisterMesh(RenderObjectID renderObjectID) override;
 		void UpdateMeshTransform(RenderObjectID renderObjectID, const glm::mat4& transform) override;
 		bool UpdateMeshMaterials(RenderObjectID renderObjectID, const Ref<MaterialTable>& materialTable) override;
