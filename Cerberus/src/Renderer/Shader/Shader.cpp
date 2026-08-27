@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <algorithm>
 #include <cctype>
+#include <iomanip>
 #include "GLSLIncludeProcessor.h"
 #include "Utils/FileSystem.h"
 
@@ -127,6 +128,26 @@ namespace cerberus
 			}
 			CORE_ASSERT(false, "");
 			return "";
+		}
+
+		static std::filesystem::path GetShaderCachePath(
+			const std::filesystem::path& cacheDirectory,
+			const std::string& shaderSourcePath,
+			const std::string& preprocessedSource,
+			VkShaderStageFlagBits stage)
+		{
+			// Include both identity and fully preprocessed contents. This avoids
+			// collisions between equal filenames in different directories and
+			// invalidates the entry when the shader or one of its includes changes.
+			const std::string resolvedPath = FileSystem::ResolvePath(shaderSourcePath).lexically_normal().generic_string();
+			const size_t cacheHash = std::hash<std::string>{}(
+				std::string("cerberus_shader_cache_v2\n") + resolvedPath + "\n" + preprocessedSource);
+
+			std::ostringstream hashStream;
+			hashStream << std::hex << std::setfill('0') << std::setw(sizeof(size_t) * 2) << cacheHash;
+			const std::string filename = std::filesystem::path(shaderSourcePath).filename().string()
+				+ "." + hashStream.str() + VkShaderStageCachedFileExtension(stage);
+			return cacheDirectory / filename;
 		}
 
 		static shaderc_shader_kind VkShaderStageToShaderC(VkShaderStageFlagBits stage)
@@ -309,12 +330,10 @@ namespace cerberus
 			const std::string shaderSourcePath = m_ShaderSourceFilePaths.find(stage) != m_ShaderSourceFilePaths.end()
 				? m_ShaderSourceFilePaths.at(stage)
 				: m_AssetPath;
-			auto extension = utils::VkShaderStageCachedFileExtension(stage);
 			// Get the compile shader from the cache directory
 			if (!forceCompile)
 			{
-				std::filesystem::path p = shaderSourcePath;
-				auto path = cacheDirectory / (p.filename().string() + extension);
+				auto path = utils::GetShaderCachePath(cacheDirectory, shaderSourcePath, source, stage);
 				std::string cachedFilePath = path.string();
 
 				FILE* f;
@@ -369,8 +388,7 @@ namespace cerberus
 
 				// Cache compiled shader
 				{
-					std::filesystem::path p = m_AssetPath;
-					auto path = cacheDirectory / (p.filename().string() + extension);
+					auto path = utils::GetShaderCachePath(cacheDirectory, shaderSourcePath, source, stage);
 					std::string cachedFilePath = path.string();
 
 					FILE* f;

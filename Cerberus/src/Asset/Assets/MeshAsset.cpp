@@ -10,6 +10,8 @@
 #include <assimp/LogStream.hpp>
 #include <filesystem>
 #include <algorithm>
+#include <cctype>
+#include <unordered_map>
 
 #define MESH_DEBUG_LOG 1
 #if MESH_DEBUG_LOG
@@ -160,6 +162,21 @@ namespace cerberus
 
 	void MeshSource::LoadMaterials()
 	{
+		std::unordered_map<std::string, std::filesystem::path> textureFilesByName;
+		std::error_code textureScanError;
+		for (std::filesystem::recursive_directory_iterator it(
+			m_Properties.Filepath.parent_path(),
+			std::filesystem::directory_options::skip_permission_denied,
+			textureScanError), end; it != end && !textureScanError; it.increment(textureScanError))
+		{
+			if (!it->is_regular_file())
+				continue;
+			std::string filename = it->path().filename().string();
+			std::transform(filename.begin(), filename.end(), filename.begin(),
+				[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+			textureFilesByName.try_emplace(std::move(filename), it->path());
+		}
+
 		auto getMaterialSlotCount = [this]() -> uint32_t
 		{
 			uint32_t materialSlotCount = m_Scene && m_Scene->HasMaterials() ? m_Scene->mNumMaterials : 0;
@@ -170,16 +187,18 @@ namespace cerberus
 			return std::max(materialSlotCount, 1u);
 		};
 
-		auto importMaterialTexture = [this](aiMaterial* sourceMaterial, aiTextureType textureType) -> AssetHandle
+		auto importMaterialTexture = [this, &textureFilesByName](aiMaterial* sourceMaterial, aiTextureType textureType, uint32_t textureIndex = 0) -> AssetHandle
 		{
-			if (!sourceMaterial || sourceMaterial->GetTextureCount(textureType) == 0)
+			if (!sourceMaterial || sourceMaterial->GetTextureCount(textureType) <= textureIndex)
 				return 0;
 
 			aiString importedTexturePath;
-			if (sourceMaterial->GetTexture(textureType, 0, &importedTexturePath) != AI_SUCCESS)
+			if (sourceMaterial->GetTexture(textureType, textureIndex, &importedTexturePath) != AI_SUCCESS)
 				return 0;
 
-			std::filesystem::path texturePath = importedTexturePath.C_Str();
+			std::string importedPathString = importedTexturePath.C_Str();
+			std::replace(importedPathString.begin(), importedPathString.end(), '\\', static_cast<char>(std::filesystem::path::preferred_separator));
+			std::filesystem::path texturePath = importedPathString;
 			if (texturePath.empty())
 				return 0;
 
@@ -191,14 +210,23 @@ namespace cerberus
 				return 0;
 			}
 
+			const std::filesystem::path originalPath = texturePath;
 			if (texturePath.is_relative())
-				texturePath = m_Properties.Filepath.parent_path() / texturePath;
+				texturePath = (m_Properties.Filepath.parent_path() / texturePath).lexically_normal();
 
-			texturePath = texturePath.lexically_normal();
 			if (!std::filesystem::exists(texturePath))
 			{
-				NV_CORE_WARN("Mesh texture does not exist: {0}", texturePath.string());
-				return 0;
+				std::string filename = originalPath.filename().string();
+				std::transform(filename.begin(), filename.end(), filename.begin(),
+					[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+				const auto foundTexture = textureFilesByName.find(filename);
+				if (foundTexture == textureFilesByName.end())
+				{
+					NV_CORE_WARN("Mesh texture does not exist: {0} (material reference: {1})",
+						texturePath.string(), importedTexturePath.C_Str());
+					return 0;
+				}
+				texturePath = foundTexture->second;
 			}
 
 			return AssetManager::ImportAsset(texturePath);
@@ -230,6 +258,56 @@ namespace cerberus
 				{
 					materialAsset->SetNormalMap(normalMap);
 					changed = true;
+				}
+			}
+
+			// The bundled Assimp predates explicit PBR texture enums. FBX importers
+			// commonly expose metallic/roughness as UNKNOWN (and sometimes put base
+			// color there too), so classify every referenced texture by filename.
+			for (int typeValue = static_cast<int>(aiTextureType_DIFFUSE);
+				typeValue <= static_cast<int>(aiTextureType_UNKNOWN); ++typeValue)
+			{
+				const aiTextureType type = static_cast<aiTextureType>(typeValue);
+				for (uint32_t textureIndex = 0; textureIndex < sourceMaterial->GetTextureCount(type); ++textureIndex)
+				{
+					aiString sourcePath;
+					if (sourceMaterial->GetTexture(type, textureIndex, &sourcePath) != AI_SUCCESS)
+						continue;
+
+					std::string normalizedSourcePath = sourcePath.C_Str();
+					std::replace(normalizedSourcePath.begin(), normalizedSourcePath.end(), '\\', '/');
+					std::string name = std::filesystem::path(normalizedSourcePath).filename().string();
+					std::transform(name.begin(), name.end(), name.begin(),
+						[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+					const auto contains = [&name](const char* token) { return name.find(token) != std::string::npos; };
+					const AssetHandle texture = importMaterialTexture(sourceMaterial, type, textureIndex);
+					if (!texture)
+						continue;
+
+					if (materialAsset->GetAlbedoMapHandle() == 0 &&
+						(contains("basecolor") || contains("base_color") || contains("albedo") || contains("diffuse")))
+					{
+						materialAsset->SetAlbedoMap(texture);
+						changed = true;
+					}
+					else if (materialAsset->GetNormalMapHandle() == 0 &&
+						(contains("normal") || contains("_nrm") || contains("_nor")))
+					{
+						materialAsset->SetNormalMap(texture);
+						changed = true;
+					}
+					else if (materialAsset->GetMetalnessMapHandle() == 0 &&
+						(contains("metalness") || contains("metallic") || contains("_metal")))
+					{
+						materialAsset->SetMetalnessMap(texture);
+						changed = true;
+					}
+					else if (materialAsset->GetRoughnessMapHandle() == 0 &&
+						(contains("roughness") || contains("_rough")))
+					{
+						materialAsset->SetRoughnessMap(texture);
+						changed = true;
+					}
 				}
 			}
 

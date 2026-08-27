@@ -19,6 +19,7 @@ namespace cerberus
 		{ ".png", AssetType::Texture },
 		{ ".jpg", AssetType::Texture },
 		{ ".jpeg", AssetType::Texture },
+		{ ".dds", AssetType::Texture },
 		{ ".hdr", AssetType::EnvMap },
 	};
 }

@@ -49,6 +49,14 @@ namespace cerberus
 			ImageFormat format = textureAsset.GetFormat();
 			if (format == ImageFormat::RGBA || format == ImageFormat::SRGBA)
 				return srgb ? ImageFormat::SRGBA : ImageFormat::RGBA;
+			if (format == ImageFormat::BC1_RGBA || format == ImageFormat::BC1_SRGBA)
+				return srgb ? ImageFormat::BC1_SRGBA : ImageFormat::BC1_RGBA;
+			if (format == ImageFormat::BC2_RGBA || format == ImageFormat::BC2_SRGBA)
+				return srgb ? ImageFormat::BC2_SRGBA : ImageFormat::BC2_RGBA;
+			if (format == ImageFormat::BC3_RGBA || format == ImageFormat::BC3_SRGBA)
+				return srgb ? ImageFormat::BC3_SRGBA : ImageFormat::BC3_RGBA;
+			if (format == ImageFormat::BC7_RGBA || format == ImageFormat::BC7_SRGBA)
+				return srgb ? ImageFormat::BC7_SRGBA : ImageFormat::BC7_RGBA;
 
 			return format;
 		}
@@ -99,14 +107,18 @@ namespace cerberus
 			ResolveTextureFormat(sourceAsset, ResolveTextureSRGB(metadata, colorSpace)),
 			sourceAsset.GetWidth(),
 			sourceAsset.GetHeight(),
-			sourceAsset.GetPixelData().Data);
+			sourceAsset.GetPixelData().Data,
+			sourceAsset.GetPixelData().Size,
+			sourceAsset.GetMipData());
 	}
 
-	void Texture2D::Initialize(ImageFormat format, uint32_t width, uint32_t height, const void* data)
+	void Texture2D::Initialize(ImageFormat format, uint32_t width, uint32_t height, const void* data,
+		uint32_t dataSize, std::span<const TextureMipData> sourceMips)
 	{
-		uint32_t imageSize = Image::GetImageMemorySize(format, width, height);
+		uint32_t imageSize = dataSize != 0 ? dataSize : Image::GetImageMemorySize(format, width, height);
 		if (data && imageSize)
 			m_ImageData = Buffer::Copy(data, imageSize);
+		m_SourceMips.assign(sourceMips.begin(), sourceMips.end());
 
 		CORE_ASSERT(m_ImageData.Data || m_Properties.Storage, "Texture2D requires source data unless it is a storage texture");
 		CORE_ASSERT(!m_Properties.Storage || !m_Properties.GenerateMips, "Storage Texture2D mip generation is not supported yet");
@@ -118,7 +130,8 @@ namespace cerberus
 		imageSpec.Width = width;
 		imageSpec.Height = height;
 		imageSpec.Layers = 1;
-		imageSpec.Mips = m_Properties.GenerateMips ? Image::CalculateMipCount(width, height) : 1;
+		imageSpec.Mips = !m_SourceMips.empty() ? static_cast<uint32_t>(m_SourceMips.size())
+			: (m_Properties.GenerateMips ? Image::CalculateMipCount(width, height) : 1);
 		imageSpec.Flags = SAMPLE_COMPATIBLE;
 		m_Image = ResourceManager::CreateImage(imageSpec);
 
@@ -127,7 +140,7 @@ namespace cerberus
 		viewProp.BaseLayer = 0;
 		viewProp.LayerCount = 1;
 		viewProp.BaseMip = 0;
-		viewProp.MipCount = m_Properties.GenerateMips ? GetMipLevelCount() : 1;
+		viewProp.MipCount = imageSpec.Mips;
 		viewProp.Image = m_Image;
 		m_ImageView = ResourceManager::CreateImageView(viewProp);
 		Invalidate(format, width, height);
@@ -148,6 +161,7 @@ namespace cerberus
 		, m_Image(other.m_Image)
 		, m_ImageView(other.m_ImageView)
 		, m_TextureAsset(other.m_TextureAsset)
+		, m_SourceMips(std::move(other.m_SourceMips))
 	{
 		other.m_ImageData = Buffer{};
 		other.m_Image = Handle<Image>{};
@@ -215,7 +229,8 @@ namespace cerberus
 		imageSpec.Format = format;
 		imageSpec.Width = width;
 		imageSpec.Height = height;
-		imageSpec.Mips = m_Properties.GenerateMips ? GetMipLevelCount() : 1;
+		imageSpec.Mips = !m_SourceMips.empty() ? static_cast<uint32_t>(m_SourceMips.size())
+			: (m_Properties.GenerateMips ? Image::CalculateMipCount(width, height) : 1);
 		image->Invalidate();
 		// Invalidate ImageView
 		SamplerSpecification samplerSpec{};
@@ -223,7 +238,7 @@ namespace cerberus
 		samplerSpec.SamplerFilter = m_Properties.SamplerFilter;
 		samplerSpec.Anisotropy = m_Properties.Anisotropy;
 		samplerSpec.MinLOD = 0.0f;
-		samplerSpec.MaxLOD = static_cast<float>(imageSpec.Mips);
+		samplerSpec.MaxLOD = static_cast<float>(imageSpec.Mips - 1);
 		samplerSpec.ShaderResource = true;
 		viewProp.Image = m_Image;
 		viewProp.SamplerSpec = samplerSpec;
@@ -281,30 +296,47 @@ namespace cerberus
 		// Insert a memory dependency at the proper pipeline stages that will execute the image layout transition 
 		// Source pipeline stage is host write/read exection (VK_PIPELINE_STAGE_HOST_BIT)
 		// Destination pipeline stage is copy command exection (VK_PIPELINE_STAGE_TRANSFER_BIT)
-		image->SetLayout(transfer,
-						VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
-							VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+		VkImageSubresourceRange uploadRange{};
+		uploadRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		uploadRange.levelCount = m_SourceMips.empty() ? 1u : imageSpec.Mips;
+		uploadRange.layerCount = 1;
+		image->SetLayout(transfer, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, uploadRange);
 
 		// Define Region of the Image to Copy 
-		VkBufferImageCopy bufferCopyRegion = {};
-		bufferCopyRegion.bufferOffset = 0;											// Offset into data
-		bufferCopyRegion.bufferRowLength = 0;										// Row length of data to calculate data spacing
-		bufferCopyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;	// Which aspect of image to copy
-		bufferCopyRegion.imageSubresource.mipLevel = 0;								// Mipmap level to copy
-		bufferCopyRegion.imageSubresource.baseArrayLayer = 0;						// Starting array layer (if array)
-		bufferCopyRegion.imageSubresource.layerCount = 1;							// Number of layers to copy starting at baseArrayLayer
-		bufferCopyRegion.imageExtent = { width, height, 1 };						// Size of region to copy as (x, y, z) values
+		std::vector<VkBufferImageCopy> bufferCopyRegions;
+		if (!m_SourceMips.empty())
+		{
+			bufferCopyRegions.reserve(m_SourceMips.size());
+			for (uint32_t mipIndex = 0; mipIndex < m_SourceMips.size(); ++mipIndex)
+			{
+				const TextureMipData& mip = m_SourceMips[mipIndex];
+				VkBufferImageCopy& region = bufferCopyRegions.emplace_back();
+				region.bufferOffset = mip.Offset;
+				region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+				region.imageSubresource.mipLevel = mipIndex;
+				region.imageSubresource.layerCount = 1;
+				region.imageExtent = { mip.Width, mip.Height, 1 };
+			}
+		}
+		else
+		{
+			VkBufferImageCopy& region = bufferCopyRegions.emplace_back();
+			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			region.imageSubresource.layerCount = 1;
+			region.imageExtent = { width, height, 1 };
+		}
 
 		// Copy buffer to given image
 		transfer.CopyBufferToImage(
 			stagingBuffer,
 			vkImage,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			std::span<const VkBufferImageCopy>(&bufferCopyRegion, 1));
+			bufferCopyRegions);
 		
 		VkImageLayout dstLayout;
 		VkPipelineStageFlags dstPipelineStgFlags;
-		if (m_Properties.GenerateMips)
+		if (m_Properties.GenerateMips && m_SourceMips.empty())
 		{
 			dstLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 			dstPipelineStgFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -317,14 +349,14 @@ namespace cerberus
 
 		// Once the data has been uploaded we transfer to the texture image to the shader read layout, so it can be sampled from
 		image->SetLayout(transfer, dstLayout,
-			VK_PIPELINE_STAGE_TRANSFER_BIT, dstPipelineStgFlags);
+			VK_PIPELINE_STAGE_TRANSFER_BIT, dstPipelineStgFlags, uploadRange);
 
 
 		// Flush Copy/Transfer Command Buffer (not longer needed)
 		copyCommandBuffer.SubmitAndWait();
 		allocator.DestroyBuffer(stagingBuffer, stagingBufferAllocation);
 
-		if (m_Properties.GenerateMips)
+		if (m_Properties.GenerateMips && m_SourceMips.empty())
 			GenerateMips();
 
 		// TextureAsset owns persistent source pixels. Texture2D only keeps this
@@ -335,7 +367,7 @@ namespace cerberus
 	uint32_t Texture2D::GetMipLevelCount() const
 	{
 		Image* img = ResourceManager::GetImage(m_Image);
-		return Image::CalculateMipCount(img->GetWidth(), img->GetHeight());
+		return img ? img->GetSpecification().Mips : 0;
 	}
 
 	std::pair<uint32_t, uint32_t> Texture2D::GetMipSize(uint32_t mip) const

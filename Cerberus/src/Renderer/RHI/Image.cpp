@@ -20,6 +20,20 @@ namespace cerberus
 			case ImageFormat::RGB:			   return VK_FORMAT_R8G8B8_UNORM;
 			case ImageFormat::RGBA:            return VK_FORMAT_R8G8B8A8_UNORM;
 			case ImageFormat::SRGBA:           return VK_FORMAT_R8G8B8A8_SRGB;
+			case ImageFormat::BC1_RGBA:        return VK_FORMAT_BC1_RGBA_UNORM_BLOCK;
+			case ImageFormat::BC1_SRGBA:       return VK_FORMAT_BC1_RGBA_SRGB_BLOCK;
+			case ImageFormat::BC2_RGBA:        return VK_FORMAT_BC2_UNORM_BLOCK;
+			case ImageFormat::BC2_SRGBA:       return VK_FORMAT_BC2_SRGB_BLOCK;
+			case ImageFormat::BC3_RGBA:        return VK_FORMAT_BC3_UNORM_BLOCK;
+			case ImageFormat::BC3_SRGBA:       return VK_FORMAT_BC3_SRGB_BLOCK;
+			case ImageFormat::BC4_UNORM:       return VK_FORMAT_BC4_UNORM_BLOCK;
+			case ImageFormat::BC4_SNORM:       return VK_FORMAT_BC4_SNORM_BLOCK;
+			case ImageFormat::BC5_UNORM:       return VK_FORMAT_BC5_UNORM_BLOCK;
+			case ImageFormat::BC5_SNORM:       return VK_FORMAT_BC5_SNORM_BLOCK;
+			case ImageFormat::BC6H_UFLOAT:     return VK_FORMAT_BC6H_UFLOAT_BLOCK;
+			case ImageFormat::BC6H_SFLOAT:     return VK_FORMAT_BC6H_SFLOAT_BLOCK;
+			case ImageFormat::BC7_RGBA:        return VK_FORMAT_BC7_UNORM_BLOCK;
+			case ImageFormat::BC7_SRGBA:       return VK_FORMAT_BC7_SRGB_BLOCK;
 			case ImageFormat::RGBA16F:         return VK_FORMAT_R16G16B16A16_SFLOAT;
 			case ImageFormat::RGBA32F:         return VK_FORMAT_R32G32B32A32_SFLOAT;
 			case ImageFormat::DEPTH32F:        return VK_FORMAT_D32_SFLOAT;
@@ -134,6 +148,18 @@ namespace cerberus
 		}
 
 		VkFormat vulkanFormat = utils::VulkanImageFormat(m_Specification.Format);
+		VkFormatProperties formatProperties{};
+		vkGetPhysicalDeviceFormatProperties(
+			RendererContext::GetCurrentDevice()->GetPhysicalDevice()->GetVulkanPhysicalDevice(),
+			vulkanFormat,
+			&formatProperties);
+		CORE_ASSERT((formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) != 0,
+			"Image format does not support transfer destination usage");
+		if (HasFlags(SAMPLE_COMPATIBLE))
+		{
+			CORE_ASSERT((formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0,
+				"Image format cannot be sampled by the selected GPU");
+		}
 		/////////////////////////////////////////////////
 		////// Create Image
 		/////////////////////////////////////////////////

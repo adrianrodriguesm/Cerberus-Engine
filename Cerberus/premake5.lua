@@ -46,6 +46,7 @@ project "Cerberus"
 		"GLFW",
 		"ImGui",
 		"yaml-cpp",
+		"assimp",
 		"%{Library.Vulkan}",
 		"%{Library.VulkanUtils}",
 	}

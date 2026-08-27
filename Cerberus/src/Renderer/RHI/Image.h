@@ -33,6 +33,20 @@ namespace cerberus
 		RG16F,
 		RG32F,
 		SRGBA,
+		BC1_RGBA,
+		BC1_SRGBA,
+		BC2_RGBA,
+		BC2_SRGBA,
+		BC3_RGBA,
+		BC3_SRGBA,
+		BC4_UNORM,
+		BC4_SNORM,
+		BC5_UNORM,
+		BC5_SNORM,
+		BC6H_UFLOAT,
+		BC6H_SFLOAT,
+		BC7_RGBA,
+		BC7_SRGBA,
 
 		DEPTH32F,
 		DEPTH24STENCIL8,
@@ -121,6 +135,20 @@ namespace cerberus
 			case ImageFormat::RGBA32F:	return 4 * 4;
 			case ImageFormat::RG16F:		return 2 * 2;
 			case ImageFormat::RG32F:		return 2 * 4;
+			case ImageFormat::BC1_RGBA:
+			case ImageFormat::BC1_SRGBA:
+			case ImageFormat::BC4_UNORM:
+			case ImageFormat::BC4_SNORM: return 4;
+			case ImageFormat::BC2_RGBA:
+			case ImageFormat::BC2_SRGBA:
+			case ImageFormat::BC3_RGBA:
+			case ImageFormat::BC3_SRGBA:
+			case ImageFormat::BC5_UNORM:
+			case ImageFormat::BC5_SNORM:
+			case ImageFormat::BC6H_UFLOAT:
+			case ImageFormat::BC6H_SFLOAT:
+			case ImageFormat::BC7_RGBA:
+			case ImageFormat::BC7_SRGBA: return 8;
 			}
 			CORE_ASSERT(false, "Image Format does not exits!");
 			return 0;
@@ -137,7 +165,19 @@ namespace cerberus
 
 		static inline uint32_t GetImageMemorySize(ImageFormat format, uint32_t width, uint32_t height)
 		{
+			if (IsBlockCompressedFormat(format))
+			{
+				const uint32_t blockBytes =
+					(format == ImageFormat::BC1_RGBA || format == ImageFormat::BC1_SRGBA ||
+					 format == ImageFormat::BC4_UNORM || format == ImageFormat::BC4_SNORM) ? 8u : 16u;
+				return glm::max(1u, (width + 3u) / 4u) * glm::max(1u, (height + 3u) / 4u) * blockBytes;
+			}
 			return width * height * GetImageFormatBPP(format);
+		}
+
+		static inline bool IsBlockCompressedFormat(ImageFormat format)
+		{
+			return format >= ImageFormat::BC1_RGBA && format <= ImageFormat::BC7_SRGBA;
 		}
 
 		static inline bool IsDepthFormat(ImageFormat format)

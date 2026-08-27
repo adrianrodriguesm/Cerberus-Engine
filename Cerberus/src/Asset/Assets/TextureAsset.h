@@ -1,8 +1,16 @@
 #pragma once
 #include "Renderer/RHI/Image.h"
 #include "Asset/Asset.h"
+#include <vector>
 namespace cerberus
 {
+	struct TextureMipData
+	{
+		uint32_t Offset = 0;
+		uint32_t Size = 0;
+		uint32_t Width = 0;
+		uint32_t Height = 0;
+	};
 	enum class TextureType : uint8_t
 	{
 		Texture2D = 0,
@@ -40,6 +48,7 @@ namespace cerberus
 		uint32_t GetWidth() const { return m_Width; }
 		uint32_t GetHeight() const { return m_Height; }
 		const Buffer& GetPixelData() const { return m_ImageData; }
+		const std::vector<TextureMipData>& GetMipData() const { return m_MipData; }
 		const std::filesystem::path& GetPath() const { return m_Metadata.FilePath; }
 		const TextureMetadata& GetTextureMetadata() const { return m_Metadata; }
 
@@ -50,5 +59,6 @@ namespace cerberus
 		uint32_t m_Height = 0;
 		ImageFormat m_Format = ImageFormat::None;
 		Buffer m_ImageData;
+		std::vector<TextureMipData> m_MipData;
 	};
 }

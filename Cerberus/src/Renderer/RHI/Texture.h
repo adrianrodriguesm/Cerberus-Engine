@@ -3,9 +3,10 @@
 #include "Renderer/RHI/Image.h"
 #include "Core/Buffer.h"
 #include "Asset/Asset.h"
+#include "Asset/Assets/TextureAsset.h"
+#include <span>
 namespace cerberus
 {
-	class TextureAsset;
 
 	// Texture assets store source pixels. GPU textures select how those pixels are
 	// interpreted when the Vulkan image is created.
@@ -68,7 +69,8 @@ namespace cerberus
 		uint32_t GetMipLevelCount() const;
 		virtual std::pair<uint32_t, uint32_t> GetMipSize(uint32_t mip) const override;
 	private:
-		void Initialize(ImageFormat format, uint32_t width, uint32_t height, const void* data);
+		void Initialize(ImageFormat format, uint32_t width, uint32_t height, const void* data,
+			uint32_t dataSize = 0, std::span<const TextureMipData> sourceMips = {});
 		void Invalidate(ImageFormat format, const uint32_t width, const uint32_t height);
 		void GenerateMips();
 	private:
@@ -77,6 +79,7 @@ namespace cerberus
 		Handle<Image> m_Image;
 		Handle<ImageView> m_ImageView;
 		AssetHandle m_TextureAsset;
+		std::vector<TextureMipData> m_SourceMips;
 	};
 	////////////////////////////////////////////////
 	////// TextureCube

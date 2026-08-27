@@ -193,8 +193,15 @@ namespace cerberus
 	{
 		CORE_ASSERT(HasMaterial(index), "Material index does not exist!");
 		m_Materials.erase(index);
-		if (index >= m_MaterialCount)
-			m_MaterialCount = index - 1; // TODO: Check this
+		if (index + 1 == m_MaterialCount)
+		{
+			m_MaterialCount = 0;
+			for (const auto& [materialIndex, material] : m_Materials)
+			{
+				(void)material;
+				m_MaterialCount = glm::max(m_MaterialCount, materialIndex + 1);
+			}
+		}
 	}
 
 	void MaterialTable::SetMaterialCount(uint32_t materialCount)

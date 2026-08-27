@@ -32,6 +32,7 @@ project "Cerberus-Editor"
 		"GLFW",
 		"%{Library.Vulkan}",
 		"%{Library.VulkanUtils}",
+		"assimp",
 	}
 
 	filter "system:windows"
@@ -47,27 +48,7 @@ project "Cerberus-Editor"
 		runtime "Debug"
 		symbols "On"
 
-		links
-		{
-			"../Cerberus/vendor/assimp/bin/Debug/assimp-vc141-mtd.lib",
-		}
-
-		postbuildcommands 
-		{
-			'{COPY} "../Cerberus/vendor/assimp/bin/Debug/assimp-vc141-mtd.dll" "%{cfg.targetdir}"',	
-		}
-
 	filter "configurations:Release"
 		defines "NV_RELEASE"
 		runtime "Release"
 		optimize "On"
-
-		links
-		{
-			"../Cerberus/vendor/assimp/bin/Release/assimp-vc141-mt.lib",
-		}
-
-		postbuildcommands 
-		{
-			'{COPY} "../Cerberus/vendor/assimp/bin/Release/assimp-vc141-mt.dll" "%{cfg.targetdir}"'
-		}

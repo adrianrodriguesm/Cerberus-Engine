@@ -87,6 +87,7 @@ namespace cerberus
 		m_TimestampQueryPools.clear();
 		m_TimestampQueryResults.clear();
 		m_ExecutionGPUTimes.clear();
+		m_SubmittedTimestampQueryCounts.clear();
 	}
 
 	void CommandBuffer::Begin()
@@ -273,25 +274,41 @@ namespace cerberus
 			CORE_PROFILE_SCOPE("WaitForFence");
 			VK_CHECK_RESULT(vkWaitForFences(vulkanDevice, 1, &m_WaitFences[frameIndex], VK_TRUE, UINT64_MAX));
 		}
-		VK_CHECK_RESULT(vkResetFences(vulkanDevice, 1, &m_WaitFences[frameIndex]));
-		VK_CHECK_RESULT(vkQueueSubmit(device->GetGraphicsQueue(), 1, &submitInfo, m_WaitFences[frameIndex]));
 
-		if (!collectQueryResults)
-			return;
-
-		vkGetQueryPoolResults(device->GetVulkanDevice(), m_TimestampQueryPools[frameIndex], 0, m_TimestampNextAvailableQuery,
-			m_TimestampNextAvailableQuery * sizeof(uint64_t), m_TimestampQueryResults[frameIndex].data(), sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
-
-		for (uint32_t i = 0; i < m_TimestampNextAvailableQuery; i += 2)
+		// The signaled fence covers the previous submission for this frame slot.
+		// Read its queries before submitting the command buffer that resets them.
+		if (collectQueryResults)
 		{
-			uint64_t startTime = m_TimestampQueryResults[frameIndex][i];
-			uint64_t endTime = m_TimestampQueryResults[frameIndex][i + 1];
-			float nsTime = endTime > startTime ? (endTime - startTime) * Renderer::GetDeviceLimits().timestampPeriod : 0.0f;
-			m_ExecutionGPUTimes[frameIndex][i / 2] = nsTime * 0.000001f;
+			const uint32_t previousQueryCount = m_SubmittedTimestampQueryCounts[frameIndex];
+			if (previousQueryCount > 0)
+			{
+				VK_CHECK_RESULT(vkGetQueryPoolResults(
+					vulkanDevice, m_TimestampQueryPools[frameIndex], 0, previousQueryCount,
+					previousQueryCount * sizeof(uint64_t), m_TimestampQueryResults[frameIndex].data(),
+					sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
+
+				for (uint32_t i = 0; i < previousQueryCount; i += 2)
+				{
+					const uint64_t startTime = m_TimestampQueryResults[frameIndex][i];
+					const uint64_t endTime = m_TimestampQueryResults[frameIndex][i + 1];
+					const float nsTime = endTime > startTime
+						? (endTime - startTime) * Renderer::GetDeviceLimits().timestampPeriod
+						: 0.0f;
+					m_ExecutionGPUTimes[frameIndex][i / 2] = nsTime * 0.000001f;
+				}
+
+				VK_CHECK_RESULT(vkGetQueryPoolResults(
+					vulkanDevice, m_PipelineStatisticsQueryPools[frameIndex], 0, 1,
+					sizeof(PipelineStatistics), &m_PipelineStatisticsQueryResults[frameIndex],
+					sizeof(uint64_t), VK_QUERY_RESULT_64_BIT));
+			}
 		}
 
-		vkGetQueryPoolResults(device->GetVulkanDevice(), m_PipelineStatisticsQueryPools[frameIndex], 0, 1,
-			sizeof(PipelineStatistics), &m_PipelineStatisticsQueryResults[frameIndex], sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
+		VK_CHECK_RESULT(vkResetFences(vulkanDevice, 1, &m_WaitFences[frameIndex]));
+		VK_CHECK_RESULT(vkQueueSubmit(device->GetGraphicsQueue(), 1, &submitInfo, m_WaitFences[frameIndex]));
+		m_SubmittedTimestampQueryCounts[frameIndex] = collectQueryResults
+			? m_TimestampNextAvailableQuery
+			: 0;
 	}
 
 	Ref<CommandBuffer> CommandBuffer::CreateFromSwapchain()
@@ -340,6 +357,7 @@ namespace cerberus
 		m_ExecutionGPUTimes.resize(count);
 		for (auto& executionGPUTimes : m_ExecutionGPUTimes)
 			executionGPUTimes.resize(m_TimestampQueryCount / 2);
+		m_SubmittedTimestampQueryCounts.assign(count, 0);
 
 		for (auto& timestampQueryPools : m_TimestampQueryPools)
 			VK_CHECK_RESULT(vkCreateQueryPool(device->GetVulkanDevice(), &queryPoolCreateInfo, nullptr, &timestampQueryPools));

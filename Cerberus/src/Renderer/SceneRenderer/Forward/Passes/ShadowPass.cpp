@@ -49,10 +49,11 @@ namespace cerberus
 		}
 
 		glm::vec3 frustumCorners[8] = {
-			// Near (negative Z in clip space)
-			glm::vec3(-1.0f,  1.0f, -1.0f), glm::vec3(1.0f,  1.0f, -1.0f),
-			glm::vec3(1.0f, -1.0f, -1.0f), glm::vec3(-1.0f, -1.0f, -1.0f),
-			// Far (positive Z in clip space)
+			// GLM_FORCE_DEPTH_ZERO_TO_ONE matches Vulkan's [0, 1] NDC depth.
+			// Near (zero Z in clip space)
+			glm::vec3(-1.0f,  1.0f,  0.0f), glm::vec3(1.0f,  1.0f,  0.0f),
+			glm::vec3(1.0f, -1.0f,  0.0f), glm::vec3(-1.0f, -1.0f,  0.0f),
+			// Far (one Z in clip space)
 			glm::vec3(-1.0f,  1.0f,  1.0f), glm::vec3(1.0f,  1.0f,  1.0f),
 			glm::vec3(1.0f, -1.0f,  1.0f), glm::vec3(-1.0f, -1.0f,  1.0f),
 		};

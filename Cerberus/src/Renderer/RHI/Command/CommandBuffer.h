@@ -84,6 +84,7 @@ namespace cerberus
 		std::vector<VkQueryPool> m_PipelineStatisticsQueryPools;
 		std::vector<std::vector<uint64_t>> m_TimestampQueryResults;
 		std::vector<std::vector<float>> m_ExecutionGPUTimes;
+		std::vector<uint32_t> m_SubmittedTimestampQueryCounts;
 
 
 	};

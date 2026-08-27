@@ -71,6 +71,7 @@ group "Dependencies"
 	include "Cerberus/vendor/GLFW"
 	include "Cerberus/vendor/ImGui"
 	include "Cerberus/vendor/yaml-cpp"
+	include "Cerberus/vendor/assimp"
 group ""
 
 include "Cerberus"

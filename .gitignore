@@ -21,3 +21,4 @@ Cerberus/vendor/VulkanSDK
 **.vcxproj.filters
 **.vcxproj.user
 **.csproj
+*.zip

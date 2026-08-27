@@ -609,10 +609,14 @@ namespace cerberus
 					{
 						Pass& pass = m_Passes[m_ExecutionOrder[member]];
 						if (profilingEnabled)
+						{
 							pass.GPUTimeQueryID = commandBuffer.BeginTimestampQueryRenderThread();
+						}
 						pass.GraphicsExecute(graphics);
 						if (profilingEnabled)
+						{
 							commandBuffer.EndTimestampQueryRenderThread(pass.GPUTimeQueryID);
+						}
 					}
 					graphics.EndRenderingAttachments();
 				}
@@ -622,10 +626,14 @@ namespace cerberus
 					{
 						Pass& pass = m_Passes[m_ExecutionOrder[member]];
 						if (profilingEnabled)
+						{
 							pass.GPUTimeQueryID = commandBuffer.BeginTimestampQueryRenderThread();
+						}
 						pass.GraphicsExecute(graphics);
 						if (profilingEnabled)
+						{
 							commandBuffer.EndTimestampQueryRenderThread(pass.GPUTimeQueryID);
+						}
 					}
 				}
 			}

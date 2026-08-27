@@ -10,3 +10,6 @@
 [submodule "Cerberus/vendor/yaml-cpp"]
 	path = Cerberus/vendor/yaml-cpp
 	url = https://github.com/adrianrodriguesm/yaml-cpp.git
+[submodule "Cerberus/vendor/assimp"]
+	path = Cerberus/vendor/assimp
+	url = https://github.com/adrianrodriguesm/assimp.git

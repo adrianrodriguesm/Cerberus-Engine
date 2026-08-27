@@ -281,24 +281,46 @@ namespace cerberus
 
 		VkPhysicalDeviceDescriptorIndexingFeatures supportedDescriptorIndexingFeatures{};
 		supportedDescriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+		VkPhysicalDeviceBufferDeviceAddressFeatures supportedBufferDeviceAddressFeatures{};
+		supportedBufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+		VkPhysicalDeviceRayTracingPipelineFeaturesKHR supportedRayTracingPipelineFeatures{};
+		supportedRayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+		VkPhysicalDeviceAccelerationStructureFeaturesKHR supportedAccelerationStructureFeatures{};
+		supportedAccelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+		VkPhysicalDeviceHostQueryResetFeatures supportedHostQueryResetFeatures{};
+		supportedHostQueryResetFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES;
 
 		// The instance requests VK_API_VERSION_1_3, but that alone does not enable
 		// any 1.3 feature; Dynamic Rendering must be queried and opted into explicitly.
 		VkPhysicalDeviceVulkan13Features supportedVulkan13Features{};
 		supportedVulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-		supportedVulkan13Features.pNext = &supportedDescriptorIndexingFeatures;
+		supportedVulkan13Features.pNext = &supportedHostQueryResetFeatures;
+		supportedHostQueryResetFeatures.pNext = &supportedAccelerationStructureFeatures;
+		supportedAccelerationStructureFeatures.pNext = &supportedRayTracingPipelineFeatures;
+		supportedRayTracingPipelineFeatures.pNext = &supportedDescriptorIndexingFeatures;
+		supportedDescriptorIndexingFeatures.pNext = &supportedBufferDeviceAddressFeatures;
 
 		VkPhysicalDeviceFeatures2 supportedDeviceFeatures{};
 		supportedDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 		supportedDeviceFeatures.pNext = &supportedVulkan13Features;
 		vkGetPhysicalDeviceFeatures2(m_PhysicalDevice->GetVulkanPhysicalDevice(), &supportedDeviceFeatures);
 
+		CORE_ASSERT(supportedDeviceFeatures.features.samplerAnisotropy,
+			"The selected GPU does not support sampler anisotropy");
+		CORE_ASSERT(supportedDeviceFeatures.features.pipelineStatisticsQuery,
+			"The selected GPU does not support pipeline statistics queries");
 		CORE_ASSERT(
 			supportedDescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing,
 			"The selected GPU does not support non-uniform sampled-image array indexing required by the RT texture table");
 		CORE_ASSERT(
 			supportedVulkan13Features.dynamicRendering == VK_TRUE,
 			"The selected GPU does not support Vulkan 1.3 Dynamic Rendering");
+		CORE_ASSERT(supportedBufferDeviceAddressFeatures.bufferDeviceAddress,
+			"The selected GPU does not support buffer device addresses");
+		CORE_ASSERT(supportedRayTracingPipelineFeatures.rayTracingPipeline,
+			"The selected GPU does not support ray tracing pipelines");
+		CORE_ASSERT(supportedAccelerationStructureFeatures.accelerationStructure,
+			"The selected GPU does not support acceleration structures");
 
 		VkPhysicalDeviceDescriptorIndexingFeatures enabledDescriptorIndexingFeatures{};
 		enabledDescriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
@@ -320,20 +342,16 @@ namespace cerberus
 		enabledAccelerationStructureFeatures.accelerationStructure = VK_TRUE;
 		enabledAccelerationStructureFeatures.pNext = &enabledRayTracingPipelineFeatures;
 
-		// Provided by VK_EXT_host_query_reset
-		VkPhysicalDeviceHostQueryResetFeatures enabledHostQueryResetFeatures{};
-		enabledHostQueryResetFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES;
-		enabledHostQueryResetFeatures.hostQueryReset = VK_TRUE;
-		enabledHostQueryResetFeatures.pNext = &enabledAccelerationStructureFeatures;
-
 		// Core Vulkan 1.3 feature: no extension string required, only this feature
 		// struct. Kept as the new head of the chain so every previously enabled
-		// feature (host query reset, acceleration structures, RT pipeline,
+		// feature (acceleration structures, RT pipeline,
 		// descriptor indexing, buffer device address) stays enabled unchanged.
 		VkPhysicalDeviceVulkan13Features enabledVulkan13Features{};
 		enabledVulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
 		enabledVulkan13Features.dynamicRendering = VK_TRUE;
-		enabledVulkan13Features.pNext = &enabledHostQueryResetFeatures;
+		// Query pools are reset on the GPU with vkCmdResetQueryPool, so the
+		// optional hostQueryReset feature is not required.
+		enabledVulkan13Features.pNext = &enabledAccelerationStructureFeatures;
 
 		void* deviceCreatepNextChain = &enabledVulkan13Features;
 
