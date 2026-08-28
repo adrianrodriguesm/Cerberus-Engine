@@ -16,6 +16,11 @@
 
 namespace cerberus
 {
+	RenderScene::RenderScene()
+	{
+		m_TextureRegistry.Initialize(RendererResources::GetWhiteTexture());
+	}
+
 	RenderScene::~RenderScene()
 	{
 		Shutdown();
@@ -219,34 +224,7 @@ namespace cerberus
 
 	uint32_t RenderScene::RegisterTextureProxy(AssetHandle textureAssetHandle, bool srgb)
 	{
-		if (textureAssetHandle == 0)
-			return InvalidMaterialTextureIndex;
-
-		auto& registeredTextures = srgb
-			? m_MeshRegister.SRGBTextureRegistered
-			: m_MeshRegister.LinearTextureRegistered;
-
-		if (auto it = registeredTextures.find(textureAssetHandle); it != registeredTextures.end())
-			return it->second;
-
-		Ref<TextureAsset> textureAsset = AssetManager::GetAsset<TextureAsset>(textureAssetHandle);
-		if (!textureAsset || !textureAsset->Loaded())
-		{
-			NV_CORE_WARN("Material texture asset {0} could not be loaded", (uint64_t)textureAssetHandle);
-			return InvalidMaterialTextureIndex;
-		}
-
-		CORE_ASSERT(m_MeshRegister.GPUTextures.size() < MaxMaterialTextureCount, "Material texture table capacity exceeded");
-
-		Handle<Texture2D> gpuTexture = ResourceManager::CreateTexture2D(
-			textureAsset,
-			srgb ? TextureColorSpace::SRGB : TextureColorSpace::Linear);
-		CORE_ASSERT(gpuTexture.IsValid(), "Failed to create GPU texture for the material table");
-
-		const uint32_t textureIndex = static_cast<uint32_t>(m_MeshRegister.GPUTextures.size());
-		m_MeshRegister.GPUTextures.push_back(gpuTexture);
-		registeredTextures[textureAssetHandle] = textureIndex;
-		return textureIndex;
+		return m_TextureRegistry.RegisterTexture(textureAssetHandle, srgb);
 	}
 
 	GPUMaterialData RenderScene::BuildMaterialGPUData(const Ref<MaterialAsset>& materialAsset)
@@ -302,15 +280,7 @@ namespace cerberus
 
 	void RenderScene::ClearTextureProxies()
 	{
-		for (Handle<Texture2D> texture : m_MeshRegister.GPUTextures)
-		{
-			if (texture.IsValid())
-				ResourceManager::DestroyTexture2D(texture);
-		}
-
-		m_MeshRegister.GPUTextures.clear();
-		m_MeshRegister.SRGBTextureRegistered.clear();
-		m_MeshRegister.LinearTextureRegistered.clear();
+		m_TextureRegistry.Shutdown();
 	}
 
 	bool RenderScene::RegisterMesh(
@@ -810,7 +780,7 @@ namespace cerberus
 			m_MeshRegister.RegisteredMeshInstances.empty() &&
 			m_MeshRegister.MeshSourceRegistered.empty() &&
 			m_MeshRegister.MaterialProxies.empty() &&
-			m_MeshRegister.GPUTextures.empty() &&
+			m_TextureRegistry.GetTextureHandles().size() <= 1 &&
 			m_RayTracingInstances.empty())
 		{
 			return;

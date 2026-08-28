@@ -1,14 +1,13 @@
 #ifndef CERBERUS_RT_TEXTURE_TABLE_GLSL
 #define CERBERUS_RT_TEXTURE_TABLE_GLSL
 
-// Must match cerberus::MaxRayTracingTextureCount.
-const uint CERBERUS_RT_MAX_TEXTURES = 128u;
+const uint CERBERUS_INVALID_TEXTURE_INDEX = 0xFFFFFFFFu;
 
-layout(set = 0, binding = 5) uniform sampler2D RTTextures[128];
+layout(set = 0, binding = 5) uniform sampler2D RTTextures[];
 
 bool IsValidRTTextureIndex(uint textureIndex)
 {
-    return textureIndex < CERBERUS_RT_MAX_TEXTURES;
+	return textureIndex != CERBERUS_INVALID_TEXTURE_INDEX;
 }
 
 vec4 SampleRTTexture(uint textureIndex, vec2 texCoord)

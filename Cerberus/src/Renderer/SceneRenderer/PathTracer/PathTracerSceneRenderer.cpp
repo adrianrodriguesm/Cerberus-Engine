@@ -46,12 +46,6 @@ namespace cerberus
 
 		m_RenderScene = CreateScope<RenderScene>();
 
-		const VkPhysicalDeviceLimits physicalDeviceLimits = RendererContext::GetCurrentDevice()->GetPhysicalDeviceLimits();
-		CORE_ASSERT(
-			physicalDeviceLimits.maxPerStageDescriptorSampledImages >= MaxRayTracingTextureCount &&
-			physicalDeviceLimits.maxDescriptorSetSampledImages >= MaxRayTracingTextureCount,
-			"The selected GPU cannot expose the fixed RT texture table to one shader stage");
-
 		// The path tracer owns only RT resources. Raster rendering is rebuilt as
 		// an independent renderer on top of GraphicsCommandList.
 
@@ -71,6 +65,16 @@ namespace cerberus
 		{
 			Ref<Shader> rtShader = RendererResources::GetShaderLibrary().Get("Raytrace");
 			BindGroupLayout::BindGroupLayoutInfo layoutInfoRT = ShaderReflection::ReflectLayoutInfo(rtShader, 0);
+			bool foundBindlessTextures = false;
+			for (auto& imageSampler : layoutInfoRT.ImageSamplers)
+			{
+				if (imageSampler.BindingPoint != RT_TEXTURES_BINDING)
+					continue;
+				imageSampler.ArraySize = m_RenderScene->GetTextureRegistry().GetCapacity();
+				imageSampler.Bindless = true;
+				foundBindlessTextures = true;
+			}
+			CORE_ASSERT(foundBindlessTextures, "RT shader reflection did not expose the bindless texture table");
 			m_RT_BindGroupLayout = ResourceManager::CreateBindGroupLayout(layoutInfoRT);
 
 			BindGroupSpecification bindGroupRTSpec;
@@ -420,10 +424,12 @@ namespace cerberus
 	void PathTracerSceneRenderer::UpdateRTTextureTable()
 	{
 		CORE_ASSERT(m_RenderScene, "RenderScene is not initialized");
+		const GlobalTextureRegistry& textureRegistry = m_RenderScene->GetTextureRegistry();
+		if (m_TextureRegistryRevision == textureRegistry.GetRevision())
+			return;
 
 		std::vector<Handle<ImageView>> textureImageViews;
-		const std::vector<Handle<Texture2D>>& textures = m_RenderScene->GetRayTracingTextures();
-		CORE_ASSERT(textures.size() <= MaxRayTracingTextureCount, "RT texture table capacity exceeded");
+		const std::span<const Handle<Texture2D>> textures = textureRegistry.GetTextureHandles();
 		textureImageViews.reserve(textures.size());
 
 		for (Handle<Texture2D> textureHandle : textures)
@@ -439,6 +445,7 @@ namespace cerberus
 		BindGroup* rtBindGroup = ResourceManager::GetBindGroup(m_RT_BindGroup);
 		CORE_ASSERT(rtBindGroup, "Invalid RT bind group");
 		rtBindGroup->SetImageViewArray(textureImageViews, fallbackTexture->GetImageView(), RT_TEXTURES_BINDING);
+		m_TextureRegistryRevision = textureRegistry.GetRevision();
 	}
 
 	void PathTracerSceneRenderer::UpdateRTEnvironment()

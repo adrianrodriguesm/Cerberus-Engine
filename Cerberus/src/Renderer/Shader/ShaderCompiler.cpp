@@ -90,15 +90,17 @@ namespace cerberus
 				continue;
 
 			auto& type = compiler.get_type(resource.type_id);
-			const uint32_t arraySize = type.array.empty() || type.array[0] == 0
-				? 1u
-				: type.array[0];
+				const bool bindless = !type.array.empty() && type.array[0] == 0;
+				const uint32_t arraySize = bindless
+					? RendererContext::GetCurrentDevice()->GetBindlessTextureCapacity()
+					: (type.array.empty() ? 1u : type.array[0]);
 
 			BindGroupLayout::ImageBinding imgBinding;
 			imgBinding.Name = resource.name;
 			imgBinding.BindingPoint = compiler.get_decoration(resource.id, spv::DecorationBinding);
 			imgBinding.ShaderStage = shaderStage;
 			imgBinding.ArraySize = arraySize;
+			imgBinding.Bindless = bindless;
 
 			NV_CORE_TRACE("  {0} ({1}, {2})", imgBinding.Name, descriptorSet, imgBinding.BindingPoint);
 

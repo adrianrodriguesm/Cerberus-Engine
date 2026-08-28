@@ -124,6 +124,7 @@ namespace cerberus
 		Ref<UniformBufferSet> m_RT_DirectionalLightBufferSet;
 		Ref<StorageBufferSet> m_RT_MaterialBufferSet;
 		Ref<StorageBufferSet> m_RT_InstanceBufferSet;
+		uint64_t m_TextureRegistryRevision = 0;
 
 		// Renderer-side representation of the logical scene.
 		Scope<RenderScene> m_RenderScene;

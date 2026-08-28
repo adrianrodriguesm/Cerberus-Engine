@@ -148,12 +148,12 @@ layout(std430, set = 0, binding = 3) readonly buffer MaterialBuffer
     GPUMaterialData Materials[];
 } MaterialTable;
 
-const uint CERBERUS_RT_MAX_TEXTURES = 128u;
-layout(set = 0, binding = 5) uniform sampler2D RTTextures[128];
+const uint CERBERUS_INVALID_TEXTURE_INDEX = 0xFFFFFFFFu;
+layout(set = 0, binding = 5) uniform sampler2D RTTextures[];
 
 bool IsValidRTTextureIndex(uint textureIndex)
 {
-    return textureIndex < CERBERUS_RT_MAX_TEXTURES;
+	return textureIndex != CERBERUS_INVALID_TEXTURE_INDEX;
 }
 
 vec4 SampleRTTexture(uint textureIndex, vec2 texCoord)

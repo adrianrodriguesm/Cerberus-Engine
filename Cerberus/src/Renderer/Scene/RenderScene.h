@@ -8,6 +8,7 @@
 #include "Asset/Assets/MeshAsset.h"
 #include "Renderer/Core/RenderObjectID.h"
 #include "Scene/SceneEnvironment.h"
+#include "Renderer/Scene/GlobalTextureRegistry.h"
 
 #include <array>
 #include <span>
@@ -17,11 +18,6 @@ namespace cerberus
 	class Texture2D;
 	class TextureCube;
 	struct EnvironmentMap;
-
-	static constexpr uint32_t MaxMaterialTextureCount = 128;
-	// Compatibility name for the current RT shaders. Both renderers consume the
-	// same RenderScene-owned material texture table.
-	static constexpr uint32_t MaxRayTracingTextureCount = MaxMaterialTextureCount;
 
 	static_assert(sizeof(MeshSource::Vertex) == 14 * sizeof(float), "RT vertex fetch expects MeshSource::Vertex to contain 14 tightly packed floats");
 	static_assert(sizeof(MeshSource::Index) == 3 * sizeof(uint32_t), "RT index fetch expects tightly packed uint32 triangle indices");
@@ -65,7 +61,7 @@ namespace cerberus
 	class RenderScene final
 	{
 	public:
-		RenderScene() = default;
+		RenderScene();
 		~RenderScene();
 
 		bool RegisterMesh(RenderObjectID renderObjectID, const Ref<Mesh>& mesh, const Ref<MaterialTable>& materialTable, const glm::mat4& transform, int32_t submeshIndex = -1);
@@ -100,8 +96,7 @@ namespace cerberus
 		// for both scene renderers regardless of how many passes they run.
 		uint32_t GetTotalTriangleCount() const;
 		const MaterialProxy* GetMaterialProxy(uint32_t materialProxyIndex) const;
-		const std::vector<Handle<Texture2D>>& GetMaterialTextures() const { return m_MeshRegister.GPUTextures; }
-		const std::vector<Handle<Texture2D>>& GetRayTracingTextures() const { return GetMaterialTextures(); }
+		const GlobalTextureRegistry& GetTextureRegistry() const { return m_TextureRegistry; }
 
 		// Encodes every registered raster mesh instance into one DrawStreamBuilder
 		// stream (see DrawStreamBuilder.h). Rebuilt once per frame by the raster
@@ -185,12 +180,6 @@ namespace cerberus
 			std::vector<MaterialProxy> MaterialProxies;
 			uint32_t DefaultMaterialProxyIndex = InvalidMaterialProxyIndex;
 
-			// The same source asset can be resident once as sRGB data and once as
-			// linear data, because the material slot decides the color space.
-			std::unordered_map<AssetHandle, uint32_t> SRGBTextureRegistered;
-			std::unordered_map<AssetHandle, uint32_t> LinearTextureRegistered;
-			std::vector<Handle<Texture2D>> GPUTextures;
-
 			// Mesh Source Proxy -> Submesh index -> Submesh instance
 			std::unordered_map<Handle<MeshSourceProxy>, std::unordered_map<uint32_t, std::vector<Handle<MeshInstanceProxy>>>> MeshInstanceMap;
 			// Flat draw order consumed by raster renderers. The per-source map above is
@@ -199,6 +188,8 @@ namespace cerberus
 
 			uint32_t MeshInstanceCount = 0;
 		} m_MeshRegister;
+
+		GlobalTextureRegistry m_TextureRegistry;
 
 		// Kept in exactly the same order as the instances submitted to the TLAS.
 		std::vector<RayTracingInstanceData> m_RayTracingInstances;

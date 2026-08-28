@@ -34,6 +34,7 @@ namespace cerberus
 			uint32_t BindingPoint = 0;
 			uint32_t ArraySize = 0;
 			VkShaderStageFlagBits ShaderStage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+			bool Bindless = false;
 		};
 
 		struct BindGroupLayoutInfo

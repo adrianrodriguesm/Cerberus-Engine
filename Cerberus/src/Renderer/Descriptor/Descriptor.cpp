@@ -2,6 +2,7 @@
 #include "Descriptor.h"
 #include "Renderer/Core/Renderer.h"
 #include "Renderer/Memory/DeferredResourceDeletionQueue.h"
+#include <numeric>
 namespace cerberus
 {
 	DescriptorAllocator::DescriptorAllocator(const DescriptorAllocatorSpecification& spec)
@@ -17,9 +18,7 @@ namespace cerberus
 		pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		// Persistent sets are individually released by BindGroup. Transient sets
 		// are reclaimed in bulk when their frame pool is reset.
-		pool_info.flags = m_Specification.IsPersistent
-			? m_Specification.Flags
-			: 0;
+		pool_info.flags = m_Specification.Flags;
 
 		pool_info.maxSets = m_Specification.MaxSets;
 		pool_info.poolSizeCount = (uint32_t)sizes.size();
@@ -147,7 +146,28 @@ namespace cerberus
 	VkDescriptorSetLayout DescriptorLayoutCache::CreateDescriptorLayout(VkDescriptorSetLayoutCreateInfo* info)
 	{
 		DescriptorLayoutInfo layoutinfo;
+		layoutinfo.Flags = info->flags;
 		layoutinfo.Bindings.reserve(info->bindingCount);
+		layoutinfo.BindingFlags.assign(info->bindingCount, 0);
+
+		const VkDescriptorSetLayoutBindingFlagsCreateInfo* flagsInfo = nullptr;
+		for (auto* next = static_cast<const VkBaseInStructure*>(info->pNext); next; next = next->pNext)
+		{
+			if (next->sType == VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO)
+			{
+				flagsInfo = reinterpret_cast<const VkDescriptorSetLayoutBindingFlagsCreateInfo*>(next);
+				break;
+			}
+		}
+
+		if (flagsInfo)
+		{
+			CORE_ASSERT(flagsInfo->bindingCount == info->bindingCount,
+				"Descriptor binding flags must match the final layout binding count");
+			layoutinfo.BindingFlags.assign(
+				flagsInfo->pBindingFlags,
+				flagsInfo->pBindingFlags + flagsInfo->bindingCount);
+		}
 
 		bool isSorted = true;
 		int lastBinding = -1;
@@ -167,10 +187,20 @@ namespace cerberus
 		//		 makes equality check work much better
 		if (!isSorted)
 		{
-			std::sort(layoutinfo.Bindings.begin(), layoutinfo.Bindings.end(), [](VkDescriptorSetLayoutBinding& a, VkDescriptorSetLayoutBinding& b)
+			std::vector<uint32_t> order(layoutinfo.Bindings.size());
+			std::iota(order.begin(), order.end(), 0u);
+			std::sort(order.begin(), order.end(), [&](uint32_t a, uint32_t b)
 			{
-				return a.binding < b.binding;
+				return layoutinfo.Bindings[a].binding < layoutinfo.Bindings[b].binding;
 			});
+
+			auto bindings = layoutinfo.Bindings;
+			auto flags = layoutinfo.BindingFlags;
+			for (uint32_t i = 0; i < order.size(); ++i)
+			{
+				layoutinfo.Bindings[i] = bindings[order[i]];
+				layoutinfo.BindingFlags[i] = flags[order[i]];
+			}
 		}
 
 		// Try to grab from cache
@@ -189,7 +219,8 @@ namespace cerberus
 
 	bool DescriptorLayoutInfo::operator==(const DescriptorLayoutInfo& other) const
 	{
-		if (other.Bindings.size() != Bindings.size()) 
+		if (other.Bindings.size() != Bindings.size() ||
+			other.BindingFlags != BindingFlags || other.Flags != Flags)
 			return false;
 		
 		// Compare each of the bindings is the same. Bindings are sorted so they will match
@@ -209,15 +240,17 @@ namespace cerberus
 
 	size_t DescriptorLayoutInfo::Hash() const
 	{
-		size_t result = std::hash<size_t>()(Bindings.size());
+		size_t result = std::hash<size_t>()(Bindings.size()) ^ std::hash<uint32_t>()(Flags);
 
-		for (const VkDescriptorSetLayoutBinding& b : Bindings)
+		for (uint32_t i = 0; i < Bindings.size(); ++i)
 		{
+			const VkDescriptorSetLayoutBinding& b = Bindings[i];
 			//pack the binding data into a single int64. Not fully correct but it's ok
 			size_t binding_hash = b.binding | b.descriptorType << 8 | b.descriptorCount << 16 | b.stageFlags << 24;
 
 			//shuffle the packed binding data and xor it with the main hash
 			result ^= std::hash<size_t>()(binding_hash);
+			result ^= std::hash<uint32_t>()(BindingFlags[i]) << 1;
 		}
 
 		return result;

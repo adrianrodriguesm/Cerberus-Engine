@@ -120,6 +120,7 @@ namespace cerberus
 		Ref<UniformBufferSet> m_LightingBufferSet;
 		Ref<UniformBufferSet> m_ShadowBufferSet;
 		Ref<StorageBufferSet> m_MaterialBufferSet;
+		uint64_t m_TextureRegistryRevision = 0;
 
 		// Pass ordering and barriers for this renderer's frame; rebuilt (Reset()
 		// then re-added) every Render() call rather than reconstructed.

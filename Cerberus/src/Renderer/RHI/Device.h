@@ -108,6 +108,7 @@ namespace cerberus
 		VkPhysicalDeviceFeatures GetDeviceFeatures() { return m_Features; }
 
 		inline const VkPhysicalDeviceLimits GetPhysicalDeviceLimits() const { return m_PhysicalDevice->m_Properties.limits; }
+		uint32_t GetBindlessTextureCapacity() const;
 
 		inline const VkPhysicalDeviceAccelerationStructurePropertiesKHR& GetAccelerationStructureProperties() const
 		{

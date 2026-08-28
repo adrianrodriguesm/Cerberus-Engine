@@ -312,6 +312,12 @@ namespace cerberus
 		CORE_ASSERT(
 			supportedDescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing,
 			"The selected GPU does not support non-uniform sampled-image array indexing required by the RT texture table");
+		CORE_ASSERT(supportedDescriptorIndexingFeatures.runtimeDescriptorArray,
+			"The selected GPU does not support runtime descriptor arrays required by bindless textures");
+		CORE_ASSERT(supportedDescriptorIndexingFeatures.descriptorBindingPartiallyBound,
+			"The selected GPU does not support partially-bound descriptor arrays");
+		CORE_ASSERT(supportedDescriptorIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind,
+			"The selected GPU does not support updating sampled images after bind");
 		CORE_ASSERT(
 			supportedVulkan13Features.dynamicRendering == VK_TRUE,
 			"The selected GPU does not support Vulkan 1.3 Dynamic Rendering");
@@ -325,6 +331,9 @@ namespace cerberus
 		VkPhysicalDeviceDescriptorIndexingFeatures enabledDescriptorIndexingFeatures{};
 		enabledDescriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
 		enabledDescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+		enabledDescriptorIndexingFeatures.runtimeDescriptorArray = VK_TRUE;
+		enabledDescriptorIndexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
+		enabledDescriptorIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
 
 		// Enable features required for ray tracing using feature chaining via pNext
 		VkPhysicalDeviceBufferDeviceAddressFeatures enabledBufferDeviceAddresFeatures = {};
@@ -400,6 +409,31 @@ namespace cerberus
 		m_AccelerationStructureProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
 		deviceProperties2.pNext = &m_AccelerationStructureProperties;
 		vkGetPhysicalDeviceProperties2(physicalDevice, &deviceProperties2);
+	}
+
+	uint32_t Device::GetBindlessTextureCapacity() const
+	{
+		static constexpr uint32_t engineTextureBudget = 4096;
+		static constexpr uint32_t reservedSampledImages = 16;
+
+		VkPhysicalDeviceDescriptorIndexingProperties indexingProperties{};
+		indexingProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES;
+		VkPhysicalDeviceProperties2 properties{};
+		properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+		properties.pNext = &indexingProperties;
+		vkGetPhysicalDeviceProperties2(GetVulkanPhysicalDevice(), &properties);
+
+		const VkPhysicalDeviceLimits& limits = m_PhysicalDevice->m_Properties.limits;
+		const uint32_t deviceLimit = std::min({
+			limits.maxPerStageDescriptorSampledImages,
+			limits.maxDescriptorSetSampledImages,
+			indexingProperties.maxPerStageDescriptorUpdateAfterBindSampledImages,
+			indexingProperties.maxDescriptorSetUpdateAfterBindSampledImages,
+			indexingProperties.maxUpdateAfterBindDescriptorsInAllPools });
+
+		CORE_ASSERT(deviceLimit > reservedSampledImages,
+			"The selected GPU does not expose enough sampled-image descriptors for Cerberus");
+		return std::min(engineTextureBudget, deviceLimit - reservedSampledImages);
 	}
 
 

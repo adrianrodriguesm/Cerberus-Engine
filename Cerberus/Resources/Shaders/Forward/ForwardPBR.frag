@@ -2,7 +2,7 @@
 #extension GL_EXT_nonuniform_qualifier : require
 
 const float PI = 3.14159265358979323846;
-const uint MaxMaterialTextures = 128u;
+const uint InvalidMaterialTextureIndex = 0xFFFFFFFFu;
 
 struct GPUMaterialData
 {
@@ -33,7 +33,7 @@ layout(std430, set = 0, binding = 1) readonly buffer MaterialTable
     GPUMaterialData Materials[];
 } MaterialBuffer;
 
-layout(set = 0, binding = 2) uniform sampler2D MaterialTextures[128];
+layout(set = 0, binding = 2) uniform sampler2D MaterialTextures[];
 layout(set = 0, binding = 3) uniform samplerCube EnvironmentRadiance;
 layout(set = 0, binding = 4) uniform samplerCube EnvironmentIrradiance;
 
@@ -66,7 +66,7 @@ layout(location = 0) out vec4 o_Color;
 
 bool IsValidTextureIndex(uint textureIndex)
 {
-    return textureIndex < MaxMaterialTextures;
+	return textureIndex != InvalidMaterialTextureIndex;
 }
 
 vec4 SampleMaterialTexture(uint textureIndex, vec2 texCoord)

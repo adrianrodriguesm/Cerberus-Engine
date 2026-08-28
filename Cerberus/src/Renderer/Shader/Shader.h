@@ -114,6 +114,7 @@ namespace cerberus
 			uint32_t ArraySize = 0;
 			std::string Name;
 			VkShaderStageFlagBits ShaderStage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+			bool Bindless = false;
 		};
 
 		struct AccelerationStructure

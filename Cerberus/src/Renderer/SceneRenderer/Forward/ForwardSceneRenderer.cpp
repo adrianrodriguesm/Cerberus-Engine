@@ -44,13 +44,15 @@ namespace cerberus
 			const char* name,
 			uint32_t binding,
 			uint32_t arraySize,
-			VkShaderStageFlagBits stages)
+			VkShaderStageFlagBits stages,
+			bool bindless = false)
 		{
 			BindGroupLayout::ImageBinding result;
 			result.Name = name;
 			result.BindingPoint = binding;
 			result.ArraySize = arraySize;
 			result.ShaderStage = stages;
+			result.Bindless = bindless;
 			return result;
 		}
 	}
@@ -67,13 +69,6 @@ namespace cerberus
 			? static_cast<uint32_t>(specification.Resolution.y)
 			: 1080u;
 		m_RenderScene = CreateScope<RenderScene>();
-
-		const VkPhysicalDeviceLimits limits = Renderer::GetDeviceLimits();
-		constexpr uint32_t requiredForwardSampledImages = MaxMaterialTextureCount + 2u;
-		CORE_ASSERT(
-			limits.maxPerStageDescriptorSampledImages >= requiredForwardSampledImages &&
-			limits.maxDescriptorSetSampledImages >= requiredForwardSampledImages,
-			"The selected GPU cannot expose the material texture table plus the two environment maps to the Forward fragment shader");
 
 		CreateRasterResources();
 	}
@@ -338,7 +333,8 @@ namespace cerberus
 			BufferBinding("MaterialTable", ForwardMaterialBinding, VK_SHADER_STAGE_ALL)
 		};
 		geometryLayout.ImageSamplers = {
-			ImageBinding("MaterialTextures", ForwardTextureBinding, MaxMaterialTextureCount, VK_SHADER_STAGE_FRAGMENT_BIT),
+			ImageBinding("MaterialTextures", ForwardTextureBinding,
+				m_RenderScene->GetTextureRegistry().GetCapacity(), VK_SHADER_STAGE_FRAGMENT_BIT, true),
 			ImageBinding("EnvironmentRadiance", ForwardRadianceBinding, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
 			ImageBinding("EnvironmentIrradiance", ForwardIrradianceBinding, 1, VK_SHADER_STAGE_FRAGMENT_BIT),
 			ImageBinding("ShadowMaps", ForwardShadowMapBinding, ShadowCascadeCount, VK_SHADER_STAGE_FRAGMENT_BIT)
@@ -588,9 +584,12 @@ namespace cerberus
 
 	void ForwardSceneRenderer::UpdateTextureTable()
 	{
+		const GlobalTextureRegistry& textureRegistry = m_RenderScene->GetTextureRegistry();
+		if (m_TextureRegistryRevision == textureRegistry.GetRevision())
+			return;
+
 		std::vector<Handle<ImageView>> imageViews;
-		const std::vector<Handle<Texture2D>>& textures = m_RenderScene->GetMaterialTextures();
-		CORE_ASSERT(textures.size() <= MaxMaterialTextureCount, "Forward material texture table capacity exceeded");
+		const std::span<const Handle<Texture2D>> textures = textureRegistry.GetTextureHandles();
 		imageViews.reserve(textures.size());
 		for (Handle<Texture2D> textureHandle : textures)
 		{
@@ -606,6 +605,7 @@ namespace cerberus
 			imageViews,
 			fallbackTexture->GetImageView(),
 			ForwardTextureBinding);
+		m_TextureRegistryRevision = textureRegistry.GetRevision();
 	}
 
 	void ForwardSceneRenderer::UpdateEnvironmentBindings()

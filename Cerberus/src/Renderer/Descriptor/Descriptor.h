@@ -55,9 +55,11 @@ namespace cerberus
 	///////////////////////////////////////////////////////////////////////
 	//////// DescriptorLayout
 	///////////////////////////////////////////////////////////////////////
-	struct DescriptorLayoutInfo 
+	struct DescriptorLayoutInfo
 	{
 		std::vector<VkDescriptorSetLayoutBinding> Bindings;
+		std::vector<VkDescriptorBindingFlags> BindingFlags;
+		VkDescriptorSetLayoutCreateFlags Flags = 0;
 
 		bool operator==(const DescriptorLayoutInfo& other) const;
 

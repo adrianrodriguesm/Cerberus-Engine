@@ -22,3 +22,33 @@ Cerberus/vendor/VulkanSDK
 **.vcxproj.user
 **.csproj
 *.zip
+
+# --- Local test / source assets (large binaries kept out of git) ---
+# Heavy mesh source sets pulled in for local testing only.
+Cerberus-Editor/Resources/Meshes/Source/Armadillo/
+Cerberus-Editor/Resources/Meshes/Source/Bistro_v5_2/
+Cerberus-Editor/Resources/Meshes/Source/Bunny/
+Cerberus-Editor/Resources/Meshes/Source/CornellBox/
+Cerberus-Editor/Resources/Meshes/Source/Dragon/
+Cerberus-Editor/Resources/Meshes/Source/HappyBuddha/
+Cerberus-Editor/Resources/Meshes/Source/Lucy/
+Cerberus-Editor/Resources/Meshes/Source/Sponza/
+Cerberus-Editor/Resources/Meshes/Source/Teapot/
+Cerberus-Editor/Resources/Meshes/Source/Test/
+
+# Editor-generated material/mesh/scene caches for the test sets above.
+Cerberus-Editor/Resources/Materials/Defaults/BistroExterior/
+Cerberus-Editor/Resources/Materials/Defaults/bun_zipper/
+Cerberus-Editor/Resources/Materials/Defaults/cornell_box/
+Cerberus-Editor/Resources/Materials/Defaults/dragon_vrip/
+Cerberus-Editor/Resources/Materials/Defaults/lucy/
+Cerberus-Editor/Resources/Materials/Defaults/teapot/
+Cerberus-Editor/Resources/Meshes/BistroExterior.cmesh
+Cerberus-Editor/Resources/Meshes/bunny.cmesh
+Cerberus-Editor/Resources/Meshes/cornell_box.cmesh
+Cerberus-Editor/Resources/Meshes/dragon_vrip.cmesh
+Cerberus-Editor/Resources/Meshes/lucy.cmesh
+Cerberus-Editor/Resources/Scenes/Bistro.cscene
+Cerberus-Editor/Resources/Scenes/Cornell_Box.cscene
+Cerberus-Editor/Resources/Scenes/Cornell_Box_Pathtracer_test.cscene
+Cerberus-Editor/Resources/Scenes/Teapot.cscene

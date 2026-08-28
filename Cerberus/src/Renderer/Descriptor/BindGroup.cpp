@@ -4,6 +4,7 @@
 #include "Renderer/Core/RendererContext.h"
 #include "Renderer/Descriptor/DescriptorManager.h"
 #include "Renderer/RayTracing/AccelerationStructure.h"
+#include <numeric>
 namespace cerberus
 {
 	bool BindGroupLayout::BindGroupLayoutInfo::operator==(const BindGroupLayoutInfo& other) const
@@ -49,6 +50,8 @@ namespace cerberus
 			if (other.ImageSamplers[i].ShaderStage != ImageSamplers[i].ShaderStage)
 				return false;
 			if (other.ImageSamplers[i].ArraySize != ImageSamplers[i].ArraySize)
+				return false;
+			if (other.ImageSamplers[i].Bindless != ImageSamplers[i].Bindless)
 				return false;
 		}
 
@@ -110,6 +113,7 @@ namespace cerberus
 			layoutBinding.pImmutableSamplers = nullptr;
 			layoutBinding.binding = imageSampler.BindingPoint;
 		}
+
 		// Storage Images
 		for (const auto& imageStorage : info.ImageStorages)
 		{
@@ -119,6 +123,27 @@ namespace cerberus
 			layoutBinding.stageFlags = imageStorage.ShaderStage;
 			layoutBinding.pImmutableSamplers = nullptr;
 			layoutBinding.binding = imageStorage.BindingPoint;
+		}
+
+		// Binding flags are positional and must cover every binding in the final layout.
+		std::vector<VkDescriptorBindingFlags> bindingFlags(layoutBindings.size(), 0);
+		bool hasBindlessBinding = false;
+		for (const auto& imageSampler : info.ImageSamplers)
+		{
+			if (!imageSampler.Bindless)
+				continue;
+
+			for (uint32_t bindingIndex = 0; bindingIndex < layoutBindings.size(); ++bindingIndex)
+			{
+				if (layoutBindings[bindingIndex].binding != imageSampler.BindingPoint)
+					continue;
+
+				bindingFlags[bindingIndex] =
+					VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+					VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+				hasBindlessBinding = true;
+				break;
+			}
 		}
 		// Fill VkWriteDescriptorSet
 		for (const auto& layoutBinding : layoutBindings)
@@ -136,7 +161,15 @@ namespace cerberus
 
 		VkDescriptorSetLayoutCreateInfo layoutInfo = {};
 		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layoutInfo.pNext = nullptr;
+		VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo{};
+		if (hasBindlessBinding)
+		{
+			bindingFlagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+			bindingFlagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
+			bindingFlagsInfo.pBindingFlags = bindingFlags.data();
+			layoutInfo.pNext = &bindingFlagsInfo;
+			layoutInfo.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+		}
 		layoutInfo.bindingCount = (uint32_t)(layoutBindings.size());
 		layoutInfo.pBindings = layoutBindings.data();
 
@@ -362,6 +395,20 @@ namespace cerberus
 		const Handle<ImageView> fallbackImageViewHandle,
 		uint32_t bindingPoint)
 	{
+		BindGroupLayout* layout = ResourceManager::GetBindGroupLayout(m_BindGroupLayout);
+		CORE_ASSERT(layout, "BindGroup::SetImageViewArray has an invalid layout");
+		uint32_t descriptorCapacity = 0;
+		bool bindless = false;
+		for (const auto& imageBinding : layout->GetLayoutInfo().ImageSamplers)
+		{
+			if (imageBinding.BindingPoint != bindingPoint)
+				continue;
+			descriptorCapacity = imageBinding.ArraySize;
+			bindless = imageBinding.Bindless;
+			break;
+		}
+		CORE_ASSERT(descriptorCapacity > 0, "BindGroup image-array binding has zero descriptors");
+
 		ImageView* fallbackImageView = ResourceManager::GetImageView(fallbackImageViewHandle);
 		CORE_ASSERT(fallbackImageView, "BindGroup::SetImageViewArray received an invalid fallback ImageView");
 
@@ -389,12 +436,13 @@ namespace cerberus
 					writeDescriptor.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 					"BindGroup::SetImageViewArray called on a non-sampled-image binding");
 
-				const uint32_t descriptorCapacity = writeDescriptor.descriptorCount;
-				CORE_ASSERT(descriptorCapacity > 0, "BindGroup image-array binding has zero descriptors");
 				CORE_ASSERT(imageViewHandles.size() <= descriptorCapacity, "BindGroup image array exceeds the reflected shader capacity");
 
 				std::vector<VkDescriptorImageInfo>& descriptors = arrayStates[writeIndex];
-				descriptors.assign(descriptorCapacity, fallbackDescriptor);
+				const uint32_t descriptorWriteCount = bindless
+					? std::max(1u, static_cast<uint32_t>(imageViewHandles.size()))
+					: descriptorCapacity;
+				descriptors.assign(descriptorWriteCount, fallbackDescriptor);
 
 				for (uint32_t imageIndex = 0; imageIndex < imageViewHandles.size(); imageIndex++)
 				{
@@ -407,7 +455,7 @@ namespace cerberus
 				}
 
 				writeDescriptor.pImageInfo = descriptors.data();
-				writeDescriptor.descriptorCount = descriptorCapacity;
+				writeDescriptor.descriptorCount = descriptorWriteCount;
 				foundBinding = true;
 			}
 		}

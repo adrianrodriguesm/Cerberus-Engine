@@ -29,6 +29,10 @@ namespace cerberus
 		s_DescriptorManagerData->TransientAllocator = new DescriptorAllocator(descriptorAllocatorSpec);
 
 		descriptorAllocatorSpec.IsPersistent = true;
+		descriptorAllocatorSpec.Flags =
+			VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT |
+			VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+		descriptorAllocatorSpec.PoolSizes[VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER] = 16.0f;
 		s_DescriptorManagerData->PersistentAllocator = new DescriptorAllocator(descriptorAllocatorSpec);
 
 		s_DescriptorManagerData->LayoutCache = new DescriptorLayoutCache();

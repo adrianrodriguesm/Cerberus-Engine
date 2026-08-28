@@ -574,9 +574,10 @@ namespace cerberus
 			uint32_t binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
 			uint32_t descriptorSet = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
 			uint32_t dimension = baseType.image.dim;
-			uint32_t arraySize = type.array[0];
-			if (arraySize == 0)
-				arraySize = 1;
+			const bool bindless = !type.array.empty() && type.array[0] == 0;
+			const uint32_t arraySize = bindless
+				? RendererContext::GetCurrentDevice()->GetBindlessTextureCapacity()
+				: (type.array.empty() ? 1u : type.array[0]);
 			if (descriptorSet >= m_ShaderDescriptorSets.size())
 				m_ShaderDescriptorSets.resize(descriptorSet + 1);
 
@@ -587,6 +588,7 @@ namespace cerberus
 			imageSampler.Name = name;
 			imageSampler.ShaderStage = shaderStage;
 			imageSampler.ArraySize = arraySize;
+			imageSampler.Bindless = bindless;
 
 			m_Resources[name] = ShaderResourceDeclaration(name, binding, 1);
 
@@ -714,6 +716,8 @@ namespace cerberus
 			// Descriptor Set Layout
 			//////////////////////////////////////////////////////////////////////
 			std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
+			std::vector<VkDescriptorBindingFlags> layoutBindingFlags;
+			bool hasBindlessBinding = false;
 			for (auto& [binding, uniformBuffer] : shaderDescriptorSet.UniformBuffers)
 			{
 				VkDescriptorSetLayoutBinding& layoutBinding = layoutBindings.emplace_back();
@@ -722,6 +726,7 @@ namespace cerberus
 				layoutBinding.stageFlags = uniformBuffer->ShaderStage;
 				layoutBinding.pImmutableSamplers = nullptr;
 				layoutBinding.binding = binding;
+				layoutBindingFlags.push_back(0);
 
 				VkWriteDescriptorSet& set = shaderDescriptorSet.WriteDescriptorSets[uniformBuffer->Name];
 				set = {};
@@ -738,6 +743,7 @@ namespace cerberus
 				layoutBinding.stageFlags = strorageBuffer->ShaderStage;
 				layoutBinding.pImmutableSamplers = nullptr;
 				layoutBinding.binding = binding;
+				layoutBindingFlags.push_back(0);
 
 				VkWriteDescriptorSet& set = shaderDescriptorSet.WriteDescriptorSets[strorageBuffer->Name];
 				set = {};
@@ -754,6 +760,7 @@ namespace cerberus
 				layoutBinding.stageFlags = accelerationStructure->ShaderStage;
 				layoutBinding.pImmutableSamplers = nullptr;
 				layoutBinding.binding = binding;
+				layoutBindingFlags.push_back(0);
 
 				VkWriteDescriptorSet& set = shaderDescriptorSet.WriteDescriptorSets[accelerationStructure->Name];
 				set = {};
@@ -770,6 +777,10 @@ namespace cerberus
 				layoutBinding.stageFlags = imageSampler.ShaderStage;
 				layoutBinding.pImmutableSamplers = nullptr;
 				layoutBinding.binding = binding;
+				layoutBindingFlags.push_back(imageSampler.Bindless
+					? VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT
+					: 0);
+				hasBindlessBinding |= imageSampler.Bindless;
 
 				CORE_ASSERT(shaderDescriptorSet.UniformBuffers.find(binding) == shaderDescriptorSet.UniformBuffers.end(), "Binding is already present!");
 				CORE_ASSERT(shaderDescriptorSet.StorageBuffers.find(binding) == shaderDescriptorSet.StorageBuffers.end(), "Binding is already present!");
@@ -792,6 +803,7 @@ namespace cerberus
 
 				uint32_t binding = bindingAndSet & 0xffffffff;
 				layoutBinding.binding = binding;
+				layoutBindingFlags.push_back(0);
 
 				CORE_ASSERT(shaderDescriptorSet.UniformBuffers.find(binding) == shaderDescriptorSet.UniformBuffers.end(), "Binding is already present!");
 				CORE_ASSERT(shaderDescriptorSet.StorageBuffers.find(binding) == shaderDescriptorSet.StorageBuffers.end(), "Binding is already present!");
@@ -807,7 +819,16 @@ namespace cerberus
 
 			VkDescriptorSetLayoutCreateInfo descriptorLayout = {};
 			descriptorLayout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-			descriptorLayout.pNext = nullptr;
+			VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo{};
+			if (hasBindlessBinding)
+			{
+				CORE_ASSERT(layoutBindingFlags.size() == layoutBindings.size(), "Shader descriptor binding flags are out of sync");
+				bindingFlagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+				bindingFlagsInfo.bindingCount = static_cast<uint32_t>(layoutBindingFlags.size());
+				bindingFlagsInfo.pBindingFlags = layoutBindingFlags.data();
+				descriptorLayout.pNext = &bindingFlagsInfo;
+				descriptorLayout.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+			}
 			descriptorLayout.bindingCount = (uint32_t)(layoutBindings.size());
 			descriptorLayout.pBindings = layoutBindings.data();
 			
