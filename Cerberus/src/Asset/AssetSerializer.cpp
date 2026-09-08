@@ -278,6 +278,14 @@ namespace cerberus
 		out << YAML::BeginMap;
 		out << YAML::Key << "Scene" << YAML::Value << scene->m_Name;
 		out << YAML::Key << "Renderer" << YAML::Value << std::string(SceneRendererTypeToString(scene->m_RendererType));
+		if (scene->m_HasEditorCameraPose)
+		{
+			out << YAML::Key << "EditorCamera" << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "Position" << YAML::Value << scene->m_EditorCameraPosition;
+			out << YAML::Key << "Yaw" << YAML::Value << scene->m_EditorCameraYaw;
+			out << YAML::Key << "Pitch" << YAML::Value << scene->m_EditorCameraPitch;
+			out << YAML::EndMap;
+		}
 		out << YAML::Key << "Entities" << YAML::Value << YAML::BeginSeq;
 		scene->m_Registry.each([&](auto entityID)
 		{
@@ -329,6 +337,14 @@ namespace cerberus
 		Ref<Scene> scene = CreateRef<Scene>(sceneName);
 		if (data["Renderer"])
 			scene->m_RendererType = SceneRendererTypeFromString(data["Renderer"].as<std::string>());
+
+		if (auto editorCamera = data["EditorCamera"])
+		{
+			scene->m_EditorCameraPosition = editorCamera["Position"].as<glm::vec3>(scene->m_EditorCameraPosition);
+			scene->m_EditorCameraYaw = editorCamera["Yaw"].as<float>(scene->m_EditorCameraYaw);
+			scene->m_EditorCameraPitch = editorCamera["Pitch"].as<float>(scene->m_EditorCameraPitch);
+			scene->m_HasEditorCameraPose = true;
+		}
 
 		NV_CORE_TRACE("Deserializing scene '{0}'", sceneName);
 

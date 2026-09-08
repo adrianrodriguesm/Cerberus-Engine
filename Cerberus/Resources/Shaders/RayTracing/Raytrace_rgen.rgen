@@ -12,60 +12,93 @@
 
 layout(location = 0) rayPayloadEXT HitPayload Payload;
 
-vec3 ACESToneMap(vec3 color)
-{
-    mat3 inputTransform = mat3(
-        0.59719, 0.07600, 0.02840,
-        0.35458, 0.90834, 0.13383,
-        0.04823, 0.01566, 0.83777);
-
-    mat3 outputTransform = mat3(
-        1.60475, -0.10208, -0.00327,
-       -0.53108,  1.10813, -0.07276,
-       -0.07367, -0.00605,  1.07602);
-
-    vec3 transformed = inputTransform * max(color, vec3(0.0));
-    vec3 numerator = transformed * (transformed + 0.0245786) - 0.000090537;
-    vec3 denominator = transformed * (0.983729 * transformed + 0.4329510) + 0.238081;
-    return clamp(outputTransform * (numerator / denominator), 0.0, 1.0);
-}
-
-vec3 LinearToDisplay(vec3 linearRadiance)
-{
-    float exposure = max(PathTracer.Presentation.x, 0.0);
-    vec3 toneMapped = ACESToneMap(linearRadiance * exposure);
-
-    // Cerberus currently presents through an UNORM swapchain, matching the
-    // explicit gamma conversion used by SceneComposite.glsl.
-    return pow(toneMapped, vec3(1.0 / 2.2));
-}
-
 void main()
 {
     ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
     ivec2 size = ivec2(gl_LaunchSizeEXT.xy);
 
     uint pixelIndex = uint(pixel.y * size.x + pixel.x);
-    uint sampleIndex = PathTracer.Parameters.x;
-    uint randomState =
-        pixelIndex * 747796405u +
-        sampleIndex * 2891336453u +
-        0xA511E9B3u;
-
-    // Every accumulated frame gets a different sub-pixel sample.
-    vec2 pixelJitter = vec2(
-        RandomFloat(randomState),
-        RandomFloat(randomState)) - vec2(0.5);
-
-    vec3 origin = Camera.Position.xyz;
-    vec3 direction = GetCameraRayDirection(
-        vec2(pixel) + pixelJitter,
-        vec2(size));
-
-    vec3 radiance = vec3(0.0);
-    vec3 throughput = vec3(1.0);
-
+    uint frameSeed = PathTracer.Parameters.x;
     uint maxBounces = max(PathTracer.Parameters.y, 1u);
+    uint sampleCount = max(uint(PathTracer.Presentation.z), 1u);
+
+    // Per-frame contribution, accumulated over sampleCount independent primary
+    // paths. Split three ways for the denoiser (see Common.glsl): diffuse and
+    // specular are demodulated and written after the loop; emissive/sky is
+    // view-independent and kept raw. RTRadiance gets the un-split sum, so
+    // reference mode is unaffected.
+    vec3 diffuseAccum  = vec3(0.0);
+    vec3 specularAccum = vec3(0.0);
+    vec3 emissiveAccum = vec3(0.0);
+
+    // Primary-hit shading params for demodulation, captured on sub-sample 0.
+    // Defaults are the primary-miss case: identity diffuse albedo, and the
+    // diffuse/specular accumulators are zero there anyway.
+    vec3  primaryBaseColor = vec3(1.0);
+    float primaryRoughness = 1.0;
+    float primaryMetalness = 0.0;
+    float primaryNdotV     = 1.0;
+
+    // Hit distances for the denoiser's specular filtering (Step 8.1), captured on
+    // sub-sample 0. primaryHitDistance: camera -> first hit. specularVirtualDist:
+    // first hit -> first specular bounce hit (0 unless the primary lobe was
+    // specular, CERBERUS_HITDIST_MAX if the reflected ray escaped).
+    float primaryHitDistance      = 0.0;
+    float specularVirtualDistance = 0.0;
+    // Direct-lighting luminance at the primary hit (sub-sample 0), for the
+    // A-SVGF temporal gradient. Captured after bounce 0's NEE, before indirect.
+    float primaryDirectLuma = 0.0;
+    // Virtual specular reprojection inputs, captured on sub-sample 0.
+    vec3  primaryHitWorldPos   = vec3(0.0);
+    vec3  primaryReflectDir    = vec3(0.0);
+    vec2  primarySurfaceMotion = vec2(0.0);
+    bool  primaryHitValid      = false;
+    bool  primaryWasSpecular   = false;
+
+    for (uint subSample = 0u; subSample < sampleCount; ++subSample)
+    {
+        // Unique per (pixel, frame, sub-sample) so every path decorrelates.
+        uint randomState =
+            pixelIndex * 747796405u +
+            (frameSeed * sampleCount + subSample) * 2891336453u +
+            0xA511E9B3u;
+
+        // Sub-sample 0 is fired dead centre: it is the one that writes the
+        // denoiser G-buffer (normal / depth / position / material). A jittered
+        // primary hit would sample a slightly different sub-pixel point every
+        // frame, so the G-buffer depth/normal would wobble, the a-trous edge
+        // stops would wobble, and its output (which feeds the history) would
+        // shimmer on a still camera. Extra sub-samples keep the jitter for
+        // anti-aliasing and decorrelation. (RandomFloat is still consumed so the
+        // rest of the path's RNG stream is identical either way.)
+        float jx = RandomFloat(randomState);
+        float jy = RandomFloat(randomState);
+        vec2 pixelJitter = (subSample == 0u)
+            ? vec2(0.0)
+            : vec2(jx, jy) - vec2(0.5);
+
+        vec3 origin = Camera.Position.xyz;
+        vec3 direction = GetCameraRayDirection(
+            vec2(pixel) + pixelJitter,
+            vec2(size));
+
+        // This path's contribution, split by the primary lobe.
+        vec3 pathDiffuse  = vec3(0.0);
+        vec3 pathSpecular = vec3(0.0);
+        vec3 pathEmissive = vec3(0.0);
+        vec3 throughput = vec3(1.0);
+        // Set at bounce 0 from the sampled lobe; routes every bounce >= 1
+        // contribution of this path into diffuse or specular.
+        bool primaryLobeSpecular = false;
+
+        // "Specular tightness" of the primary hit (0 rough/dielectric .. 1
+        // near-mirror metal). Captured at bounce 0 and used only to clamp this
+        // path's firefly ceiling harder for mirror-like primaries: a grazing GGX
+        // sample that catches the sun disc through a near-delta lobe would
+        // otherwise inject a luminance-16 spike into a pixel whose true value is
+        // ~0.5, and the denoiser cannot average that away in a bounded history.
+        float primaryTightness = 0.0;
+
     for (uint bounce = 0u; bounce < maxBounces; ++bounce)
     {
         Payload.Emission = vec3(0.0);
@@ -85,7 +118,129 @@ void main()
             0
         );
 
-        radiance += throughput * max(Payload.Emission, vec3(0.0));
+        // Emission (surface emissive, or the environment on a miss). Bounce 0 is
+        // seen directly and is view-independent -> emissive channel; deeper
+        // bounces reached the eye through the primary lobe -> that lobe's channel.
+        vec3 hitEmission = throughput * max(Payload.Emission, vec3(0.0));
+        if (bounce == 0u)
+            pathEmissive += hitEmission;
+        else if (primaryLobeSpecular)
+            pathSpecular += hitEmission;
+        else
+            pathDiffuse += hitEmission;
+
+        if (bounce == 0u && Payload.Hit != 0u)
+        {
+            primaryTightness = clamp(
+                (1.0 - Payload.Roughness) * (0.3 + 0.7 * Payload.Metalness),
+                0.0, 1.0);
+        }
+
+        // Capture the primary hit into the denoiser G-buffer before the shadow
+        // traces below reuse payload location 0. Only the first path segment of
+        // the first sub-sample feeds the denoiser; indirect bounces and extra
+        // sub-samples are left untouched.
+        if (bounce == 0u && subSample == 0u)
+        {
+            if (Payload.Hit != 0u)
+            {
+                // Geometric (un-normal-mapped) normal for the denoiser G-buffer.
+                // SVGF's a-trous normal weight is pow(dot, 128) -- built for
+                // smooth geometry. Feeding it normal-mapped shading normals makes
+                // it reject filtering across any textured surface, so per-pixel
+                // normal-map detail stays in the illumination signal instead.
+                vec3 primaryNormal = normalize(Payload.GeometricNormal);
+                float primaryLinearDepth =
+                    -(Camera.View * vec4(Payload.WorldPosition, 1.0)).z;
+
+                // Screen-space motion vector: where this world point projected
+                // last frame minus where it projects now. Camera motion only in
+                // v1. The prevUV Y sign assumes Vulkan y-down clip space; if the
+                // debug view shows vertical motion inverted, flip prevUV.y.
+                //
+                // currUV MUST carry the same sub-pixel jitter as the primary ray
+                // (worldPos is the jittered hit): otherwise the jitter leaks into
+                // the motion vector as a random per-frame offset, the temporal
+                // pass reprojects history to a shifting sub-pixel location every
+                // frame, and detailed regions never converge. With the jitter in
+                // both terms it cancels -- a still camera yields exactly zero.
+                // If the camera did not move this frame, the reprojection MUST
+                // land on the exact same texel -> force zero. prevUV (forward
+                // projection) and currUV (from the inverse-projected primary ray)
+                // are different code paths, so otherwise ~1 px of FP-rounding
+                // noise stays in 'motion'; the bilinear reprojection then samples
+                // a different sub-pixel blend of the history every frame and the
+                // whole image shimmers on a still camera even after the temporal
+                // accumulation has converged. PreviousViewProjection is last
+                // frame's ViewProjection, so bit-equality == "camera is static".
+                vec2 motion = vec2(0.0);
+                if (Camera.PreviousViewProjection != Camera.ViewProjection)
+                {
+                    vec4 prevClip = Camera.PreviousViewProjection *
+                        vec4(Payload.WorldPosition, 1.0);
+                    if (prevClip.w > 0.0)
+                    {
+                        vec2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;
+                        vec2 currUV = (vec2(pixel) + 0.5 + pixelJitter) / vec2(size);
+                        motion = prevUV - currUV;
+                    }
+                    // Still snap sub-pixel residue from a barely-moving camera.
+                    if (length(motion * vec2(size)) < 0.5)
+                        motion = vec2(0.0);
+                }
+
+                imageStore(RTGBufferNormalDepth, pixel,
+                    vec4(primaryNormal, primaryLinearDepth));
+                imageStore(RTGBufferPositionMeshID, pixel,
+                    vec4(Payload.WorldPosition, uintBitsToFloat(Payload.InstanceIndex)));
+                imageStore(RTGBufferAlbedo, pixel, vec4(Payload.Albedo, 1.0));
+                imageStore(RTGBufferMaterial, pixel,
+                    vec4(Payload.Roughness, Payload.Metalness, 0.0, 0.0));
+                imageStore(RTMotionVector, pixel, vec4(motion, 0.0, 0.0));
+
+                // Demodulation params for the diffuse/specular split writes at
+                // the end of main(). NdotV MUST be temporally stable or the
+                // demod/remod round trip flickers: use the GEOMETRIC normal (the
+                // normal-mapped shading normal swings per-pixel as the jittered
+                // ray samples a slightly different texel each frame) and the view
+                // vector to the hit (its jitter is sub-pixel and cancels).
+                primaryBaseColor = Payload.Albedo;
+                primaryRoughness = Payload.Roughness;
+                primaryMetalness = Payload.Metalness;
+                primaryNdotV = max(dot(primaryNormal,
+                    normalize(Camera.Position.xyz - Payload.WorldPosition)), 1e-3);
+
+                primaryHitDistance   = min(Payload.HitT, CERBERUS_HITDIST_MAX);
+                primaryHitWorldPos   = Payload.WorldPosition;
+                primarySurfaceMotion = motion;
+                primaryHitValid      = true;
+                // Deterministic mirror reflection (lobe centre) for the virtual
+                // reprojection point -- not this frame's stochastic GGX sample.
+                primaryReflectDir    = reflect(direction, primaryNormal);
+            }
+            else
+            {
+                imageStore(RTGBufferNormalDepth, pixel, vec4(0.0));
+                imageStore(RTGBufferPositionMeshID, pixel,
+                    vec4(0.0, 0.0, 0.0, uintBitsToFloat(0xFFFFFFFFu)));
+                // Albedo 1 for the sky so the denoiser's demodulate/remodulate
+                // (radiance / albedo, then x albedo in Finalize) is identity.
+                imageStore(RTGBufferAlbedo, pixel, vec4(1.0));
+                imageStore(RTGBufferMaterial, pixel, vec4(1.0, 0.0, 0.0, 0.0));
+                imageStore(RTMotionVector, pixel, vec4(0.0));
+            }
+        }
+
+        // Specular virtual depth (Step 8.1): length of the first specular bounce
+        // segment. Captured here -- the miss case is still visible in Payload.Hit,
+        // and before the shadow traces below reuse payload location 0.
+        // primaryLobeSpecular is set at the end of bounce 0, so it is valid now.
+        if (bounce == 1u && subSample == 0u && primaryLobeSpecular)
+        {
+            specularVirtualDistance = (Payload.Hit != 0u)
+                ? min(Payload.HitT, CERBERUS_HITDIST_MAX)
+                : CERBERUS_HITDIST_MAX;
+        }
 
         // A miss has already returned the environment radiance through Emission.
         if (Payload.Hit == 0u)
@@ -146,16 +301,39 @@ void main()
 
             if (Payload.Hit == 0u)
             {
-                vec3 bsdf = EvaluatePBRBSDF(
-                    viewDirection,
-                    lightDirection,
-                    shadingNormal,
-                    surfaceAlbedo,
-                    surfaceRoughness,
-                    surfaceMetalness);
-                radiance += throughput * bsdf * shadingNormalDotLight * lightRadiance;
+                vec3 lightThroughput = throughput * shadingNormalDotLight * lightRadiance;
+                if (bounce == 0u)
+                {
+                    // Primary direct lighting: split by BRDF lobe so each denoiser
+                    // channel gets exactly its share.
+                    vec3 diffuseBrdf;
+                    vec3 specularBrdf;
+                    EvaluatePBRBSDFSeparate(
+                        viewDirection, lightDirection, shadingNormal,
+                        surfaceAlbedo, surfaceRoughness, surfaceMetalness,
+                        diffuseBrdf, specularBrdf);
+                    pathDiffuse  += lightThroughput * diffuseBrdf;
+                    pathSpecular += lightThroughput * specularBrdf;
+                }
+                else
+                {
+                    vec3 bsdf = EvaluatePBRBSDF(
+                        viewDirection, lightDirection, shadingNormal,
+                        surfaceAlbedo, surfaceRoughness, surfaceMetalness);
+                    vec3 contribution = lightThroughput * bsdf;
+                    if (primaryLobeSpecular)
+                        pathSpecular += contribution;
+                    else
+                        pathDiffuse += contribution;
+                }
             }
         }
+
+        // Direct lighting only (bounce 0, this sub-sample) for the temporal
+        // gradient -- pathEmissive is separate, indirect bounces not yet added.
+        if (bounce == 0u && subSample == 0u)
+            primaryDirectLuma = dot(pathDiffuse + pathSpecular,
+                vec3(0.2126, 0.7152, 0.0722));
 
         BSDFSample bsdfSample;
         if (!SamplePBRBSDF(
@@ -168,6 +346,13 @@ void main()
             bsdfSample))
         {
             break;
+        }
+
+        if (bounce == 0u)
+        {
+            primaryLobeSpecular = bsdfSample.IsSpecular;
+            if (subSample == 0u)
+                primaryWasSpecular = bsdfSample.IsSpecular;
         }
 
         if (dot(geometricNormal, bsdfSample.Direction) <= 0.0)
@@ -191,18 +376,91 @@ void main()
         direction = bsdfSample.Direction;
     }
 
-    // Online mean: previous + (new - previous) / sampleCount.
-    // On a reset sampleIndex is zero, so stale image contents are intentionally
-    // ignored and no explicit GPU clear is required.
-    vec3 accumulatedRadiance = radiance;
-    if (sampleIndex > 0u)
-    {
-        vec3 previousRadiance = imageLoad(RTAccumulation, pixel).rgb;
-        float sampleCount = float(sampleIndex + 1u);
-        accumulatedRadiance = previousRadiance +
-            (radiance - previousRadiance) / sampleCount;
+        // Firefly clamp (denoiser mode only), per path so one bad sub-sample
+        // cannot dominate the average. Diffuse and specular are clamped
+        // separately; the specular ceiling is 3x tighter for mirror-like
+        // primaries (primaryTightness) because a grazing GGX sample that catches
+        // the sun disc injects a spike the bounded denoiser history cannot
+        // average out. Emissive is exact and view-independent -> never clamped.
+        // Presentation.y <= 0 or Parameters.w == 0 disables it, so reference mode
+        // stays unbiased.
+        if (PathTracer.Parameters.w != 0u && PathTracer.Presentation.y > 0.0)
+        {
+            const vec3 lumaWeights = vec3(0.2126, 0.7152, 0.0722);
+            float diffuseCeil  = PathTracer.Presentation.y;
+            float specularCeil = PathTracer.Presentation.y * mix(1.0, 0.35, primaryTightness);
+            float diffuseLuma  = dot(pathDiffuse,  lumaWeights);
+            float specularLuma = dot(pathSpecular, lumaWeights);
+            if (diffuseLuma  > diffuseCeil)  pathDiffuse  *= diffuseCeil  / diffuseLuma;
+            if (specularLuma > specularCeil) pathSpecular *= specularCeil / specularLuma;
+        }
+
+        diffuseAccum  += pathDiffuse;
+        specularAccum += pathSpecular;
+        emissiveAccum += pathEmissive;
     }
 
-    imageStore(RTAccumulation, pixel, vec4(accumulatedRadiance, 1.0));
-    imageStore(RTOutput, pixel, vec4(LinearToDisplay(accumulatedRadiance), 1.0));
+    float invSamples = 1.0 / float(sampleCount);
+
+    // Un-split sum -> RTRadiance. ReferenceAccumulate + Finalize consume this;
+    // reference-mode behaviour is unchanged. frameSeed varies per frame so the
+    // cross-frame accumulation keeps decorrelating.
+    imageStore(RTRadiance, pixel,
+        vec4((diffuseAccum + specularAccum + emissiveAccum) * invSamples, 1.0));
+
+    // Demodulated split -> denoiser inputs. Divide by the same factors Finalize
+    // multiplies back: the diffuse albedo, and the preintegrated environment BRDF
+    // (specular's "albedo"). Floored so a near-black channel cannot blow up the
+    // illumination signal; the round trip stays exact because both sides use the
+    // clamped values.
+    const float CERBERUS_DEMOD_FLOOR = 0.05;
+    vec3 diffuseAlbedo = max(primaryBaseColor * (1.0 - primaryMetalness),
+        vec3(CERBERUS_DEMOD_FLOOR));
+    vec3 f0 = mix(vec3(0.04), primaryBaseColor, primaryMetalness);
+    vec3 envBRDF = max(EnvBRDFApprox(f0, primaryRoughness, primaryNdotV),
+        vec3(CERBERUS_DEMOD_FLOOR));
+
+    imageStore(RTRadianceDiffuse,  pixel, vec4(diffuseAccum  * invSamples / diffuseAlbedo, 1.0));
+    imageStore(RTRadianceSpecular, pixel, vec4(specularAccum * invSamples / envBRDF, 1.0));
+    imageStore(RTRadianceEmissive, pixel, vec4(emissiveAccum * invSamples, 1.0));
+    // Store the exact clamped demod factor for Finalize's recombination. Diffuse
+    // albedo it reconstructs itself from the G-buffer (same formula, same
+    // inputs); envBRDF depends on NdotV, so it has to come from here.
+    imageStore(RTGBufferSpecularAlbedo, pixel, vec4(envBRDF, 1.0));
+
+    // Step 8.1: hit distances for the specular a-trous reach (Step 8.2).
+    imageStore(RTGBufferHitDistance, pixel,
+        vec4(primaryHitDistance, specularVirtualDistance, 0.0, 0.0));
+
+    // Virtual specular reprojection (NRD ReLAX style). Reconstruct the virtual
+    // reflection point and project it with last frame's view-projection; blend
+    // that motion vector with the surface one by roughness. RTSpecReflHistory
+    // carries the virtual point's view Z and the reflected-ray hit distance so
+    // SVGFTemporalSplit can validate the virtual reprojection against the
+    // reflection geometry -- not the surface G-buffer.
+    vec2  specularMotion   = primarySurfaceMotion;
+    float virtualViewZ     = 0.0;
+    float virtualHitDist   = 0.0;
+    if (primaryHitValid && primaryWasSpecular && specularVirtualDistance > 0.0 &&
+        Camera.PreviousViewProjection != Camera.ViewProjection)
+    {
+        virtualHitDist  = specularVirtualDistance;
+        vec3 virtualPos = primaryHitWorldPos + primaryReflectDir * virtualHitDist;
+        virtualViewZ    = -(Camera.View * vec4(virtualPos, 1.0)).z;
+
+        vec4 prevClip = Camera.PreviousViewProjection * vec4(virtualPos, 1.0);
+        if (prevClip.w > 0.0)
+        {
+            vec2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;
+            vec2 currUV = (vec2(pixel) + 0.5) / vec2(size); // sub-sample 0: no jitter
+            vec2 virtualMotion = prevUV - currUV;
+
+            // Roughness blend: mirror -> pure virtual, rough -> pure surface.
+            float virtualWeight = 1.0 - smoothstep(0.05, 0.45, primaryRoughness);
+            specularMotion = mix(primarySurfaceMotion, virtualMotion, virtualWeight);
+        }
+    }
+    imageStore(RTMotionVectorSpecular, pixel, vec4(specularMotion, 0.0, 0.0));
+    imageStore(RTSpecReflHistory, pixel, vec4(virtualViewZ, virtualHitDist, 0.0, 0.0));
+    imageStore(RTDirectLuma, pixel, vec4(primaryDirectLuma, 0.0, 0.0, 0.0));
 }

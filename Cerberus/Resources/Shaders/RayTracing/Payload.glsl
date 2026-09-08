@@ -19,7 +19,8 @@ struct HitPayload
     uint Hit;
 
     vec2 TexCoord;
-    vec2 Padding;
+    uint InstanceIndex;
+    uint Padding;
 };
 
 #endif // CERBERUS_RT_PAYLOAD_GLSL

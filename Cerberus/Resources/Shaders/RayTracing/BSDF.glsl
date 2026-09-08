@@ -9,6 +9,10 @@ struct BSDFSample
 {
     vec3 Direction;
     vec3 Weight;
+    // Which lobe produced Direction. The denoiser split routes the whole
+    // indirect contribution of a primary path into the diffuse or the specular
+    // signal based on the primary hit's value of this.
+    bool IsSpecular;
 };
 
 uint RandomUint(inout uint state)
@@ -83,6 +87,23 @@ vec3 FresnelSchlick(float directionDotHalf, vec3 reflectanceAtNormalIncidence)
         (vec3(1.0) - reflectanceAtNormalIncidence) * fresnel;
 }
 
+// Analytic preintegrated environment BRDF (Karis 2013 split-sum, Lazarov's
+// mobile fit). Returns the RGB factor that a perfectly denoised specular
+// *illumination* signal must be multiplied by to reconstruct specular radiance:
+//   specularRadiance ~= specularIllumination * EnvBRDFApprox(F0, roughness, NdotV)
+// This is the specular analogue of the diffuse albedo used for demodulation, so
+// the denoiser can filter a signal that is free of the BRDF's angular/Fresnel
+// variation. No LUT needed.
+vec3 EnvBRDFApprox(vec3 reflectanceAtNormalIncidence, float roughness, float normalDotView)
+{
+    const vec4 c0 = vec4(-1.0, -0.0275, -0.572, 0.022);
+    const vec4 c1 = vec4(1.0, 0.0425, 1.04, -0.04);
+    vec4 r = roughness * c0 + c1;
+    float a004 = min(r.x * r.x, exp2(-9.28 * max(normalDotView, 0.0))) * r.x + r.y;
+    vec2 ab = vec2(-1.04, 1.04) * a004 + r.zw;
+    return reflectanceAtNormalIncidence * ab.x + vec3(ab.y);
+}
+
 vec3 SampleGGXHalfVector(vec2 randomSample, vec3 normal, float alpha)
 {
     float alphaSquared = alpha * alpha;
@@ -97,17 +118,23 @@ vec3 SampleGGXHalfVector(vec2 randomSample, vec3 normal, float alpha)
         normal);
 }
 
-// Evaluates the BRDF for an explicitly chosen light direction. This is used
-// by next-event estimation for analytic lights; the cosine term is applied by
-// the caller so the function returns f(view, light) only.
-vec3 EvaluatePBRBSDF(
+// Evaluates the BRDF for an explicitly chosen light direction, returning the
+// diffuse and specular terms separately (the caller applies the cosine). Used by
+// next-event estimation: the combined form for the path radiance, the split
+// terms for the denoiser's diffuse/specular demodulation. Returns f(view, light).
+void EvaluatePBRBSDFSeparate(
     vec3 viewDirection,
     vec3 lightDirection,
     vec3 normal,
     vec3 albedo,
     float roughness,
-    float metalness)
+    float metalness,
+    out vec3 diffuseBRDF,
+    out vec3 specularBRDF)
 {
+    diffuseBRDF = vec3(0.0);
+    specularBRDF = vec3(0.0);
+
     albedo = max(albedo, vec3(0.0));
     roughness = clamp(roughness, 0.045, 1.0);
     metalness = clamp(metalness, 0.0, 1.0);
@@ -117,13 +144,13 @@ vec3 EvaluatePBRBSDF(
     if (normalDotView <= CERBERUS_BSDF_EPSILON ||
         normalDotLight <= CERBERUS_BSDF_EPSILON)
     {
-        return vec3(0.0);
+        return;
     }
 
     vec3 halfVectorSum = viewDirection + lightDirection;
     float halfVectorLengthSquared = dot(halfVectorSum, halfVectorSum);
     if (halfVectorLengthSquared <= CERBERUS_BSDF_EPSILON)
-        return vec3(0.0);
+        return;
 
     vec3 halfVector = halfVectorSum * inversesqrt(halfVectorLengthSquared);
     float normalDotHalf = max(dot(normal, halfVector), 0.0);
@@ -138,17 +165,36 @@ vec3 EvaluatePBRBSDF(
     vec3 reflectanceAtNormalIncidence = mix(vec3(0.04), albedo, metalness);
     vec3 fresnel = FresnelSchlick(viewDotHalf, reflectanceAtNormalIncidence);
 
-    vec3 specularBRDF =
+    vec3 spec =
         distribution * geometry * fresnel /
         max(4.0 * normalDotView * normalDotLight, CERBERUS_BSDF_EPSILON);
 
-    vec3 diffuseBRDF =
+    vec3 diff =
         (vec3(1.0) - fresnel) *
         (1.0 - metalness) *
         albedo * CERBERUS_INV_PI;
 
-    vec3 result = diffuseBRDF + specularBRDF;
-    return any(isnan(result)) || any(isinf(result)) ? vec3(0.0) : result;
+    bool bad = any(isnan(spec)) || any(isinf(spec)) || any(isnan(diff)) || any(isinf(diff));
+    if (bad)
+        return;
+
+    diffuseBRDF = diff;
+    specularBRDF = spec;
+}
+
+vec3 EvaluatePBRBSDF(
+    vec3 viewDirection,
+    vec3 lightDirection,
+    vec3 normal,
+    vec3 albedo,
+    float roughness,
+    float metalness)
+{
+    vec3 diffuseBRDF;
+    vec3 specularBRDF;
+    EvaluatePBRBSDFSeparate(viewDirection, lightDirection, normal, albedo,
+        roughness, metalness, diffuseBRDF, specularBRDF);
+    return diffuseBRDF + specularBRDF;
 }
 
 bool SamplePBRBSDF(
@@ -183,10 +229,12 @@ bool SamplePBRBSDF(
             return false;
 
         bsdfResult.Direction = normalize(reflect(-viewDirection, halfVector));
+        bsdfResult.IsSpecular = true;
     }
     else
     {
         bsdfResult.Direction = SampleCosineHemisphere(randomSample, normal);
+        bsdfResult.IsSpecular = false;
     }
 
     float normalDotLight = max(dot(normal, bsdfResult.Direction), 0.0);

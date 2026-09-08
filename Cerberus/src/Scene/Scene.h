@@ -58,6 +58,20 @@ namespace cerberus
 		void SetRendererType(SceneRendererType rendererType) { m_RendererType = rendererType; }
 		SceneRendererType GetRendererType() const { return m_RendererType; }
 
+		// Editor viewport camera pose, persisted with the scene so reopening it
+		// restores the last vantage point. Editor-only; the runtime ignores it.
+		void SetEditorCameraPose(const glm::vec3& position, float yaw, float pitch)
+		{
+			m_EditorCameraPosition = position;
+			m_EditorCameraYaw = yaw;
+			m_EditorCameraPitch = pitch;
+			m_HasEditorCameraPose = true;
+		}
+		bool HasEditorCameraPose() const { return m_HasEditorCameraPose; }
+		const glm::vec3& GetEditorCameraPosition() const { return m_EditorCameraPosition; }
+		float GetEditorCameraYaw() const { return m_EditorCameraYaw; }
+		float GetEditorCameraPitch() const { return m_EditorCameraPitch; }
+
 		// Scene components currently cache whether their renderer-side proxy exists.
 		// A renderer replacement owns a fresh RenderScene, so every mesh must be
 		// registered again before the new renderer can draw it.
@@ -74,10 +88,13 @@ namespace cerberus
 		std::unordered_map<UUID, entt::entity> m_EntityMap;
 		uint32_t m_Width, m_Heigth;
 		std::string m_Name;
-		// Defaulted to Forward for now while it's under active development and
-		// gets loaded on every test launch; flip back to PathTracer once Forward
-		// is done, or once scenes are re-saved with an explicit Renderer field.
-		SceneRendererType m_RendererType = SceneRendererType::Forward;
+		SceneRendererType m_RendererType = SceneRendererType::PathTracer;
+
+		// Persisted editor viewport camera pose (see SetEditorCameraPose).
+		glm::vec3 m_EditorCameraPosition{ 0.0f, 0.0f, 7.0f };
+		float m_EditorCameraYaw = -90.0f;
+		float m_EditorCameraPitch = 0.0f;
+		bool m_HasEditorCameraPose = false;
 
 		LightEnvironment m_LightEnvironment;
 		std::vector<RenderObjectID> m_MeshToRemoved;

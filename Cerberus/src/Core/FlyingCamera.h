@@ -26,6 +26,9 @@ namespace cerberus
 
 		const glm::vec3& GetPosition() const { return m_Position; }
 		glm::vec3 GetDirection() const;
+		// Snap the camera to an absolute pose (used to restore a persisted editor
+		// viewport). No interpolation -- it sticks until the next input.
+		void SetPose(const glm::vec3& position, float yaw, float pitch);
 		void SetFocusPoint(const glm::vec3& focusPoint, float focusRadius = 1.0f);
 		float GetPitch() const { return m_Pitch; }
 		float GetYaw() const { return m_Yaw; }

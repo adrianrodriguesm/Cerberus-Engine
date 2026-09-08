@@ -100,7 +100,8 @@ namespace cerberus
 			static_cast<float>(resolution.first) / static_cast<float>(std::max(resolution.second, 1u)),
 			0.1f,
 			1000.f);
-		
+		ApplyEditorCameraFromScene();
+
 
 		Ref<ScenePropertiesPanel> scenePropertiesPanel = CreateRef<ScenePropertiesPanel>(m_Scene);
 		Ref<SceneHierarchyPanel> sceneHierarchyPanel = CreateRef<SceneHierarchyPanel>(m_Scene);
@@ -146,6 +147,14 @@ namespace cerberus
 
 	void EditorLayer::OnDetach()
 	{
+		// Persist the viewport camera pose with the scene so reopening it lands
+		// back on the same vantage point.
+		if (m_Scene)
+		{
+			StoreEditorCameraToScene();
+			AssetImporter::Serialize(m_Scene);
+		}
+
 		AssetEditorManager::SetAssetModifiedCallback(nullptr);
 		if (m_SceneRenderer)
 		{
@@ -770,7 +779,7 @@ namespace cerberus
 			m_RendererRecreationRequested = true;
 			SelectEntities({});
 			m_EditorPanelManager->SetSceneContext(m_Scene);
-
+			ApplyEditorCameraFromScene();
 		}
 	}
 
@@ -784,6 +793,20 @@ namespace cerberus
 		m_RendererRecreationRequested = true;
 		SelectEntities({});
 		m_EditorPanelManager->SetSceneContext(m_Scene);
+		ApplyEditorCameraFromScene();
+	}
+
+	void EditorLayer::ApplyEditorCameraFromScene()
+	{
+		if (m_Scene && m_Scene->HasEditorCameraPose())
+			m_Camera.SetPose(m_Scene->GetEditorCameraPosition(),
+				m_Scene->GetEditorCameraYaw(), m_Scene->GetEditorCameraPitch());
+	}
+
+	void EditorLayer::StoreEditorCameraToScene()
+	{
+		if (m_Scene)
+			m_Scene->SetEditorCameraPose(m_Camera.GetPosition(), m_Camera.GetYaw(), m_Camera.GetPitch());
 	}
 
 	void EditorLayer::SaveSceneAs()

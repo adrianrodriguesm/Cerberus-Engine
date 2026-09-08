@@ -126,4 +126,5 @@ void main()
     Payload.Emission = vec3(max(material.Parameters.z, 0.0));
     Payload.Hit = 1u;
     Payload.TexCoord = texCoord;
+    Payload.InstanceIndex = instanceIndex;
 }

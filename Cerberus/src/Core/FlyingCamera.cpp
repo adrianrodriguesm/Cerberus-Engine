@@ -131,6 +131,20 @@ namespace cerberus
 		UpdateView();
 	}
 
+	void FlyingCamera::SetPose(const glm::vec3& position, float yaw, float pitch)
+	{
+		m_Position = position;
+		m_Yaw = yaw;
+		m_Pitch = std::clamp(pitch, -89.f, 89.f);
+		m_Target = m_Position + GetDirection();
+		m_NewTarget = m_Target;
+		m_TargetPosition = m_Position;
+		m_TargetYaw = m_Yaw;
+		m_TargetPitch = m_Pitch;
+		m_Distance = glm::distance(m_Position, m_Target);
+		UpdateView();
+	}
+
 	glm::vec3 FlyingCamera::GetDirection() const
 	{
 		float yawRad = glm::radians(m_Yaw);

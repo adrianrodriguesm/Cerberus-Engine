@@ -10,6 +10,10 @@ layout(set = 0, binding = 2) uniform CameraData
     mat4 InverseProjection;
     mat4 InverseViewReverseProjection;
 
+    // Previous frame's ViewProjection, for denoiser temporal reprojection.
+    // Equals the current ViewProjection on the first rendered frame.
+    mat4 PreviousViewProjection;
+
     vec4 Position;
     vec4 Forward;
     vec4 Right;

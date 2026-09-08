@@ -53,6 +53,9 @@ namespace cerberus
 		void OpenScene(const Ref<Scene>& scene);
 		void SaveSceneAs();
 		void SaveScene();
+		// Restore / capture the viewport camera pose persisted in the scene file.
+		void ApplyEditorCameraFromScene();
+		void StoreEditorCameraToScene();
 		// Events
 		bool OnWindowResize(WindowResizeEvent& event);
 		bool OnKeyPress(KeyPressedEvent& event);
