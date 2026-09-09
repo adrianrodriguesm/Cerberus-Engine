@@ -53,9 +53,9 @@ layout(binding = 18, rg16f)   readonly  uniform image2D u_Material;         // .
 layout(binding = 19, rg16f)   readonly  uniform image2D u_SpecReflCurr;     // this frame: .x virtual view Z, .y reflected-ray hit dist
 layout(binding = 20, rg16f)   readonly  uniform image2D u_SpecReflPrev;     // previous frame (ping-pong), same layout
 layout(binding = 21, rg16f)   writeonly uniform image2D u_OutSpecReflHistory;// -> ping-pong curr, = u_SpecReflCurr passthrough
-layout(binding = 22, r32f)    readonly  uniform image2D u_DirectLumaCurr;   // this frame's primary-hit direct-lighting luma
-layout(binding = 23, r32f)    readonly  uniform image2D u_PrevDirectLuma;   // previous frame (ping-pong)
-layout(binding = 24, r32f)    writeonly uniform image2D u_OutDirectLuma;    // -> ping-pong curr passthrough
+layout(binding = 22, r32f)    readonly  uniform image2D u_DirectLumaCurr;   // this frame's raw 1-spp primary-hit direct-lighting luma
+layout(binding = 23, r32f)    readonly  uniform image2D u_PrevDirectLuma;   // previous frame (ping-pong): temporally accumulated direct-luma mean
+layout(binding = 24, r32f)    writeonly uniform image2D u_OutDirectLuma;    // -> ping-pong curr: accumulated direct-luma mean
 
 layout(push_constant) uniform Push
 {
@@ -94,7 +94,23 @@ const float CERBERUS_VIRTUAL_DIST_REL_TOL = 0.30;
 // Roughness above which the reflection check is skipped and the surface
 // reprojection is used directly (rough reflections are ~attached to the surface).
 const float CERBERUS_SPEC_VIRTUAL_ROUGHNESS_MAX = 0.45;
-// A-SVGF temporal gradient epsilon (relative-change denominator floor).
+// A-SVGF temporal gradient. The naive form -- this frame's raw 1-spp direct-luma
+// sample vs last frame's raw sample -- has no common-random-number cancellation
+// (unlike A-SVGF's re-traced gradient), so in a 1-spp NEE penumbra the two
+// independent noisy samples differ by ~sqrt(2)*sigma every frame and the gradient
+// fires on pure noise: it shortens history in shadowed regions (keeps them noisy)
+// and, via the neighbourhood clip, bleeds shadow<->light at junction edges.
+// Instead: compare the raw sample against the temporally ACCUMULATED direct-luma
+// mean (one noise term gone), and size the "did it really change" band from the
+// SPATIAL variance of the current direct luma (5x5, same mesh) -- instantaneous,
+// so no feedback loop (a temporally-accumulated variance stalls at 0 whenever the
+// gradient itself forces alpha to 1, pinning that pixel's history at length 1 for
+// several frames -- the "sombras demoran unos frames en construirse"). Then take
+// the min over the reprojection search window (MC noise is uncorrelated; a real
+// shadow edge is a connected region). AntilagStrength scales the sensitivity.
+const float CERBERUS_GRAD_SIGMA = 2.0;  // noise-band multiplier (spatial sigma)
+const float CERBERUS_GRAD_GAIN  = 2.5;  // ramp from threshold (rel=1) to full
+// Relative floor on the noise band, so it does not collapse on a uniform surface.
 const float CERBERUS_GRAD_EPS = 0.02;
 // Half-extent (pixels) of the ReLAX-style reprojection search. The surface motion
 // vector is only pixel-accurate, so under a fast pan the true previous sample of
@@ -206,10 +222,31 @@ void NeighborhoodStats(int channel, ivec2 pixel, ivec2 size, uint meshID,
     stddev = count > 0.0 ? sqrt(max(sumSq / count - mean * mean, vec3(0.0))) : vec3(0.0);
 }
 
+// Per-sample std-dev of the raw 1-spp direct luma over a 5x5 same-mesh window --
+// sizes the A-SVGF gradient's "is this a real change or just noise" band. Large
+// in a penumbra (bimodal NEE visibility + the real gradient), small on a surface
+// that is uniformly lit or uniformly shadowed.
+float SpatialDirectLumaStdDev(ivec2 pixel, ivec2 size, uint meshID)
+{
+    float sum = 0.0, sumSq = 0.0, count = 0.0;
+    for (int dy = -2; dy <= 2; ++dy)
+    for (int dx = -2; dx <= 2; ++dx)
+    {
+        ivec2 t = pixel + ivec2(dx, dy);
+        if (t.x < 0 || t.y < 0 || t.x >= size.x || t.y >= size.y) continue;
+        if (floatBitsToUint(imageLoad(u_CurrPositionMeshID, t).w) != meshID) continue;
+        float l = imageLoad(u_DirectLumaCurr, t).x;
+        sum += l; sumSq += l * l; count += 1.0;
+    }
+    if (count < 1.0) return 0.0;
+    float mean = sum / count;
+    return sqrt(max(sumSq / count - mean * mean, 0.0));
+}
+
 // Does the previous-frame sample at `tap` describe the SAME world surface as the
 // current pixel? One predicate shared by the bilinear taps, the reprojection
 // search, and (with reflCheck) the virtual-reflection validation.
-bool ConsistentTap(ivec2 tap, ivec2 size, vec3 normal, vec3 currWorldPos,
+bool ConsistentTap(ivec2 tap, ivec2 pixel, ivec2 size, vec3 normal, vec3 currWorldPos,
     uint meshID, float posGradient, float nMin, float planeTol,
     bool reflCheck, float refZ, float refDist)
 {
@@ -221,7 +258,14 @@ bool ConsistentTap(ivec2 tap, ivec2 size, vec3 normal, vec3 currWorldPos,
     if (dot(normal, OctDecode(prevG.xy)) < nMin)
         return false;
     vec3 tapWP = imageLoad(u_CurrPositionMeshID, tap).xyz;
-    if (abs(dot(tapWP - currWorldPos, normal)) > planeTol * posGradient)
+    // The plane tolerance must scale with how far `tap` sits from `pixel`: under
+    // a pan that offset is `motion*size` pixels (tens), and on a CURVED surface
+    // two current-frame points that far apart along the curve are legitimately
+    // non-coplanar -- a fixed ~1px tolerance then rejects a valid reprojection
+    // of already-visible shadowed geometry and forces a history reset. The
+    // a-trous depth weight already scales the same way (SigmaDepth*grad*dist).
+    float offsetPx = clamp(length(vec2(tap - pixel)), 1.0, 32.0);
+    if (abs(dot(tapWP - currWorldPos, normal)) > planeTol * posGradient * offsetPx)
         return false;
     if (reflCheck)
     {
@@ -272,7 +316,7 @@ bool GatherHistory(int channel, vec2 motion, ivec2 pixel, ivec2 size,
     for (int i = 0; i < 4; ++i)
     {
         ivec2 tap = baseTap + tapOffset[i];
-        if (!ConsistentTap(tap, size, normal, currWorldPos, meshID, posGradient,
+        if (!ConsistentTap(tap, pixel, size, normal, currWorldPos, meshID, posGradient,
                 nMin, planeTol, reflCheck, refZ, refDist))
             continue;
 
@@ -302,7 +346,7 @@ bool GatherHistory(int channel, vec2 motion, ivec2 pixel, ivec2 size,
         for (int sx = -CERBERUS_REPROJ_SEARCH; sx <= CERBERUS_REPROJ_SEARCH; ++sx)
         {
             ivec2 t = centerTap + ivec2(sx, sy);
-            if (!ConsistentTap(t, size, normal, currWorldPos, meshID, posGradient,
+            if (!ConsistentTap(t, pixel, size, normal, currWorldPos, meshID, posGradient,
                     nMin, planeTol, reflCheck, refZ, refDist))
                 continue;
             float d2 = float(sx * sx + sy * sy);
@@ -490,38 +534,37 @@ void main()
 
     bool frameReset = (u_Push.FrameIndex == 0u);
 
-    // A-SVGF temporal gradient: relative change of this pixel's direct lighting
-    // vs. last frame at the reprojected world point. Camera-motion-invariant
-    // because it compares the SAME world surface point across time. 0 => keep
-    // history while panning; > 0 => a real lighting/shadow change.
+    // A-SVGF temporal gradient: did the DIRECT lighting at this world point
+    // actually change since last frame, above the Monte-Carlo noise? Compare the
+    // raw 1-spp sample against the accumulated mean carried in u_PrevDirectLuma,
+    // normalised by that history's own per-sample std-dev (react past the noise
+    // band -- AntilagStrength scales it), and take the min over the reprojection
+    // search window (a real shadow edge is spatially connected; noise is not).
+    // Camera-motion-invariant: it compares the SAME world point across time.
     float gradient = 0.0;
-    if (!frameReset)
+    if (!frameReset && u_Push.AntilagStrength > 0.0)
     {
-        float dl = imageLoad(u_DirectLumaCurr, pixel).x;
+        float dl   = imageLoad(u_DirectLumaCurr, pixel).x; // raw 1-spp direct luma
+        float band = CERBERUS_GRAD_SIGMA * SpatialDirectLumaStdDev(pixel, size, meshID);
         vec2  srcF = (vec2(pixel) + 0.5) + surfaceMotion * vec2(size) - 0.5;
         ivec2 srcCenter = ivec2(round(srcF));
-        // Robust to reprojection error: take the SMALLEST relative difference
-        // over a previous-frame search window -- if any nearby previous pixel
-        // matches, this world point's direct lighting did not actually change
-        // (so already-visible geometry stays at gradient ~ 0 while panning).
-        // Same CERBERUS_REPROJ_SEARCH window as GatherHistory's fallback search:
-        // a plain 2x2 bilinear footprint is only sub-pixel accurate, and under a
-        // fast pan reprojection error grows past it -- a false-positive gradient
-        // here shortens historyLength on UNCHANGED, already-visible geometry,
-        // which (a) dumps weight onto the noisy raw 1-spp sample (grain) and
-        // (b) keeps the young-pixel neighbourhood clip active, which pulls
-        // brightness toward the local spatial mean (the "opacamiento" while
-        // moving, that clears once the camera stops and historyLength recovers).
-        float best = 1.0;
+        float bestRel = -1.0;
         for (int dy = -CERBERUS_REPROJ_SEARCH; dy <= CERBERUS_REPROJ_SEARCH; ++dy)
         for (int dx = -CERBERUS_REPROJ_SEARCH; dx <= CERBERUS_REPROJ_SEARCH; ++dx)
         {
             ivec2 s = srcCenter + ivec2(dx, dy);
             if (s.x < 0 || s.y < 0 || s.x >= size.x || s.y >= size.y) continue;
-            float p = imageLoad(u_PrevDirectLuma, s).x;
-            best = min(best, abs(dl - p) / max(max(dl, p), CERBERUS_GRAD_EPS));
+            float pm = imageLoad(u_PrevDirectLuma, s).x; // accumulated direct-luma mean
+            if (pm <= 0.0) continue;                      // no accumulated history here
+            float denom = band + CERBERUS_GRAD_EPS * max(dl, pm) + 1e-4;
+            float rel   = abs(dl - pm) / denom;
+            bestRel = (bestRel < 0.0) ? rel : min(bestRel, rel);
         }
-        gradient = clamp((best - 0.1) * 1.25, 0.0, 1.0); // small deadzone
+        // AntilagStrength scales sensitivity (how fast a change past the noise
+        // band ramps to a full history reset); gradient MUST stay in [0,1] or the
+        // mix() calls in ProcessChannel extrapolate to negative illumination.
+        if (bestRel >= 0.0)
+            gradient = clamp((bestRel - 1.0) * CERBERUS_GRAD_GAIN * u_Push.AntilagStrength, 0.0, 1.0);
     }
 
     // Diffuse: surface reprojection.
@@ -564,9 +607,19 @@ void main()
         histColorD, histMomD, histLenD, meanD, stdD, rxD,
         u_Push.AlphaMin, gradient);
 
+    // The A-SVGF gradient measures a DIRECT-lighting change -- meaningful for the
+    // diffuse channel, but a shadow sweeping across a mirror does not change what
+    // the mirror reflects. Feeding it to the specular channel wiped reflection
+    // history on any camera move (the pan's first frames spike the gradient) and
+    // then the a-trous historyDistrust ramp rebuilt the reflection over ~6
+    // frames -- the "se borran y despues se reconstruyen". Specular invalidation
+    // is already handled by resetS, which includes the virtual reflection-
+    // geometry check (u_SpecReflPrev) -- the specular-appropriate "did the
+    // reflection change" test. So: no gradient term for specular.
+    const float gradientSpec = 0.0;
     ChannelOut os = ProcessChannel(resetS, specIllum, specLuma,
         histColorS, histMomS, histLenS, meanS, stdS, rxS,
-        u_Push.AlphaMin, gradient);
+        u_Push.AlphaMin, gradientSpec);
 
     // TemporalColor.a is 16F; clamp the variance so a very bright specular pixel
     // (E[l^2] ~ 1e5) does not overflow it. Moments (.y = E[l^2]) go to the 32F
@@ -584,7 +637,24 @@ void main()
     // Pass this frame's reflection G-buffer into the ping-pong so next frame's
     // virtual reprojection can validate against it.
     imageStore(u_OutSpecReflHistory, pixel, vec4(specRef, 0.0, 0.0));
-    imageStore(u_OutDirectLuma, pixel, vec4(imageLoad(u_DirectLumaCurr, pixel).x, 0.0, 0.0, 0.0));
+    // Accumulate the direct-luma mean at the diffuse colour's blend rate, so next
+    // frame's gradient has a low-noise reference. Reprojected (nearest) like the
+    // colour; resetD (alpha 1) or no prior history seeds it from the raw sample.
+    // The noise BAND is spatial (see SpatialDirectLumaStdDev) and does not depend
+    // on this accumulation, so there is no feedback loop even when gradient forces
+    // alpha to 1 -- the mean just snaps to the new value and the gradient clears.
+    {
+        float dlRaw  = imageLoad(u_DirectLumaCurr, pixel).x;
+        float prevDl = 0.0;
+        if (!resetD)
+        {
+            ivec2 sc = clamp(ivec2(round((vec2(pixel) + 0.5) + surfaceMotion * vec2(size) - 0.5)),
+                             ivec2(0), size - ivec2(1));
+            prevDl = imageLoad(u_PrevDirectLuma, sc).x;
+        }
+        float outDl = (prevDl > 0.0) ? mix(prevDl, dlRaw, od.appliedAlpha) : dlRaw;
+        imageStore(u_OutDirectLuma, pixel, vec4(outDl, 0.0, 0.0, 0.0));
+    }
     // Reprojection source for next frame (until the split a-trous takes over).
     imageStore(u_OutColorHistoryDiff, pixel, outDiff);
     imageStore(u_OutColorHistorySpec, pixel, outSpec);

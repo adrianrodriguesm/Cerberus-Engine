@@ -36,6 +36,10 @@ layout(binding = 14, rgba16f) readonly uniform image2D u_SplitAtrousSpecular;
 // .w = applied blend alpha). Diagnostic debug view only.
 layout(binding = 15, rgba32f) readonly uniform image2D u_SplitMomentsSpec0;
 layout(binding = 16, rgba32f) readonly uniform image2D u_SplitMomentsSpec1;
+// Diffuse temporal moments, both ping-pong slots (.z = history length,
+// .w = applied blend alpha). Diagnostic debug view only.
+layout(binding = 17, rgba32f) readonly uniform image2D u_SplitMomentsDiff0;
+layout(binding = 18, rgba32f) readonly uniform image2D u_SplitMomentsDiff1;
 
 layout(push_constant) uniform Push
 {
@@ -184,6 +188,22 @@ vec3 DebugColor(ivec2 pixel)
             // stable on a still camera the flicker is in the remod (envBRDF);
             // if it flickers here the temporal EMA itself is the bug.
             return LinearToDisplay(imageLoad(u_SplitTemporalSpecular, pixel).rgb, u_Push.Exposure);
+        case 11u:
+        {
+            // DIFFUSE temporal blend factor (.w) and history length (.z), the
+            // "shadows rebuild over frames" diagnostic. Pan the camera and watch:
+            //   R = applied alpha * 50  -> RED where alpha is high (history is
+            //       being reset / shortened -- gradient fired or reprojection
+            //       failed). Dark on a healthy reprojected pixel.
+            //   G = historyLength / 64  -> GREEN where history is long (healthy).
+            //       Black where it collapsed to ~1.
+            //   A red band that follows the camera motion over already-visible
+            //   shadowed geometry == the temporal buffer is being invalidated.
+            vec4 m = (u_Push.SplitParity == 0u)
+                ? imageLoad(u_SplitMomentsDiff0, pixel)
+                : imageLoad(u_SplitMomentsDiff1, pixel);
+            return vec3(clamp(m.w * 50.0, 0.0, 1.0), clamp(m.z / 64.0, 0.0, 1.0), 0.0);
+        }
         default:
             return vec3(0.0);
     }

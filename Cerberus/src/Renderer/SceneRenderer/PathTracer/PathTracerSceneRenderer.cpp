@@ -77,6 +77,9 @@ namespace cerberus
 	// Both specular-moments ping-pong slots, for the history-length debug view.
 	static constexpr uint32_t PP_SPLIT_MOMENTS_SPEC0_BINDING = 15;
 	static constexpr uint32_t PP_SPLIT_MOMENTS_SPEC1_BINDING = 16;
+	// Both diffuse-moments ping-pong slots, for the diffuse alpha/history view.
+	static constexpr uint32_t PP_SPLIT_MOMENTS_DIFF0_BINDING = 17;
+	static constexpr uint32_t PP_SPLIT_MOMENTS_DIFF1_BINDING = 18;
 
 	// Local set-0 bindings for SVGFSpatialPreResolve.glsl.
 	static constexpr uint32_t SVGF_PR_IN_RADIANCE_DIFFUSE_BINDING = 0;
@@ -675,6 +678,8 @@ namespace cerberus
 			createGBufferImage(slot == 0 ? "RT SpecReflHistory PP A" : "RT SpecReflHistory PP B", ImageFormat::RG16F,
 				m_RT_SpecReflHistoryPPImage[slot], m_RT_SpecReflHistoryPPImageView[slot]);
 		createGBufferImage("RT DirectLuma", ImageFormat::RED32F, m_RT_DirectLumaImage, m_RT_DirectLumaImageView);
+		// The ping-pong carries the temporally accumulated direct-luma mean (the
+		// low-noise reference for the A-SVGF gradient; its band is spatial).
 		for (uint32_t slot = 0; slot < 2; ++slot)
 			createGBufferImage(slot == 0 ? "RT DirectLuma PP A" : "RT DirectLuma PP B", ImageFormat::RED32F,
 				m_RT_DirectLumaPPImage[slot], m_RT_DirectLumaPPImageView[slot]);
@@ -764,6 +769,8 @@ namespace cerberus
 		finalizeBindGroup->SetImageView(m_RT_SplitATrousImageView[1][0], PP_SPLIT_ATROUS_SPECULAR_BINDING);
 		finalizeBindGroup->SetImageView(m_RT_SplitMomentsImageView[1][0], PP_SPLIT_MOMENTS_SPEC0_BINDING);
 		finalizeBindGroup->SetImageView(m_RT_SplitMomentsImageView[1][1], PP_SPLIT_MOMENTS_SPEC1_BINDING);
+		finalizeBindGroup->SetImageView(m_RT_SplitMomentsImageView[0][0], PP_SPLIT_MOMENTS_DIFF0_BINDING);
+		finalizeBindGroup->SetImageView(m_RT_SplitMomentsImageView[0][1], PP_SPLIT_MOMENTS_DIFF1_BINDING);
 		finalizeBindGroup->Update();
 
 		// SVGFSpatialPreResolve bind group: reads this frame's raw radiance +
@@ -1277,12 +1284,17 @@ namespace cerberus
 			m_RT_SplitTemporalColorImage[0], "RTSplitTemporalColorDiffuse", gbufferInitialAccess);
 		const RGTextureHandle splitTemporalSpecRG = m_RenderGraph.ImportImage(
 			m_RT_SplitTemporalColorImage[1], "RTSplitTemporalColorSpecular", gbufferInitialAccess);
-		// Both specular-moments ping-pong slots, imported unconditionally for the
-		// history-length debug view; the denoiser passes below reuse these handles.
+		// Both specular- and diffuse-moments ping-pong slots, imported
+		// unconditionally for the alpha/history debug views; the denoiser passes
+		// below reuse these handles.
 		const RGTextureHandle splitMomentsSpec0RG = m_RenderGraph.ImportImage(
 			m_RT_SplitMomentsImage[1][0], "RTSplitMomentsSpec0", gbufferInitialAccess);
 		const RGTextureHandle splitMomentsSpec1RG = m_RenderGraph.ImportImage(
 			m_RT_SplitMomentsImage[1][1], "RTSplitMomentsSpec1", gbufferInitialAccess);
+		const RGTextureHandle splitMomentsDiff0RG = m_RenderGraph.ImportImage(
+			m_RT_SplitMomentsImage[0][0], "RTSplitMomentsDiff0", gbufferInitialAccess);
+		const RGTextureHandle splitMomentsDiff1RG = m_RenderGraph.ImportImage(
+			m_RT_SplitMomentsImage[0][1], "RTSplitMomentsDiff1", gbufferInitialAccess);
 
 		const RGAccessState computeRWInitial{ VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT };
 		RGTextureHandle accumulationRG{};
@@ -1309,10 +1321,10 @@ namespace cerberus
 			splitColorHistDiffPrevRG = m_RenderGraph.ImportImage(m_RT_SplitColorHistoryImage[0][prev], "RTSplitColorHistDiffPrev", computeRWInitial);
 			splitColorHistSpecCurrRG = m_RenderGraph.ImportImage(m_RT_SplitColorHistoryImage[1][curr], "RTSplitColorHistSpecCurr", computeRWInitial);
 			splitColorHistSpecPrevRG = m_RenderGraph.ImportImage(m_RT_SplitColorHistoryImage[1][prev], "RTSplitColorHistSpecPrev", computeRWInitial);
-			splitMomentsDiffCurrRG = m_RenderGraph.ImportImage(m_RT_SplitMomentsImage[0][curr], "RTSplitMomentsDiffCurr", computeRWInitial);
-			splitMomentsDiffPrevRG = m_RenderGraph.ImportImage(m_RT_SplitMomentsImage[0][prev], "RTSplitMomentsDiffPrev", computeRWInitial);
 			// Reuse the unconditional handles (importing the same image twice would
 			// desync the graph's per-resource state tracking).
+			splitMomentsDiffCurrRG = (curr == 0u) ? splitMomentsDiff0RG : splitMomentsDiff1RG;
+			splitMomentsDiffPrevRG = (curr == 0u) ? splitMomentsDiff1RG : splitMomentsDiff0RG;
 			splitMomentsSpecCurrRG = (curr == 0u) ? splitMomentsSpec0RG : splitMomentsSpec1RG;
 			splitMomentsSpecPrevRG = (curr == 0u) ? splitMomentsSpec1RG : splitMomentsSpec0RG;
 
@@ -1581,7 +1593,7 @@ namespace cerberus
 			[finalizeSourceRG, outputRG, normalDepthRG, positionMeshIDRG, albedoRG, motionRG, materialRG,
 			 radianceDiffuseRG, radianceSpecularRG, radianceEmissiveRG, specularAlbedoRG,
 			 splitTemporalSpecRG, splitAtrousFinalDiffRG, splitAtrousFinalSpecRG,
-			 splitMomentsSpec0RG, splitMomentsSpec1RG](RenderGraphBuilder& builder)
+			 splitMomentsSpec0RG, splitMomentsSpec1RG, splitMomentsDiff0RG, splitMomentsDiff1RG](RenderGraphBuilder& builder)
 			{
 				builder.ReadWriteStorageImage(finalizeSourceRG, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 				builder.ReadWriteStorageImage(outputRG, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
@@ -1599,6 +1611,8 @@ namespace cerberus
 				builder.ReadWriteStorageImage(splitAtrousFinalSpecRG, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 				builder.ReadWriteStorageImage(splitMomentsSpec0RG, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 				builder.ReadWriteStorageImage(splitMomentsSpec1RG, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+				builder.ReadWriteStorageImage(splitMomentsDiff0RG, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+				builder.ReadWriteStorageImage(splitMomentsDiff1RG, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 			},
 			[this, finalizePush, groupsX, groupsY](ComputeCommandList& compute)
 			{
@@ -1920,7 +1934,8 @@ namespace cerberus
 					"Lit", "Motion vectors", "Normals", "Linear depth", "Albedo", "Mesh ID", "Denoiser variance",
 					"Material (rough/metal/tightness)",
 					"Split: recombined (raw)",
-					"Split: spec alpha/history (R=a G=hist)", "Split: spec EMA raw" };
+					"Split: spec alpha/history (R=a G=hist)", "Split: spec EMA raw",
+					"Split: diff alpha/history (R=a G=hist)" };
 				ImGui::Combo("Debug view", &m_DebugView, kDebugViews, IM_ARRAYSIZE(kDebugViews));
 				SettingHelp("Replaces the lit image with a raw denoiser input for inspection: "
 					"motion vectors, world normals, linear depth, primary albedo, a per-instance "
