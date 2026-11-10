@@ -84,7 +84,7 @@ vec3 LinearToDisplay(vec3 linearRadiance, float exposure)
     vec3 toneMapped = ACESToneMap(linearRadiance * max(exposure, 0.0));
 
     // Cerberus presents through an UNORM swapchain: explicit gamma, matching
-    // SceneComposite.glsl.
+    // Composite/Composite.frag.
     return pow(toneMapped, vec3(1.0 / 2.2));
 }
 
