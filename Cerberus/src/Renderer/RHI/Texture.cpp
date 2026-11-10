@@ -510,7 +510,7 @@ namespace cerberus
 		SamplerSpec.SamplerFilter = SamplerFilter::Linear;
 		SamplerSpec.Anisotropy = false;
 		SamplerSpec.MinLOD = 0.f;
-		SamplerSpec.MaxLOD = m_MipsLevels;
+		SamplerSpec.MaxLOD = static_cast<float>(m_MipsLevels);
 		SamplerSpec.ShaderResource = true;
 
 		viewProp.SamplerSpec = SamplerSpec;
@@ -932,7 +932,14 @@ namespace cerberus
 
 	Handle<TextureCube> TextureFactory::CreateTextureCubeWithColor(const glm::vec4& color)
 	{
-		uint32_t textureData = ConvertRGBtoHex((float)color.r, (float)color.g, (float)color.b, (float)color.a);
+		// Round rather than truncate, and clamp in case of HDR input (>1.0 channels),
+		// since ConvertRGBtoHex asserts its inputs are within [0, 255].
+		const glm::vec4 color255 = glm::round(glm::clamp(color, 0.f, 1.f) * 255.f);
+		uint32_t textureData = ConvertRGBtoHex(
+			static_cast<uint32_t>(color255.r),
+			static_cast<uint32_t>(color255.g),
+			static_cast<uint32_t>(color255.b),
+			static_cast<uint32_t>(color255.a));
 		uint32_t cubeTextureData[6] = { textureData, textureData, textureData, textureData, textureData, textureData };
 		TextureProperties prop;
 		prop.DebugName = "Colored Texture Cube";
@@ -1055,7 +1062,7 @@ namespace cerberus
 			SamplerSpec.SamplerFilter = SamplerFilter::Linear;
 			SamplerSpec.Anisotropy = false;
 			SamplerSpec.MinLOD = 0.f;
-			SamplerSpec.MaxLOD = m_Properties.MipCount;
+			SamplerSpec.MaxLOD = static_cast<float>(m_Properties.MipCount);
 			SamplerSpec.ShaderResource = m_Properties.ShaderResource;
 			
 		}

@@ -18,7 +18,7 @@ namespace cerberus
 		rendererSpec.SwapChainTarget = false;
 		rendererSpec.Resolution = { resolution.first, resolution.second };
 		m_SceneRenderer = CreateRef<PathTracerSceneRenderer>(m_Scene, rendererSpec);
-		m_Camera = FlyingCamera(45.f, resolution.first / resolution.second, 0.1f, 1000.f);
+		m_Camera = FlyingCamera(45.f, static_cast<float>(resolution.first) / static_cast<float>(resolution.second), 0.1f, 1000.f);
 	}
 
 	void RuntimeLayer::OnDetach()
@@ -51,7 +51,7 @@ namespace cerberus
 		sceneRendererCamera.Target = m_Camera.GetTarget();
 		sceneRendererCamera.Near = m_Camera.GetNearPlane();
 		sceneRendererCamera.Far = m_Camera.GetFarPlane();
-		m_Scene->OnUpdate(m_SceneRenderer, sceneRendererCamera, ts);
+		m_Scene->OnUpdate(*m_SceneRenderer, sceneRendererCamera, ts);
 	}
 
 	void RuntimeLayer::OpenScene()
@@ -62,14 +62,13 @@ namespace cerberus
 			std::filesystem::path relativePath = FileSystem::GetRelativePathFromAbsolute(filepath);
 			m_Scene = AssetManager::GetAsset<Scene>(relativePath);
 			m_Scene->SetName(relativePath.stem().string());
-			m_SceneRenderer->SetSceneContext(m_Scene);
 		}
 	}
 
 	bool RuntimeLayer::OnWindowResize(WindowResizeEvent& event)
 	{
 		m_SceneRenderer->SetViewportSize(event.GetWidth(), event.GetHeight());
-		m_Camera.SetViewportSize(event.GetWidth(), event.GetHeight());
+		m_Camera.SetViewportSize(static_cast<float>(event.GetWidth()), static_cast<float>(event.GetHeight()));
 		return false;
 	}
 
@@ -99,7 +98,7 @@ namespace cerberus
 			ImVec2 viewportSize = ImGui::GetContentRegionAvail();
 			m_SceneRenderer->SetViewportSize((uint32_t)viewportSize.x, (uint32_t)viewportSize.y);
 
-			m_Camera.SetViewportSize((uint32_t)viewportSize.x, (uint32_t)viewportSize.y);
+			m_Camera.SetViewportSize(viewportSize.x, viewportSize.y);
 
 			// Render viewport image
 			ui::Image(m_SceneRenderer->GetFinalPassImage(), viewportSize, { 0, 1 }, { 1, 0 });

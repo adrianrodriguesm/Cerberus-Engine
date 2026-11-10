@@ -35,7 +35,7 @@ namespace cerberus
 		uint32_t GetSize() const { return m_Size; }
 		uint32_t GetOffset() const { return m_Offset; }
 
-		static const std::string& UniformTypeToString(ShaderUniformType type);
+		static std::string UniformTypeToString(ShaderUniformType type);
 	private:
 		std::string m_Name;
 		ShaderUniformType m_Type = ShaderUniformType::None;

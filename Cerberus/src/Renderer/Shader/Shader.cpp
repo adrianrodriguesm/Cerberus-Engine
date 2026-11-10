@@ -107,7 +107,7 @@ namespace cerberus
 			}
 			else
 			{
-				CORE_ASSERT(false, "Could not load shader: {0} resolved to {1}", filepath, resolvedPath.string());
+				CORE_ASSERT(false, fmt::format("Could not load shader: {0} resolved to {1}", filepath, resolvedPath.string()));
 			}
 			in.close();
 			return result;
@@ -1019,22 +1019,22 @@ namespace cerberus
 	{
 	}
 
-	const std::string& ShaderUniform::UniformTypeToString(const ShaderUniformType type)
+	std::string ShaderUniform::UniformTypeToString(const ShaderUniformType type)
 	{
 		if (type == ShaderUniformType::Bool)
 		{
-			return std::string("Boolean");
+			return "Boolean";
 		}
 		else if (type == ShaderUniformType::Int)
 		{
-			return std::string("Int");
+			return "Int";
 		}
 		else if (type == ShaderUniformType::Float)
 		{
-			return std::string("Float");
+			return "Float";
 		}
 
-		return std::string("None");
+		return "None";
 	}
 
 }

@@ -57,7 +57,14 @@ project "Cerberus"
 		defines
 		{
 			"NV_PLATFORM_WINDOWS",
+			-- fmt (vendored by spdlog) still uses stdext::checked_array_iterator for
+			-- bigint formatting; silence the MSVC STL deprecation warning it triggers.
+			"_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING",
 		}
+
+		-- shaderc's import lib and vulkan-1.lib both emit a __NULL_IMPORT_DESCRIPTOR
+		-- symbol; harmless duplicate, the linker already keeps the first one.
+		linkoptions { "/ignore:4006" }
 
 	filter "configurations:Debug"
 		defines "NV_DEBUG"

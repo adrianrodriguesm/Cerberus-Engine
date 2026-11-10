@@ -67,7 +67,7 @@ namespace cerberus
 
 		std::string filepath = fmt::format("Meshes/{0}.{1}", assetData.FilePath.stem().string(), "cmesh");
 		if (!m_FilepathBuffer[0])
-			strcpy(m_FilepathBuffer.data(), filepath.c_str());
+			strcpy_s(m_FilepathBuffer.data(), m_FilepathBuffer.size(), filepath.c_str());
 
 		ImGui::InputText("##meshPath", m_FilepathBuffer.data(), m_FilepathBuffer.size());
 		if (ImGui::Button("Create"))

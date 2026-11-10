@@ -402,7 +402,7 @@ namespace cerberus
 			buildAs[idx].CleanupAStructure = buildAs[idx].AStructure;					 // previous AS to destroy
 			buildAs[idx].SizeInfo.accelerationStructureSize = compactSizes[queryCtn++];  // new reduced size
 			// Creating a compact version of the AS
-			AccelerationStructureSpecification asSpec{ AccelerationStructureType::BottomLevel ,buildAs[idx].SizeInfo.accelerationStructureSize, nullptr };
+			AccelerationStructureSpecification asSpec{ AccelerationStructureType::BottomLevel, static_cast<uint32_t>(buildAs[idx].SizeInfo.accelerationStructureSize), nullptr };
 			buildAs[idx].AStructure = ResourceManager::CreateAccelerationStructure(asSpec);
 
 			// Attach the compacted blas to the actual submesh
@@ -431,7 +431,7 @@ namespace cerberus
 		{
 			
 			// Actual allocation of buffer and acceleration structure.
-			AccelerationStructureSpecification asSpec{ AccelerationStructureType::BottomLevel ,buildAs[idx].SizeInfo.accelerationStructureSize, nullptr };
+			AccelerationStructureSpecification asSpec{ AccelerationStructureType::BottomLevel, static_cast<uint32_t>(buildAs[idx].SizeInfo.accelerationStructureSize), nullptr };
 			buildAs[idx].AStructure = ResourceManager::CreateAccelerationStructure(asSpec);
 			// Attach blas to the actual submesh
 			MeshSourceProxy* meshProxy = ResourceManager::GetMeshSourceProxy(buildAs[idx].MeshSourceProxy);

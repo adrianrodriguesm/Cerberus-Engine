@@ -990,7 +990,7 @@ namespace cerberus
 			if (m_SceneRenderer)
 				m_SceneRenderer->SetViewportSize(m_RendererViewportSize.x, m_RendererViewportSize.y);
 
-			m_Camera.SetViewportSize((uint32_t)viewportSize.x, (uint32_t)viewportSize.y);
+			m_Camera.SetViewportSize(viewportSize.x, viewportSize.y);
 
 			// Render viewport image
 			if (m_SceneRenderer)

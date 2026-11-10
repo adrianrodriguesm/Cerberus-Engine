@@ -170,14 +170,14 @@ namespace cerberus
 		}
 
 		bool isSorted = true;
-		int lastBinding = -1;
+		int64_t lastBinding = -1;
 
 		// Copy from the direct info struct into our own one
-		for (int i = 0; i < info->bindingCount; i++)
+		for (uint32_t i = 0; i < info->bindingCount; i++)
 		{
 			layoutinfo.Bindings.push_back(info->pBindings[i]);
 			// Check that the bindings are in strict increasing order
-			if (info->pBindings[i].binding > lastBinding)
+			if (static_cast<int64_t>(info->pBindings[i].binding) > lastBinding)
 				lastBinding = info->pBindings[i].binding;
 			else
 				isSorted = false;

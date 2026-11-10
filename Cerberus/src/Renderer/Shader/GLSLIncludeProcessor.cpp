@@ -303,7 +303,7 @@ namespace cerberus
 		{
 			source = ReadFileAndSkipBOM(requestedFullPath);
 			if (source.empty())
-				CORE_ASSERT(false, "Failed to load included file: {} in {}.", requestedFullPath, requestingPath);
+				CORE_ASSERT(false, fmt::format("Failed to load included file: {} in {}.", requestedFullPath.string(), requestingPath.string()));
 			sourceHash = GenerateFNVHash(source.c_str());
 
 			// Can clear "source" in case it has already been included in this stage and is guarded.

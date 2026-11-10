@@ -158,7 +158,7 @@ namespace cerberus
 		gpuBufferSpec.Usage = GPUBufferUsage::ShaderBindingTableUsage;
 		gpuBufferSpec.DebugName = "Shader Binding Table";
 		gpuBufferSpec.MemoryUsage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-		gpuBufferSpec.Size = sbtSize;
+		gpuBufferSpec.Size = static_cast<uint32_t>(sbtSize);
 
 		m_Buffer = ResourceManager::CreateBuffer(gpuBufferSpec);
 		GPUBuffer* sbtBuffer = ResourceManager::GetBuffer(m_Buffer);
