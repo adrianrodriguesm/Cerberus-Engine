@@ -1,0 +1,84 @@
+Run A = DISTINCT(Benchmarks[Run])
+
+Run B = DISTINCT(Benchmarks[Run])
+
+Cameras = DISTINCT(Benchmarks[camera])
+
+Statistic = DATATABLE("Statistic", STRING, {{"Mean"}, {"Median"}, {"P95"}})
+
+Timing ms =
+IF(
+    COUNTROWS(Benchmarks) = 1 && MAX(Benchmarks[samples]) > 0,
+    SWITCH(
+        SELECTEDVALUE(Statistic[Statistic], "Mean"),
+        "Mean", MAX(Benchmarks[mean_ms]),
+        "Median", MAX(Benchmarks[median_ms]),
+        "P95", MAX(Benchmarks[p95_ms])
+    )
+)
+
+Run A ms =
+VAR RunId = SELECTEDVALUE('Run A'[Run])
+RETURN
+    IF(
+        NOT ISBLANK(RunId) && HASONEVALUE(Cameras[camera]),
+        CALCULATE(
+            [Timing ms],
+            KEEPFILTERS(Benchmarks[Run] = RunId)
+        )
+    )
+
+Run B ms =
+VAR RunId = SELECTEDVALUE('Run B'[Run])
+RETURN
+    IF(
+        NOT ISBLANK(RunId) && HASONEVALUE(Cameras[camera]),
+        CALCULATE(
+            [Timing ms],
+            KEEPFILTERS(Benchmarks[Run] = RunId)
+        )
+    )
+
+
+Comparison status =
+VAR A = SELECTEDVALUE('Run A'[Run])
+VAR B = SELECTEDVALUE('Run B'[Run])
+VAR CameraName = SELECTEDVALUE(Cameras[camera])
+VAR KeyA =
+    CALCULATE(
+        SELECTEDVALUE(Benchmarks[Compatibility]),
+        REMOVEFILTERS(Benchmarks),
+        Benchmarks[Run] = A,
+        Benchmarks[camera] = CameraName,
+        Benchmarks[Timing] = "GPU frame"
+    )
+VAR KeyB =
+    CALCULATE(
+        SELECTEDVALUE(Benchmarks[Compatibility]),
+        REMOVEFILTERS(Benchmarks),
+        Benchmarks[Run] = B,
+        Benchmarks[camera] = CameraName,
+        Benchmarks[Timing] = "GPU frame"
+    )
+RETURN
+    SWITCH(
+        TRUE(),
+        ISBLANK(A) || ISBLANK(B), "Select one run in each slicer",
+        A = B, "Select two different runs",
+        ISBLANK(CameraName), "Select one camera",
+        ISBLANK(KeyA) || ISBLANK(KeyB), "Missing camera or compatibility metadata",
+        KeyA <> KeyB, "Recorded capture settings differ",
+        "Recorded capture settings match"
+    )
+
+Delta ms =
+VAR A = [Run A ms]
+VAR B = [Run B ms]
+RETURN
+    IF(
+        [Comparison status] = "Recorded capture settings match" &&
+        NOT ISBLANK(A) && NOT ISBLANK(B),
+        B - A
+    )
+
+Delta % = DIVIDE([Delta ms], [Run A ms])

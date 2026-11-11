@@ -1,0 +1,48 @@
+{
+  "run_a": "2026-11-11_002739_First Scene_PathTracer.csv",
+  "run_b": "2026-11-11_004231_First Scene_PathTracer.csv",
+  "rows": 30,
+  "frame": {
+    "mean_ms": {
+      "A": 15.5756,
+      "B": 15.4972,
+      "delta_ms": -0.07840000000000025,
+      "delta_percent": -0.5033513957728771
+    },
+    "median_ms": {
+      "A": 15.5392,
+      "B": 15.4317,
+      "delta_ms": -0.10749999999999993,
+      "delta_percent": -0.6917988056013176
+    },
+    "p95_ms": {
+      "A": 15.8996,
+      "B": 15.8546,
+      "delta_ms": -0.04499999999999993,
+      "delta_percent": -0.28302598807517126
+    }
+  },
+  "top_gpu_passes_b": [
+    {
+      "pass_name": "PathTrace",
+      "mean_ms": 6.73251
+    },
+    {
+      "pass_name": "SVGFTemporalSplit",
+      "mean_ms": 2.20195
+    },
+    {
+      "pass_name": "SVGFAtrousSplit D0",
+      "mean_ms": 0.726381
+    },
+    {
+      "pass_name": "SVGFAtrousSplit S0",
+      "mean_ms": 0.709418
+    },
+    {
+      "pass_name": "SVGFAtrousSplit S1",
+      "mean_ms": 0.686817
+    }
+  ],
+  "validation": "CSV parsing/arithmetic only; Power Query, DAX and Desktop not executed"
+}

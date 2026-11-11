@@ -1,0 +1,30 @@
+# scene: First Scene
+# renderer: PathTracer
+# path_tracer_mode: denoised
+# resolution: 1920x1080
+# total_triangle_count: 315832
+# mesh_instance_count: 30
+# gpu: NVIDIA GeForce RTX 3080
+# vulkan_api_version: 1.4.341
+# gpu_driver_version_raw: 2559967232
+# present_mode: Mailbox
+# build_configuration: Release
+# git_commit: ac5fc825d07e5d54dbe43a2568a95850ee8a0c8e
+# warmup_frames: 60
+# sample_frames: 300
+camera,pass,type,mean_ms,median_ms,min_ms,max_ms,p95_ms,samples
+Camera 1,PathTrace,RayTracing,6.73251,6.76902,6.26896,7.43741,7.08669,300
+Camera 1,SVGFSpatialPreResolve,Compute,0.561643,0.524288,0.518784,0.963968,0.941056,300
+Camera 1,SVGFTemporalSplit,Compute,2.20195,2.15603,2.1248,2.94912,2.57638,300
+Camera 1,SVGFAtrousSplit D3,Compute,0.666292,0.661504,0.653312,0.959488,0.673792,300
+Camera 1,SVGFHistoryFix,Compute,0.37888,0.374784,0.366592,0.719872,0.38912,300
+Camera 1,SVGFAtrousSplit D0,Compute,0.726381,0.719872,0.713728,1.04448,0.735232,300
+Camera 1,SVGFAtrousSplit D1,Compute,0.682721,0.678912,0.672768,0.96256,0.6912,300
+Camera 1,SVGFAtrousSplit D2,Compute,0.653135,0.651264,0.64512,0.932864,0.663552,300
+Camera 1,SVGFAtrousSplit S0,Compute,0.709418,0.705536,0.699392,0.984064,0.718848,300
+Camera 1,SVGFAtrousSplit S1,Compute,0.686817,0.68096,0.674816,0.974848,0.693248,300
+Camera 1,SVGFAtrousSplit S2,Compute,0.657654,0.653312,0.647168,0.953344,0.6656,300
+Camera 1,SVGFAtrousSplit S3,Compute,0.669307,0.663552,0.65536,0.9728,0.676864,300
+Camera 1,Finalize,Compute,0.170463,0.16896,0.164864,0.193344,0.186368,300
+Camera 1,FrameTotal,Frame,15.4972,15.4317,15.2627,16.554,15.8546,300
+Camera 1,CPUFrameTime,CPU,15.6698,15.6284,15.0189,16.736,16.1366,300
