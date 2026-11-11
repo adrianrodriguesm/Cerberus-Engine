@@ -78,6 +78,7 @@ namespace cerberus
 		bool PrepareRayTracing();
 
 		bool HasRenderableMeshes() const { return m_MeshRegister.MeshInstanceCount > 0; }
+		uint32_t GetMeshInstanceCount() const { return m_MeshRegister.MeshInstanceCount; }
 		bool HasValidTLAS() const { return m_MeshRegister.ASRegisterInfo.TLAS.IsValid(); }
 		Handle<AccelerationStructure> GetTLAS() const { return m_MeshRegister.ASRegisterInfo.TLAS; }
 

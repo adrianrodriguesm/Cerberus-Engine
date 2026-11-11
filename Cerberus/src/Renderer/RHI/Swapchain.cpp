@@ -7,6 +7,8 @@
 #include "Renderer/Memory/DeferredResourceDeletionQueue.h"
 namespace cerberus
 {
+	bool Swapchain::s_UncappedPresentModeOverride = false;
+
 	Swapchain::Swapchain(VkInstance instance, const Ref<Device>& device)
 		: m_VulkanInstance(instance),m_Device(device)
 	{
@@ -215,6 +217,16 @@ namespace cerberus
 	// We choose formats that do not risk tearing
 	VkPresentModeKHR Swapchain::ChooseBestPresentationMode(std::span<const VkPresentModeKHR> presentationModes)
 	{
+		if (s_UncappedPresentModeOverride)
+		{
+			for (const auto& presentationMode : presentationModes)
+			{
+				if (presentationMode == VK_PRESENT_MODE_IMMEDIATE_KHR)
+					return presentationMode;
+			}
+			// Not supported on this surface -- fall through to the normal choice.
+		}
+
 		// Look for Mailbox presentation mode
 		for (const auto& presentationMode : presentationModes)
 		{
@@ -307,6 +319,7 @@ namespace cerberus
 		VkSurfaceFormatKHR surfaceFormat = ChooseBestSurfaceFormat(swapChainDetails.Formats);
 		// 2. CHOOSE BEST PRESENTATION MODE
 		VkPresentModeKHR presentationMode = ChooseBestPresentationMode(swapChainDetails.PresentationModes);
+		m_PresentMode = presentationMode;
 		// 3. CHOOSE SWAP CHAIN IMAGE RESOLUTION
 		VkExtent2D extent = ChooseSwapExtent(swapChainDetails.SurfaceCapabilities);
 

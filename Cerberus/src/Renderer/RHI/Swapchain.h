@@ -31,6 +31,14 @@ namespace cerberus
 
 		void RecreateSwapchain();
 
+		// Forces VK_PRESENT_MODE_IMMEDIATE_KHR on the next (Re)CreateSwapchain
+		// call, falling back to the normal MAILBOX/FIFO choice if the surface
+		// doesn't support it. For benchmark captures only (see BenchmarkPanel),
+		// so a run isn't throttled by FIFO on drivers that don't expose
+		// MAILBOX; callers must call RecreateSwapchain() for this to take
+		// effect, and again after clearing it to restore normal presentation.
+		static void SetUncappedPresentModeOverride(bool uncapped) { s_UncappedPresentModeOverride = uncapped; }
+
 		uint32_t GetWidth() const { return m_SwapchainExtent.width; }
 		uint32_t GetHeight() const { return m_SwapchainExtent.height; }
 
@@ -38,6 +46,7 @@ namespace cerberus
 		inline VkRenderPass GetRenderPass() const { return m_MainRenderPass; }
 		inline VkFormat GetSwapchainImageFormat() const { return m_SwapchainImageFormat; }
 		inline VkExtent2D GetSwapchainExtent() const { return m_SwapchainExtent; }
+		inline VkPresentModeKHR GetPresentMode() const { return m_PresentMode; }
 		inline uint32_t GetCurrentBufferIndex() const { return m_CurrentCmdBufferIndex; }
 		inline VkFramebuffer GetActiveFramebuffer() const { return m_SwapchainFrambuffers[m_CurrentImageIndex]; }
 		inline VkCommandBuffer GetDrawCommandBuffer(uint32_t index) const
@@ -87,6 +96,7 @@ namespace cerberus
 		// - Utility
 		VkFormat m_SwapchainImageFormat;
 		VkExtent2D m_SwapchainExtent;
+		VkPresentModeKHR m_PresentMode = VK_PRESENT_MODE_FIFO_KHR;
 		// Render Pass and Framebuffer
 		VkRenderPass m_MainRenderPass;
 		std::vector<VkFramebuffer> m_SwapchainFrambuffers; // One for each swapchain image
@@ -106,6 +116,7 @@ namespace cerberus
 		uint32_t m_CurrentCmdBufferIndex = 0;
 		uint32_t m_CurrentImageIndex = 0;
 
+		static bool s_UncappedPresentModeOverride;
 	};
 };
 

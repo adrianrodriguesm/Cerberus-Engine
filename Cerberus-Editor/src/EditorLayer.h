@@ -2,6 +2,7 @@
 #include "Cerberus.h"
 
 #include "Panels/EditorPanel.h"
+#include "Panels/BenchmarkPanel.h"
 #include "ImGui/ImGuizmo.h"
 #include <limits>
 #include <unordered_map>
@@ -106,6 +107,13 @@ namespace cerberus
 		bool m_RendererRecreationRequested = false;
 		glm::uvec2 m_RendererViewportSize = glm::uvec2(1u);
 		Ref<EditorPanelManager> m_EditorPanelManager;
+		// Kept as a typed member (unlike the panels only reached through
+		// m_EditorPanelManager->GetPanels()) because OnUpdate calls its
+		// BeginFrame()/EndFrame() every frame -- a string lookup each frame
+		// for that would be pointless overhead. Still registered in
+		// m_EditorPanelManager too, for the usual open/close + SetSceneContext
+		// dispatch every other panel gets.
+		Ref<BenchmarkPanel> m_BenchmarkPanel;
 		FlyingCamera m_Camera;
 		std::vector<Entity> m_Entities;
 		std::unordered_map<AssetHandle, MeshBounds> m_MeshBoundsCache;

@@ -107,6 +107,11 @@ namespace cerberus
 		Ref<SceneHierarchyPanel> sceneHierarchyPanel = CreateRef<SceneHierarchyPanel>(m_Scene);
 		Ref<ContentBrowserPanel> contentBrowserPanel = CreateRef<ContentBrowserPanel>();
 
+		m_BenchmarkPanel = CreateRef<BenchmarkPanel>();
+		m_BenchmarkPanel->SetSceneContext(m_Scene);
+		m_BenchmarkPanel->SetActiveSceneRenderer(m_SceneRenderer.get());
+		m_BenchmarkPanel->SetLiveCamera(&m_Camera);
+
 		AssetEditorManager::SetAssetModifiedCallback([this](const Ref<Asset>& asset)
 		{
 			if (!m_SceneRenderer || !asset || asset->GetAssetType() != AssetType::Material)
@@ -143,6 +148,7 @@ namespace cerberus
 		m_EditorPanelManager->AddPanel("ScenePropertiesPanel", { true, scenePropertiesPanel });
 		m_EditorPanelManager->AddPanel("SceneHierarchyPanel", { true, sceneHierarchyPanel });
 		m_EditorPanelManager->AddPanel("ContentBrowserPanel", { true, contentBrowserPanel });
+		m_EditorPanelManager->AddPanel("BenchmarkPanel", { true, m_BenchmarkPanel });
 	}
 
 	void EditorLayer::OnDetach()
@@ -201,16 +207,27 @@ namespace cerberus
 		if (m_RendererRecreationRequested || !m_Scene || !m_SceneRenderer)
 			return;
 
-		m_Camera.OnUpdate(ts);
+		// A benchmark run supplies its own held-still camera and must not let
+		// user input move it -- see BenchmarkPanel::BeginFrame()'s comment.
+		const FlyingCamera* benchmarkCamera = m_BenchmarkPanel ? m_BenchmarkPanel->BeginFrame() : nullptr;
+		if (!benchmarkCamera)
+			m_Camera.OnUpdate(ts);
+		const FlyingCamera& activeCamera = benchmarkCamera ? *benchmarkCamera : m_Camera;
 
 		SceneRendererCamera sceneRendererCamera;
-		sceneRendererCamera.Camera = m_Camera;
-		sceneRendererCamera.ViewMatrix = m_Camera.GetViewMatrix();
-		sceneRendererCamera.ViewPosition = m_Camera.GetPosition();
-		sceneRendererCamera.Target = m_Camera.GetTarget();
-		sceneRendererCamera.Near = m_Camera.GetNearPlane();
-		sceneRendererCamera.Far = m_Camera.GetFarPlane();
+		sceneRendererCamera.Camera = activeCamera;
+		sceneRendererCamera.ViewMatrix = activeCamera.GetViewMatrix();
+		sceneRendererCamera.ViewPosition = activeCamera.GetPosition();
+		sceneRendererCamera.Target = activeCamera.GetTarget();
+		sceneRendererCamera.Near = activeCamera.GetNearPlane();
+		sceneRendererCamera.Far = activeCamera.GetFarPlane();
 		m_Scene->OnUpdate(*m_SceneRenderer, sceneRendererCamera, ts);
+
+		// Queries for this frame are only recorded once Render() above has
+		// run, so the readback has to happen here, after it -- not folded
+		// into the BeginFrame() call above.
+		if (benchmarkCamera)
+			m_BenchmarkPanel->EndFrame(*m_SceneRenderer, ts);
 	}
 
 	void EditorLayer::OnFrameEnd()
@@ -220,7 +237,10 @@ namespace cerberus
 
 	void EditorLayer::RequestSceneRenderer(SceneRendererType rendererType)
 	{
-		if (!m_Scene)
+		// A benchmark run holds a direct SceneRenderer* and expects it to
+		// outlive the run; tearing it down mid-run (RecreateSceneRenderer)
+		// would leave that pointer dangling.
+		if (!m_Scene || (m_BenchmarkPanel && m_BenchmarkPanel->IsRunning()))
 			return;
 
 		m_Scene->SetRendererType(rendererType);
@@ -264,6 +284,8 @@ namespace cerberus
 
 		m_ActiveRendererType = m_PendingRendererType;
 		m_RendererRecreationRequested = false;
+		if (m_BenchmarkPanel)
+			m_BenchmarkPanel->SetActiveSceneRenderer(m_SceneRenderer.get());
 		NV_CORE_INFO("Active SceneRenderer: {0}", std::string(SceneRendererTypeToString(m_ActiveRendererType)));
 	}
 
@@ -931,6 +953,7 @@ namespace cerberus
 				panelToggle("Scene Properties", "ScenePropertiesPanel");
 				panelToggle("Scene Hierarchy", "SceneHierarchyPanel");
 				panelToggle("Content Browser", "ContentBrowserPanel");
+				panelToggle("Benchmark", "BenchmarkPanel");
 
 				ImGui::EndMenu();
 			}
@@ -983,18 +1006,45 @@ namespace cerberus
 
 			ImVec2 viewportSize = ImGui::GetContentRegionAvail();
 			const ImVec2 viewportPosition = ImGui::GetCursorScreenPos();
-			m_RendererViewportSize = {
-				static_cast<uint32_t>(glm::max(viewportSize.x, 1.0f)),
-				static_cast<uint32_t>(glm::max(viewportSize.y, 1.0f))
-			};
-			if (m_SceneRenderer)
-				m_SceneRenderer->SetViewportSize(m_RendererViewportSize.x, m_RendererViewportSize.y);
+			// A benchmark run already forced its own fixed resolution
+			// (BenchmarkPanel::StartRun) and owns it until the run ends; skip
+			// the normal per-frame auto-size so it isn't immediately
+			// overwritten. Nothing else needs to run to "restore" the panel
+			// size afterward -- this same block just resumes once IsRunning()
+			// is false again.
+			if (!m_BenchmarkPanel || !m_BenchmarkPanel->IsRunning())
+			{
+				m_RendererViewportSize = {
+					static_cast<uint32_t>(glm::max(viewportSize.x, 1.0f)),
+					static_cast<uint32_t>(glm::max(viewportSize.y, 1.0f))
+				};
+				if (m_SceneRenderer)
+					m_SceneRenderer->SetViewportSize(m_RendererViewportSize.x, m_RendererViewportSize.y);
 
-			m_Camera.SetViewportSize(viewportSize.x, viewportSize.y);
+				m_Camera.SetViewportSize(viewportSize.x, viewportSize.y);
+			}
 
-			// Render viewport image
+			// Render viewport image. While a benchmark run is active the
+			// renderer is at its own forced resolution (see above), which
+			// generally doesn't match this panel's own aspect ratio -- fit it
+			// into the panel instead of stretching it to fill, which would
+			// otherwise visibly distort the preview (the measurement itself
+			// is unaffected either way; this is purely a display concern).
+			ImVec2 imageSize = viewportSize;
+			if (m_SceneRenderer && m_BenchmarkPanel && m_BenchmarkPanel->IsRunning())
+			{
+				const glm::uvec2 benchmarkResolution = m_BenchmarkPanel->GetResolution();
+				const float benchmarkAspect = static_cast<float>(benchmarkResolution.x) / static_cast<float>(benchmarkResolution.y);
+				const float panelAspect = viewportSize.x / glm::max(viewportSize.y, 1.0f);
+				imageSize = (panelAspect > benchmarkAspect)
+					? ImVec2(viewportSize.y * benchmarkAspect, viewportSize.y)
+					: ImVec2(viewportSize.x, viewportSize.x / benchmarkAspect);
+				ImGui::SetCursorPos(ImVec2(
+					ImGui::GetCursorPos().x + (viewportSize.x - imageSize.x) * 0.5f,
+					ImGui::GetCursorPos().y + (viewportSize.y - imageSize.y) * 0.5f));
+			}
 			if (m_SceneRenderer)
-				ui::Image(m_SceneRenderer->GetFinalPassImage(), viewportSize, { 0, 1 }, { 1, 0 });
+				ui::Image(m_SceneRenderer->GetFinalPassImage(), imageSize, { 0, 1 }, { 1, 0 });
 			const bool viewportImageHovered = ImGui::IsItemHovered();
 			const bool viewportSelectionRequested = viewportImageHovered &&
 				ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::GetDragDropPayload() == nullptr;

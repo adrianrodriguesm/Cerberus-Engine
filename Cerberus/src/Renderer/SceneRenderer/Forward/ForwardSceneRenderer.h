@@ -39,6 +39,9 @@ namespace cerberus
 		void Render(const SceneRendererCamera& sceneRendererCamera) override;
 		void OnImGuiRender() override;
 		Handle<ImageView> GetFinalPassImage() const override;
+		std::span<const RGPassTiming> GetLastFramePassTimings() const override;
+		uint32_t GetTotalTriangleCount() const override { return m_RenderScene ? m_RenderScene->GetTotalTriangleCount() : 0u; }
+		uint32_t GetMeshInstanceCount() const override { return m_RenderScene ? m_RenderScene->GetMeshInstanceCount() : 0u; }
 
 	private:
 		void CreateRasterResources();

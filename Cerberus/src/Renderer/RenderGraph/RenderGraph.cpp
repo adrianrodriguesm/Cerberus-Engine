@@ -686,6 +686,22 @@ namespace cerberus
 		m_Compiled = false;
 	}
 
+	std::span<const RGPassTiming> RenderGraph::GetPassTimings(const CommandBuffer& commandBuffer) const
+	{
+		m_PassTimingsCache.clear();
+		for (uint32_t passIndex : m_ExecutionOrder)
+		{
+			const Pass& pass = m_Passes[passIndex];
+			const RGPassType type = pass.Type == Pass::Type::Graphics ? RGPassType::Graphics
+				: pass.Type == Pass::Type::Compute ? RGPassType::Compute : RGPassType::RayTracing;
+			const float gpuTimeMs = pass.GPUTimeQueryID != InvalidQueryID
+				? commandBuffer.GetExecutionGPUTime(pass.GPUTimeQueryID)
+				: 0.0f;
+			m_PassTimingsCache.push_back(RGPassTiming{ pass.Name, type, gpuTimeMs });
+		}
+		return m_PassTimingsCache;
+	}
+
 	void RenderGraph::OnImGuiRender(CommandBuffer& commandBuffer)
 	{
 		if (!ui::PropertyGridHeader("RenderGraph", true))
@@ -705,6 +721,8 @@ namespace cerberus
 			std::count_if(m_Passes.begin(), m_Passes.end(), [](const Pass& pass) { return pass.Culled; }));
 		ImGui::Text("%zu passes compiled, %u culled", m_ExecutionOrder.size(), culledCount);
 
+		const std::span<const RGPassTiming> passTimings = GetPassTimings(commandBuffer);
+
 		if (ImGui::BeginTable("RenderGraphPasses", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
 		{
 			ImGui::TableSetupColumn("Pass");
@@ -713,11 +731,12 @@ namespace cerberus
 			ImGui::TableSetupColumn("GPU Time");
 			ImGui::TableHeadersRow();
 
-			for (uint32_t passIndex : m_ExecutionOrder)
+			for (uint32_t i = 0; i < m_ExecutionOrder.size(); ++i)
 			{
-				const Pass& pass = m_Passes[passIndex];
-				const char* typeName = pass.Type == Pass::Type::Graphics ? "Graphics"
-					: pass.Type == Pass::Type::Compute ? "Compute" : "RayTracing";
+				const Pass& pass = m_Passes[m_ExecutionOrder[i]];
+				const RGPassTiming& timing = passTimings[i];
+				const char* typeName = timing.Type == RGPassType::Graphics ? "Graphics"
+					: timing.Type == RGPassType::Compute ? "Compute" : "RayTracing";
 
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
@@ -728,7 +747,7 @@ namespace cerberus
 				ImGui::TextUnformatted(pass.MergesWithPrevious ? "merged" : "-");
 				ImGui::TableNextColumn();
 				if (pass.GPUTimeQueryID != InvalidQueryID)
-					ImGui::Text("%.3f ms", commandBuffer.GetExecutionGPUTime(pass.GPUTimeQueryID));
+					ImGui::Text("%.3f ms", timing.GPUTimeMs);
 				else
 					ImGui::TextUnformatted("-");
 			}

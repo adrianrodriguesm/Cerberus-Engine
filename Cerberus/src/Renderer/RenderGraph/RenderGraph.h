@@ -8,6 +8,7 @@
 #include <limits>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace cerberus
@@ -46,6 +47,21 @@ namespace cerberus
 		WriteColorAttachment,
 		WriteDepthAttachment,
 		ReadWriteStorageImage
+	};
+
+	// Mirrors RenderGraph::Pass::Type, which stays private to the graph -- this
+	// is the only part of a pass's identity GetPassTimings() exposes.
+	enum class RGPassType : uint8_t { Graphics, Compute, RayTracing };
+
+	// One surviving pass's resolved GPU time from the most recently Execute()'d
+	// frame, as read back through CommandBuffer::GetExecutionGPUTime -- see
+	// RenderGraph::GetPassTimings(). Name points into the Pass it was read from;
+	// valid until the next Compile() or GetPassTimings() call.
+	struct RGPassTiming
+	{
+		std::string_view Name;
+		RGPassType Type = RGPassType::Graphics;
+		float GPUTimeMs = 0.0f;
 	};
 
 	// One pass's declared use of one imported resource. LoadOp/StoreOp only
@@ -159,6 +175,17 @@ namespace cerberus
 		// compiled state, and survive Reset().
 		void Reset();
 
+		// Snapshot of every surviving pass's resolved GPU time from the last
+		// Execute(), in execution order -- the exact values OnImGuiRender()
+		// below displays, so there is one source of truth for both the live
+		// table and anything else sampling these numbers (e.g. a benchmark
+		// capture). commandBuffer must be the same one Execute() was last
+		// called with; see Execute()'s comment on the one-submission-cycle lag.
+		// Backed by an internal vector reused across calls (cleared, not
+		// freed, so no per-call heap churn once warmed up); the returned span
+		// is invalidated by the next Compile() or GetPassTimings() call.
+		std::span<const RGPassTiming> GetPassTimings(const CommandBuffer& commandBuffer) const;
+
 		// Draws an ImGui table over the last Compile()'d pass list: name, type,
 		// whether it was merged into the previous pass's Dynamic Rendering scope
 		// or culled (unreachable from any pass that writes an imported
@@ -230,6 +257,9 @@ namespace cerberus
 		std::vector<Pass> m_Passes;
 		std::vector<uint32_t> m_ExecutionOrder;
 		bool m_Compiled = false;
+
+		// GetPassTimings()'s return buffer; reused across calls (see its comment).
+		mutable std::vector<RGPassTiming> m_PassTimingsCache;
 
 		// Debug-panel toggles read by Compile(); see OnImGuiRender()'s comment.
 		bool m_ScopeMergingEnabled = true;

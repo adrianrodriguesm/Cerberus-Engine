@@ -38,6 +38,18 @@ namespace cerberus
 
 		virtual Handle<ImageView> GetFinalPassImage() const override;
 
+		virtual std::span<const RGPassTiming> GetLastFramePassTimings() const override;
+		virtual uint32_t GetTotalTriangleCount() const override { return m_RenderScene ? m_RenderScene->GetTotalTriangleCount() : 0u; }
+		virtual uint32_t GetMeshInstanceCount() const override { return m_RenderScene ? m_RenderScene->GetMeshInstanceCount() : 0u; }
+
+		// Real-time (denoised) vs. reference-accumulation mode -- same flag the
+		// "Denoiser (SVGF)" checkbox in OnImGuiRender() drives. Exposed so a
+		// benchmark capture (see BenchmarkPanel) can force denoised mode for
+		// the duration of a run instead of measuring reference accumulation
+		// mid-convergence, and restore whatever the user had afterward.
+		bool IsDenoiserEnabled() const { return m_DenoiserEnabled; }
+		void SetDenoiserEnabled(bool enabled) { m_DenoiserEnabled = enabled; }
+
 	private:
 		void UpdateUBOData();
 		void UpdateRTMaterialBuffer();

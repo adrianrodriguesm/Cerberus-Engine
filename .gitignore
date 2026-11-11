@@ -12,6 +12,10 @@ Cerberus/vendor/VulkanSDK
 # Shaders cache
 **/Cache/
 
+# Benchmark capture CSV output (see BenchmarkPanel / docs/tasks/T2-benchmark-capture.md).
+# Adrian decides which CSVs are worth committing.
+/Benchmarks/
+
 
 
 # Visual Studio files and folder

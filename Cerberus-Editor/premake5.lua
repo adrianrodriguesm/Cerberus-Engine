@@ -24,15 +24,17 @@ project "Cerberus-Editor"
 		"%{IncludeDir.VulkanSDK_LocalInclude}",
 		"%{IncludeDir.VulkanSDK}",
 		"%{IncludeDir.entt}",
+		"%{IncludeDir.yaml_cpp}",
 	}
 
-	links 
-	{ 
+	links
+	{
 		"Cerberus",
 		"GLFW",
 		"%{Library.Vulkan}",
 		"%{Library.VulkanUtils}",
 		"assimp",
+		"yaml-cpp",
 	}
 
 	filter "system:windows"

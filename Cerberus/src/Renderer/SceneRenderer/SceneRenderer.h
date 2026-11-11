@@ -4,6 +4,7 @@
 #include "Renderer/Scene/Camera.h"
 #include "Renderer/RHI/Image.h"
 #include "Renderer/Core/RenderObjectID.h"
+#include "Renderer/RenderGraph/RenderGraph.h"
 #include <span>
 namespace cerberus
 {
@@ -46,6 +47,20 @@ namespace cerberus
 		virtual void OnImGuiRender() = 0;
 
 		virtual Handle<ImageView> GetFinalPassImage() const = 0;
+
+		// Per-pass GPU times from this renderer's RenderGraph for the last
+		// Execute()'d frame -- same accessor and one-submission-cycle lag as
+		// RenderGraph::GetPassTimings(). Exists so callers that only hold a
+		// SceneRenderer& (e.g. a benchmark capture) don't need to know whether
+		// the active renderer is Forward or PathTracer. Empty if this renderer
+		// hasn't rendered a frame yet.
+		virtual std::span<const RGPassTiming> GetLastFramePassTimings() const = 0;
+
+		// Scene geometric complexity, for reporting (e.g. a benchmark CSV
+		// header) -- see RenderScene::GetTotalTriangleCount()'s comment for
+		// exactly what this counts.
+		virtual uint32_t GetTotalTriangleCount() const = 0;
+		virtual uint32_t GetMeshInstanceCount() const = 0;
 
 	};
 }

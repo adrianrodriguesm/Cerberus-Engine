@@ -1954,4 +1954,10 @@ namespace cerberus
 	{
 		return m_RT_OutputImageView;
 	}
+
+	std::span<const RGPassTiming> PathTracerSceneRenderer::GetLastFramePassTimings() const
+	{
+		CommandBuffer* commandBuffer = Renderer::GetMainCommandBuffer(m_Specification.SwapChainTarget);
+		return commandBuffer ? m_RenderGraph.GetPassTimings(*commandBuffer) : std::span<const RGPassTiming>{};
+	}
 }

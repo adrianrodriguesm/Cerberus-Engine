@@ -722,8 +722,11 @@ namespace cerberus
 			{
 				const RGTextureHandle shadowMap = shadowMapRG[cascadeIndex];
 				const ShadowCascadeData cascade = m_ShadowCascades[cascadeIndex];
+				// Indexed so each cascade is a distinguishable pass identity (by name)
+				// instead of every cascade colliding under the literal name "Shadow".
+				const std::string passName = fmt::format("Shadow[{}]", cascadeIndex);
 				m_RenderGraph.AddGraphicsPass(
-					"Shadow",
+					passName.c_str(),
 					[shadowMap](RenderGraphBuilder& builder)
 					{
 						builder.WriteDepthAttachment(shadowMap, LOAD_OP::CLEAR, STORE_OP::STORE);
@@ -840,6 +843,12 @@ namespace cerberus
 			m_RenderGraph.OnImGuiRender(*commandBuffer);
 
 		ImGui::End();
+	}
+
+	std::span<const RGPassTiming> ForwardSceneRenderer::GetLastFramePassTimings() const
+	{
+		CommandBuffer* commandBuffer = Renderer::GetMainCommandBuffer(m_Specification.SwapChainTarget);
+		return commandBuffer ? m_RenderGraph.GetPassTimings(*commandBuffer) : std::span<const RGPassTiming>{};
 	}
 
 	Handle<ImageView> ForwardSceneRenderer::GetFinalPassImage() const
