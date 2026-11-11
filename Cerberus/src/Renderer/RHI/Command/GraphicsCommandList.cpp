@@ -10,18 +10,33 @@ namespace cerberus
 {
 	namespace
 	{
-		// Shared vertex-stage push-constant shape for every DrawStream consumer.
-		// Depth-only pipelines (PreDepth, Shadow) declare a push-constant range
-		// covering only the leading mat4; Forward's covers the whole struct. Normal
+		// Shared vertex-stage push-constant shape for every DrawStream consumer
+		// (PreDepth, Shadow, Forward -- each declares this same block, pipeline
+		// push-constant ranges are derived from it by shader reflection). Normal
 		// matrices are derived in ForwardPBR.vert from WorldTransform instead of
 		// being precomputed CPU-side, so this stays the one shape every pass shares.
+		//
+		// Reserved0/Reserved1 are not read by any shader; they exist only so this
+		// C++ struct's byte layout matches GLSL's push_constant block layout
+		// exactly (GLSL requires mat4 members aligned to 16 bytes within the
+		// block, which a leading 8-byte VertexBufferAddress would otherwise
+		// misalign WorldTransform against -- see Shadow.vert's separate
+		// LightViewProjection push in ShadowPass.cpp for the matching case this
+		// mirrors). Reserved1 additionally pads the whole shared block to a
+		// 16-byte boundary (96 bytes) so Shadow's own trailing LightViewProjection
+		// needs no further gap either.
 		struct DrawStreamPushConstants
 		{
+			uint64_t VertexBufferAddress = 0;
+			uint64_t Reserved0 = 0;
 			glm::mat4 WorldTransform = glm::mat4(1.0f);
 			uint32_t MaterialIndex = 0;
+			uint32_t Reserved1a = 0;
+			uint32_t Reserved1b = 0;
+			uint32_t Reserved1c = 0;
 		};
 
-		static_assert(sizeof(DrawStreamPushConstants) == 68,
+		static_assert(sizeof(DrawStreamPushConstants) == 96,
 			"DrawStreamPushConstants must match the Forward/PreDepth/Shadow vertex shaders");
 	}
 
@@ -458,12 +473,6 @@ namespace cerberus
 		for (uint32_t drawIndex = 0; drawIndex < drawArea.DrawCount; ++drawIndex)
 		{
 			const uint32_t dirtyFlags = stream.Read<uint32_t>();
-			if (dirtyFlags & DrawStreamFlags::VERTEX_BUFFER)
-			{
-				draw.VertexBuffer = stream.Read<Handle<GPUBuffer>>();
-				BindVertexBuffer(draw.VertexBuffer);
-			}
-
 			if (dirtyFlags & DrawStreamFlags::INDEX_BUFFER)
 			{
 				draw.IndexBuffer = stream.Read<Handle<GPUBuffer>>();
@@ -481,7 +490,6 @@ namespace cerberus
 			if (dirtyFlags & DrawStreamFlags::MATERIAL_INDEX)
 				draw.MaterialIndex = stream.Read<uint32_t>();
 
-			CORE_ASSERT(draw.VertexBuffer.IsValid(), "Draw stream has no vertex-buffer state");
 			CORE_ASSERT(draw.IndexBuffer.IsValid(), "Draw stream has no index-buffer state");
 			CORE_ASSERT(draw.IndexCount > 0, "Draw stream has no index-count state");
 
@@ -489,6 +497,7 @@ namespace cerberus
 			// push_constant block shape (see the ExecuteDrawStream declaration), so
 			// this push is valid against whichever pipeline is currently bound.
 			DrawStreamPushConstants pushConstants;
+			pushConstants.VertexBufferAddress = drawArea.VertexBufferAddress;
 			pushConstants.WorldTransform = draw.WorldTransform;
 			pushConstants.MaterialIndex = draw.MaterialIndex;
 			PushConstants(

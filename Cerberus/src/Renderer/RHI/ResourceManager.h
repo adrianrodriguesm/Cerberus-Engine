@@ -30,7 +30,7 @@ namespace cerberus
 		static void DestroyBuffer(const Handle<GPUBuffer> buffer);
 		static GPUBuffer* GetBuffer(const Handle<GPUBuffer> buffe);
 
-		static Handle<MeshSourceProxy> CreateMeshSourceProxy(const void* vertexData, uint32_t vertexSize, const void* indexData, uint32_t indexSize, std::span<const Submesh> submeshes);
+		static Handle<MeshSourceProxy> CreateMeshSourceProxy(GeometryPool& pool, const void* vertexData, uint32_t vertexSize, const void* indexData, uint32_t indexSize, std::span<const Submesh> submeshes);
 		static void DestroyMeshSourceProxy(const Handle<MeshSourceProxy> meshSourceProxyHandle);
 		static MeshSourceProxy* GetMeshSourceProxy(const Handle<MeshSourceProxy> meshSourceProxyHandle);
 

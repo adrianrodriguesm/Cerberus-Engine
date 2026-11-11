@@ -164,24 +164,26 @@ namespace cerberus
 		}
 		MeshSourceProxy* meshProxy = ResourceManager::GetMeshSourceProxy(mesh);
 		// Convert Mesh geometry to VkGeometryKHR
-		// BLAS builder requires raw device addresses.
+		// BLAS builder requires raw device addresses. Geometry lives in this
+		// mesh's RenderScene GeometryPool now, addressed by the pool's single
+		// base address plus this mesh's own allocation offset -- see
+		// docs/tasks/T3-geometry-pool.md.
+		CORE_ASSERT(meshProxy->Pool, "MeshSourceProxy has no owning GeometryPool");
+		const GeometryAllocation& allocation = meshProxy->Allocation;
 
-		VkBuffer vkVertexBuffer = meshProxy->VertexBuffer->GetHandle();
-		VkDeviceAddress vertexAddress = utils::GetBufferDeviceAddress(vkVertexBuffer);
+		VkDeviceAddress vertexAddress = meshProxy->Pool->GetVertexBufferAddress();
+		VkDeviceAddress indexAddress = meshProxy->Pool->GetIndexBufferAddress();
+		constexpr uint32_t vertexBufferStride = GeometryPool::VertexStrideBytes;
 
-		VkBuffer indexBuffer = meshProxy->IndexBuffer->GetHandle();
-		VkDeviceAddress indexAddress = utils::GetBufferDeviceAddress(indexBuffer);
-
-		uint32_t vertexBufferStride = meshProxy->VertexBuffer->GetLayout().GetStride();
 		// Describe buffer as array of VertexElement.
 		VkAccelerationStructureGeometryTrianglesDataKHR triangles{ VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR };
 		triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;  // vec3 vertex position data.
 		triangles.vertexData.deviceAddress = vertexAddress;
 		triangles.vertexStride = vertexBufferStride;
-		GPUBuffer* vertexBuffer = ResourceManager::GetBuffer(meshProxy->VertexBuffer->GetGPUBuffer());
-		CORE_ASSERT(vertexBuffer, "Invalid vertex buffer");
-		const uint32_t vertexCount = static_cast<uint32_t>(vertexBuffer->Size / vertexBufferStride);
-		triangles.maxVertex = vertexCount > 0 ? vertexCount - 1 : 0;
+		// Highest index (from vertexData.deviceAddress) this mesh's BLAS build
+		// may reference -- bounded by this mesh's own allocation within the
+		// pool, not the pool's total capacity.
+		triangles.maxVertex = allocation.VertexCount > 0 ? allocation.VertexOffset + allocation.VertexCount - 1 : 0;
 		// Describe index data (32-bit unsigned int)
 		triangles.indexType = VK_INDEX_TYPE_UINT32;
 		triangles.indexData.deviceAddress = indexAddress;
@@ -201,9 +203,9 @@ namespace cerberus
 
 			// The entire array will be used to build the BLAS.
 			VkAccelerationStructureBuildRangeInfoKHR& rageBuildOffsetInfo = blas.ASBuildOffsetInfo;
-			rageBuildOffsetInfo.firstVertex = submesh.BaseVertex;
+			rageBuildOffsetInfo.firstVertex = meshProxy->GlobalVertexOffset(submesh);
 			rageBuildOffsetInfo.primitiveCount = submesh.IndexCount / 3;
-			rageBuildOffsetInfo.primitiveOffset = submesh.BaseIndex * sizeof(uint32_t);
+			rageBuildOffsetInfo.primitiveOffset = meshProxy->GlobalFirstIndex(submesh) * sizeof(uint32_t);
 			rageBuildOffsetInfo.transformOffset = 0;
 
 			blasInputData.push_back(blas);

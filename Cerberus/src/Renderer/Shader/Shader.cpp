@@ -47,6 +47,15 @@ namespace cerberus
 				if (type.vecsize == 4)            return ShaderUniformType::IVec4;
 
 			case spirv_cross::SPIRType::UInt:     return ShaderUniformType::UInt;
+			// GL_EXT_buffer_reference2 pointers (e.g. VertexFloatBuffer, see
+			// Common/VertexPulling.glsl) reflect as BaseType::Struct (SPIRV-Cross
+			// reports the pointed-to block's type), not a scalar handle.
+			// ShaderUniformType has nothing matching a pointer; this map is
+			// purely descriptive bookkeeping (ShaderBuffer::Uniforms), not used
+			// for any actual GPU binding, so the closest existing type is enough.
+			case spirv_cross::SPIRType::Struct:
+			case spirv_cross::SPIRType::UInt64:
+			case spirv_cross::SPIRType::Int64:    return ShaderUniformType::UInt;
 			case spirv_cross::SPIRType::Float:
 				if (type.columns == 3)            return ShaderUniformType::Mat3;
 				if (type.columns == 4)            return ShaderUniformType::Mat4;

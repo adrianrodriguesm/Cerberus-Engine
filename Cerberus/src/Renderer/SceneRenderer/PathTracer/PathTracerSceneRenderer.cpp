@@ -1841,6 +1841,15 @@ namespace cerberus
 				{
 					ImGui::Text("Mesh instances: %zu", m_RenderScene->GetRasterMeshInstances().size());
 					ImGui::Text("Triangles: %u", m_RenderScene->GetTotalTriangleCount());
+					{
+						const GeometryPool::Stats poolStats = m_RenderScene->GetGeometryPool().GetStats();
+						ImGui::Text("Geometry pool vertices: %s / %s",
+							utils::BytesToString(poolStats.UsedVertexBytes).c_str(),
+							utils::BytesToString(poolStats.CapacityVertexBytes).c_str());
+						ImGui::Text("Geometry pool indices: %s / %s",
+							utils::BytesToString(poolStats.UsedIndexBytes).c_str(),
+							utils::BytesToString(poolStats.CapacityIndexBytes).c_str());
+					}
 					const SkyLightProxy& skyLight = m_RenderScene->GetSkyLight();
 					ImGui::Text("SkyLight intensity: %.3f", skyLight.Intensity);
 					ImGui::Text("SkyLight radiance LOD: %.0f", skyLight.SampleLOD);

@@ -113,9 +113,9 @@ namespace cerberus
 		return s_RMData->GPUBuffers.Get(buffer);
 	}
 
-	Handle<MeshSourceProxy> ResourceManager::CreateMeshSourceProxy(const void* vertexData, uint32_t vertexSize, const void* indexData, uint32_t indexSize, std::span<const Submesh> submeshes)
+	Handle<MeshSourceProxy> ResourceManager::CreateMeshSourceProxy(GeometryPool& pool, const void* vertexData, uint32_t vertexSize, const void* indexData, uint32_t indexSize, std::span<const Submesh> submeshes)
 	{
-		return s_RMData->MeshSourceProxy.Emplace(vertexData, vertexSize, indexData, indexSize, submeshes);
+		return s_RMData->MeshSourceProxy.Emplace(pool, vertexData, vertexSize, indexData, indexSize, submeshes);
 	}
 
 	void ResourceManager::DestroyMeshSourceProxy(const Handle<MeshSourceProxy> handle)

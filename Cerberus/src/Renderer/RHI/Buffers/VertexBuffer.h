@@ -1,8 +1,8 @@
 #pragma once
-#include "Renderer/Memory/ResourceAllocator.h"
-#include "Core/Buffer.h"
-#include "Core/Handle.h"
-#include "Renderer/RHI/Buffers/GPUBuffer.h"
+#include <cstdint>
+#include <initializer_list>
+#include <string>
+#include <vector>
 namespace cerberus
 {
 	/////////////////////////////////////////////////////////////////////// ShaderDataType
@@ -101,29 +101,5 @@ namespace cerberus
 				m_Stride += element.Size;
 			}
 		}
-	};
-
-
-	class VertexBuffer
-	{
-	public:
-		VertexBuffer(const void* data, uint32_t size);
-		VertexBuffer(uint32_t size);
-		virtual ~VertexBuffer();
-
-		Handle<GPUBuffer> GetGPUBuffer() const { return m_VertexBuffer; }
-		VkBuffer GetHandle() const;
-
-		const VertexBufferLayout& GetLayout() const { return m_VertexBufferLayout; }
-		void SetVertexBufferLayout(const VertexBufferLayout& layout) { m_VertexBufferLayout = layout; }
-
-		void Invalidate();
-
-		const Buffer& GetLocalData() const { return m_LocalData; }
-	private:
-		Handle<GPUBuffer> m_VertexBuffer;
-		Buffer m_LocalData;
-		VertexBufferLayout m_VertexBufferLayout;
-
 	};
 }

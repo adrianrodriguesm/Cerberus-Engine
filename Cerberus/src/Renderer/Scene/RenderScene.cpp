@@ -57,7 +57,12 @@ namespace cerberus
 		CORE_PROFILE_FUNCTION();
 
 		DrawStreamBuilder builder;
-		Handle<MeshSourceProxy> activeMeshSource;
+		// One global pool index buffer for every draw now, instead of one
+		// per mesh source -- set once, outside the per-instance loop.
+		// PreDepth/Shadow/Forward pull vertices through BDA (see
+		// docs/tasks/T3-geometry-pool.md), so there is no vertex buffer to
+		// bind -- only the fixed-function index buffer stays bound.
+		builder.SetIndexBuffer(m_GeometryPool.GetIndexBuffer());
 
 		for (Handle<MeshInstanceProxy> meshInstanceHandle : m_MeshRegister.RasterMeshInstances)
 		{
@@ -66,23 +71,18 @@ namespace cerberus
 
 			MeshSourceProxy* meshSource = ResourceManager::GetMeshSourceProxy(meshInstance->MeshSource);
 			CORE_ASSERT(meshSource, "MeshInstanceProxy references an invalid MeshSourceProxy");
-			CORE_ASSERT(meshSource->VertexBuffer && meshSource->IndexBuffer, "MeshSourceProxy has invalid geometry buffers");
+			CORE_ASSERT(meshSource->Allocation.IsValid(), "MeshSourceProxy has no geometry pool allocation");
 			CORE_ASSERT(meshInstance->SubmeshIndex < meshSource->Submeshes.size(), "MeshInstanceProxy references an invalid submesh");
-
-			if (meshInstance->MeshSource != activeMeshSource)
-			{
-				builder.SetVertexBuffer(meshSource->VertexBuffer->GetGPUBuffer());
-				builder.SetIndexBuffer(meshSource->IndexBuffer->GetGPUBuffer());
-				activeMeshSource = meshInstance->MeshSource;
-			}
 
 			const SubmeshSourceProxy& submesh = meshSource->Submeshes[meshInstance->SubmeshIndex];
 			CORE_ASSERT(meshInstance->MaterialProxyIndex < m_MeshRegister.MaterialProxies.size(), "MeshInstanceProxy references an invalid raster MaterialProxy");
 			const MaterialProxy& materialProxy = m_MeshRegister.MaterialProxies[meshInstance->MaterialProxyIndex];
 			CORE_ASSERT(materialProxy.GPUMaterialIndex != InvalidMaterialProxyIndex, "Raster MaterialProxy has no GPU index");
 
-			builder.SetVertexBufferOffset(submesh.BaseVertex);
-			builder.SetIndexBufferOffset(submesh.BaseIndex);
+			// Vertex pulling reads through gl_VertexIndex, which vkCmdDrawIndexed
+			// already offsets by this same value -- see ExecuteDrawStream.
+			builder.SetVertexBufferOffset(meshSource->GlobalVertexOffset(submesh));
+			builder.SetIndexBufferOffset(meshSource->GlobalFirstIndex(submesh));
 			builder.SetIndexBufferCount(submesh.IndexCount);
 			builder.SetWorldTransform(meshInstance->WorldTransform);
 			builder.SetMaterialIndex(materialProxy.GPUMaterialIndex);
@@ -312,6 +312,7 @@ namespace cerberus
 			const auto& submeshes = meshSource->GetSubmeshes();
 
 			meshProxyHandle = ResourceManager::CreateMeshSourceProxy(
+				m_GeometryPool,
 				vertices.data(),
 				static_cast<uint32_t>(vertices.size() * sizeof(MeshSource::Vertex)),
 				indices.data(),
@@ -640,12 +641,12 @@ namespace cerberus
 				CORE_ASSERT(meshSourceProxy, "MeshInstanceProxy references an invalid MeshSourceProxy");
 				CORE_ASSERT(meshInstance->SubmeshIndex < meshSourceProxy->Submeshes.size(), "MeshInstanceProxy references an invalid submesh");
 
-				GPUBuffer* vertexBuffer = ResourceManager::GetBuffer(meshSourceProxy->VertexBuffer->GetGPUBuffer());
-				GPUBuffer* indexBuffer = ResourceManager::GetBuffer(meshSourceProxy->IndexBuffer->GetGPUBuffer());
-				CORE_ASSERT(vertexBuffer && indexBuffer, "RT mesh has invalid geometry buffers");
-
-				const VkDeviceAddress vertexBufferAddress = vertexBuffer->GetDeviceAddress();
-				const VkDeviceAddress indexBufferAddress = indexBuffer->GetDeviceAddress();
+				// Same pool for every mesh this scene registered, so this
+				// address pair is actually constant across instances; kept
+				// per-instance here since RayTracingInstanceData is unchanged
+				// and callers already expect one entry per TLAS instance.
+				const VkDeviceAddress vertexBufferAddress = meshSourceProxy->Pool->GetVertexBufferAddress();
+				const VkDeviceAddress indexBufferAddress = meshSourceProxy->Pool->GetIndexBufferAddress();
 				CORE_ASSERT(vertexBufferAddress != 0, "RT vertex buffer has no device address");
 				CORE_ASSERT(indexBufferAddress != 0, "RT index buffer has no device address");
 				CORE_ASSERT((vertexBufferAddress & 7ull) == 0, "RT vertex buffer address is not 8-byte aligned");
@@ -659,8 +660,8 @@ namespace cerberus
 				instanceData.VertexBufferAddress = vertexBufferAddress;
 				instanceData.IndexBufferAddress = indexBufferAddress;
 				instanceData.MaterialIndex = materialProxy->GPUMaterialIndex;
-				instanceData.FirstIndex = submesh.BaseIndex;
-				instanceData.BaseVertex = submesh.BaseVertex;
+				instanceData.FirstIndex = meshSourceProxy->GlobalFirstIndex(submesh);
+				instanceData.BaseVertex = meshSourceProxy->GlobalVertexOffset(submesh);
 
 				asBuilder.SubmitMeshInstance(meshInstanceHandle, instanceCustomIndex);
 				submittedTLASInstances++;
@@ -814,6 +815,14 @@ namespace cerberus
 		asInfo.PendingMeshSourcesToDestroy.clear();
 
 		DestroyAllMeshProxies();
+
+		// DestroyAllMeshProxies() just queued each MeshSourceProxy's
+		// GeometryPool::Free() (deferred -- see its comment). m_GeometryPool
+		// is a member and is about to be destroyed right after this
+		// function returns (reverse declaration order, once ~RenderScene()'s
+		// body finishes), so those callbacks must run now, not on some later
+		// frame that would find a dangling GeometryPool*.
+		DeferredResourceDeletionQueue::FlushAll();
 
 		asInfo.BLASToBuild.clear();
 		ResetRayTracingDirtyFlags();

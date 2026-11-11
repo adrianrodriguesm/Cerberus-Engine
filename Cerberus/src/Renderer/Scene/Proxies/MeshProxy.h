@@ -1,8 +1,8 @@
 #pragma once
-#include "Renderer/RHI/Buffers/VertexBuffer.h"
 #include "Asset/Assets/MeshAsset.h"
 #include "Core/Handle.h"
 #include "Math/Matrix.h"
+#include "Renderer/Scene/GeometryPool.h"
 #include "Renderer/Scene/Proxies/MaterialProxy.h"
 
 #include <span>
@@ -25,34 +25,38 @@ namespace cerberus
 		}
 	};
 
-	// Render Core representation of a mesh
+	// Render Core representation of a mesh. Geometry lives in its owning
+	// RenderScene's GeometryPool (one shared vertex/index buffer pair per
+	// scene) rather than in a VertexBuffer/IndexBuffer of its own -- see
+	// docs/tasks/T3-geometry-pool.md. GlobalVertexOffset/GlobalFirstIndex are
+	// what a draw or a BLAS build actually indexes with; BaseVertex/BaseIndex
+	// on the submesh stay relative to this mesh's own allocation, unchanged.
 	struct MeshSourceProxy
 	{
-		VertexBuffer* VertexBuffer;
-		IndexBuffer*  IndexBuffer;
+		GeometryAllocation Allocation;
+		GeometryPool* Pool = nullptr; // non-owning; Pool->Free() happens in the destructor
 		std::vector<SubmeshSourceProxy> Submeshes;
 
 		MeshSourceProxy(MeshSourceProxy&& other) noexcept
-			: VertexBuffer(other.VertexBuffer)
-			, IndexBuffer(other.IndexBuffer)
+			: Allocation(other.Allocation)
+			, Pool(other.Pool)
 			, Submeshes(std::move(other.Submeshes))
 		{
-			other.VertexBuffer = nullptr;
-			other.IndexBuffer = nullptr;
+			other.Pool = nullptr;
+			other.Allocation = {};
 		}
 
-		MeshSourceProxy(const void* vertexData, uint32_t vertexSize, const void* indexData, uint32_t indexSize, std::span<const Submesh> submeshes)
+		MeshSourceProxy(GeometryPool& pool, const void* vertexData, uint32_t vertexSize, const void* indexData, uint32_t indexSize, std::span<const Submesh> submeshes)
+			: Pool(&pool)
 		{
-			VertexBuffer = new cerberus::VertexBuffer(vertexData, vertexSize);
-			IndexBuffer = new cerberus::IndexBuffer(indexData, indexSize);
-			VertexBufferLayout layout = {{ ShaderDataType::Float3, "a_Position"	},
-										 { ShaderDataType::Float3, "a_Normal"	},
-										 { ShaderDataType::Float3, "a_Tangent"	},
-										 { ShaderDataType::Float3, "a_Binormal"	},
-										 { ShaderDataType::Float2, "a_TexCoord"	},
-										};
-			VertexBuffer->SetVertexBufferLayout(layout);
-			// Add the submesh info 
+			CORE_ASSERT(indexSize % sizeof(uint32_t) == 0, "Index data size must be a whole number of uint32_t indices");
+			const uint32_t vertexCount = vertexSize / GeometryPool::VertexStrideBytes;
+			const uint32_t indexCount = indexSize / static_cast<uint32_t>(sizeof(uint32_t));
+
+			Allocation = Pool->Allocate(vertexCount, indexCount);
+			Pool->Upload(Allocation, vertexData, vertexSize, indexData, indexSize);
+
+			// Add the submesh info
 			Submeshes.reserve(submeshes.size());
 			for (const auto& submesh : submeshes)
 			{
@@ -67,11 +71,12 @@ namespace cerberus
 
 		~MeshSourceProxy()
 		{
-			if(VertexBuffer)
-				delete VertexBuffer;
-			if(IndexBuffer)
-				delete IndexBuffer;
+			if (Pool)
+				Pool->Free(Allocation);
 		}
+
+		uint32_t GlobalVertexOffset(const SubmeshSourceProxy& submesh) const { return Allocation.VertexOffset + submesh.BaseVertex; }
+		uint32_t GlobalFirstIndex(const SubmeshSourceProxy& submesh) const { return Allocation.IndexOffset + submesh.BaseIndex; }
 	};
 
 	// Is basically a submesh instance

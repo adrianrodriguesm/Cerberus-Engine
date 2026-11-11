@@ -1,6 +1,4 @@
 #pragma once
-#include "Renderer/RHI/Buffers/IndexBuffer.h"
-#include "Renderer/RHI/Buffers/VertexBuffer.h"
 #include "Asset/Assets/MaterialAsset.h"
 #include "Asset/Asset.h"
 #include <glm/glm.hpp>

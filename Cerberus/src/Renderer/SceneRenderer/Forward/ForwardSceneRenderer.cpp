@@ -190,13 +190,9 @@ namespace cerberus
 		shadowPipelineSpecification.DepthTest = true;
 		shadowPipelineSpecification.DepthWrite = true;
 		shadowPipelineSpecification.DepthOperator = DepthCompareOperator::Less;
-		shadowPipelineSpecification.Layout = {
-			{ ShaderDataType::Float3, "a_Position" },
-			{ ShaderDataType::Float3, "a_Normal" },
-			{ ShaderDataType::Float3, "a_Tangent" },
-			{ ShaderDataType::Float3, "a_Binormal" },
-			{ ShaderDataType::Float2, "a_TexCoord" }
-		};
+		// No vertex input -- Shadow.vert pulls vertices through BDA from the
+		// scene's GeometryPool instead (see docs/tasks/T3-geometry-pool.md).
+		// Pipeline.cpp already handles an empty Layout correctly.
 		m_ShadowPipeline = ResourceManager::CreateGraphicsPipeline(shadowPipelineSpecification);
 
 		PipelineSpecification preDepthPipelineSpecification;
@@ -207,15 +203,9 @@ namespace cerberus
 		preDepthPipelineSpecification.DepthTest = true;
 		preDepthPipelineSpecification.DepthWrite = true;
 		preDepthPipelineSpecification.DepthOperator = DepthCompareOperator::Less;
-		// Layout must match the shared interleaved vertex buffer Forward also
-		// binds, even though PreDepth.vert only reads a_Position.
-		preDepthPipelineSpecification.Layout = {
-			{ ShaderDataType::Float3, "a_Position" },
-			{ ShaderDataType::Float3, "a_Normal" },
-			{ ShaderDataType::Float3, "a_Tangent" },
-			{ ShaderDataType::Float3, "a_Binormal" },
-			{ ShaderDataType::Float2, "a_TexCoord" }
-		};
+		// No vertex input -- PreDepth.vert pulls vertices through BDA from the
+		// scene's GeometryPool instead (see docs/tasks/T3-geometry-pool.md).
+		// Pipeline.cpp already handles an empty Layout correctly.
 		m_PreDepthPipeline = ResourceManager::CreateGraphicsPipeline(preDepthPipelineSpecification);
 
 		PipelineSpecification skyPipelineSpecification;
@@ -244,13 +234,9 @@ namespace cerberus
 		geometryPipelineSpecification.DepthOperator = DepthCompareOperator::LessOrEqual;
 		geometryPipelineSpecification.DepthTest = true;
 		geometryPipelineSpecification.DepthWrite = false;
-		geometryPipelineSpecification.Layout = {
-			{ ShaderDataType::Float3, "a_Position" },
-			{ ShaderDataType::Float3, "a_Normal" },
-			{ ShaderDataType::Float3, "a_Tangent" },
-			{ ShaderDataType::Float3, "a_Binormal" },
-			{ ShaderDataType::Float2, "a_TexCoord" }
-		};
+		// No vertex input -- ForwardPBR.vert pulls vertices through BDA from
+		// the scene's GeometryPool instead (see docs/tasks/T3-geometry-pool.md).
+		// Pipeline.cpp already handles an empty Layout correctly.
 		m_GeometryPipeline = ResourceManager::CreateGraphicsPipeline(geometryPipelineSpecification);
 
 		PipelineSpecification compositePipelineSpecification;
@@ -697,6 +683,7 @@ namespace cerberus
 
 		const std::span<const uint32_t> drawStream = m_RenderScene->GetDrawStream();
 		const uint32_t drawStreamCount = m_RenderScene->GetDrawStreamCount();
+		const uint64_t vertexBufferAddress = m_RenderScene->GetGeometryPool().GetVertexBufferAddress();
 
 		m_RenderGraph.AddGraphicsPass(
 			"PreDepth",
@@ -704,12 +691,12 @@ namespace cerberus
 			{
 				builder.WriteDepthAttachment(sceneDepthRG, LOAD_OP::CLEAR, STORE_OP::STORE);
 			},
-			[this, drawStream, drawStreamCount](GraphicsCommandList& graphics)
+			[this, drawStream, drawStreamCount, vertexBufferAddress](GraphicsCommandList& graphics)
 			{
 				RenderPreDepthPass(
 					graphics,
 					PreDepthPassResources{ m_PreDepthPipeline, m_PreDepthBindGroup },
-					PreDepthPassParameters{ drawStream, drawStreamCount });
+					PreDepthPassParameters{ drawStream, drawStreamCount, vertexBufferAddress });
 			});
 
 		// Each cascade targets a different RenderTargetTexture, so (unlike Sky and
@@ -731,12 +718,12 @@ namespace cerberus
 					{
 						builder.WriteDepthAttachment(shadowMap, LOAD_OP::CLEAR, STORE_OP::STORE);
 					},
-					[this, drawStream, drawStreamCount, cascade](GraphicsCommandList& graphics)
+					[this, drawStream, drawStreamCount, vertexBufferAddress, cascade](GraphicsCommandList& graphics)
 					{
 						RenderShadowPass(
 							graphics,
 							ShadowPassResources{ m_ShadowPipeline },
-							ShadowPassParameters{ drawStream, drawStreamCount },
+							ShadowPassParameters{ drawStream, drawStreamCount, vertexBufferAddress },
 							cascade);
 					});
 			}
@@ -772,12 +759,12 @@ namespace cerberus
 						builder.ReadTexture(shadowMap, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 				}
 			},
-			[this, drawStream, drawStreamCount](GraphicsCommandList& graphics)
+			[this, drawStream, drawStreamCount, vertexBufferAddress](GraphicsCommandList& graphics)
 			{
 				RenderForwardPass(
 					graphics,
 					ForwardPassResources{ m_GeometryPipeline, m_GeometryBindGroup },
-					ForwardPassParameters{ drawStream, drawStreamCount });
+					ForwardPassParameters{ drawStream, drawStreamCount, vertexBufferAddress });
 			});
 
 		// Reads SceneColor and writes the LDR CompositeOutput that
@@ -827,6 +814,16 @@ namespace cerberus
 				m_RenderScene ? m_RenderScene->GetRasterMeshInstances().size() : size_t{ 0 });
 			ImGui::Text("Triangles: %u",
 				m_RenderScene ? m_RenderScene->GetTotalTriangleCount() : 0u);
+			if (m_RenderScene)
+			{
+				const GeometryPool::Stats poolStats = m_RenderScene->GetGeometryPool().GetStats();
+				ImGui::Text("Geometry pool vertices: %s / %s",
+					utils::BytesToString(poolStats.UsedVertexBytes).c_str(),
+					utils::BytesToString(poolStats.CapacityVertexBytes).c_str());
+				ImGui::Text("Geometry pool indices: %s / %s",
+					utils::BytesToString(poolStats.UsedIndexBytes).c_str(),
+					utils::BytesToString(poolStats.CapacityIndexBytes).c_str());
+			}
 			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
 				1000.0f / ImGui::GetIO().Framerate,
 				ImGui::GetIO().Framerate);

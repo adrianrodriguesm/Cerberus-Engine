@@ -15,10 +15,11 @@ namespace cerberus
 	namespace
 	{
 		// Offset of Shadow.vert's LightViewProjection push-constant member.
-		// ExecuteDrawStream pushes the shared { WorldTransform, MaterialIndex }
-		// block (68 bytes) at offset 0; mat4's 16-byte alignment pads the next
-		// member out to byte 80, not 68.
-		constexpr uint32_t LightViewProjectionOffset = 80;
+		// ExecuteDrawStream pushes the shared DrawStreamPushConstants block
+		// (96 bytes, see GraphicsCommandList.cpp) at offset 0; mat4's 16-byte
+		// alignment needs the next member on a 16-byte boundary, which 96
+		// already is -- see docs/tasks/T3-geometry-pool.md.
+		constexpr uint32_t LightViewProjectionOffset = 96;
 	}
 
 	std::array<ShadowCascadeData, ShadowCascadeCount> ComputeShadowCascades(
@@ -146,6 +147,7 @@ namespace cerberus
 		DrawArea drawArea;
 		drawArea.GraphicsPipeline = resources.Pipeline;
 		drawArea.DrawCount = parameters.DrawCount;
+		drawArea.VertexBufferAddress = parameters.VertexBufferAddress;
 
 		commandList.ExecuteDrawStream(drawArea, parameters.DrawStream);
 	}

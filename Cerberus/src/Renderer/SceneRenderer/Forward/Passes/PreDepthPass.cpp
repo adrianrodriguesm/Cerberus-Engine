@@ -17,6 +17,7 @@ namespace cerberus
 		drawArea.GraphicsPipeline = resources.Pipeline;
 		drawArea.BindGroup0 = resources.BindGroup;
 		drawArea.DrawCount = parameters.DrawCount;
+		drawArea.VertexBufferAddress = parameters.VertexBufferAddress;
 
 		commandList.ExecuteDrawStream(drawArea, parameters.DrawStream);
 	}

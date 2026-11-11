@@ -21,6 +21,9 @@ namespace cerberus
 	{
 		std::span<const uint32_t> DrawStream;
 		uint32_t DrawCount = 0;
+		// GeometryPool vertex buffer address, for vertex pulling -- see
+		// docs/tasks/T3-geometry-pool.md.
+		uint64_t VertexBufferAddress = 0;
 	};
 
 	// Depth-only pass writing SceneDepth ahead of Forward, so Forward's shading

@@ -22,13 +22,22 @@ namespace cerberus
 		// Word offset into the encoded draw stream. The stream uses uint32_t words.
 		uint32_t DrawOffset = 0;
 		uint32_t DrawCount = 0;
+
+		// The scene's GeometryPool vertex buffer address, for vertex pulling --
+		// constant across every draw in the area (one pool per RenderScene), so
+		// it lives here rather than in the per-draw stream. See
+		// docs/tasks/T3-geometry-pool.md and ExecuteDrawStream.
+		uint64_t VertexBufferAddress = 0;
 	};
 
 	enum DrawStreamFlags : uint16_t
 	{
 		SHADER = BIT(1),
 
-		VERTEX_BUFFER = BIT(2),
+		// No VERTEX_BUFFER bind -- PreDepth/Shadow/Forward pull vertices
+		// through BDA now (see docs/tasks/T3-geometry-pool.md); VERTEX_OFFSET
+		// still matters, since vkCmdDrawIndexed's vertexOffset feeds
+		// gl_VertexIndex regardless of whether a vertex buffer is bound.
 		VERTEX_OFFSET = BIT(3),
 
 		INDEX_BUFFER = BIT(4),
@@ -48,7 +57,7 @@ namespace cerberus
 
 	struct DrawCallInfo
 	{
-		Handle<GPUBuffer> VertexBuffer, IndexBuffer;
+		Handle<GPUBuffer> IndexBuffer;
 		uint32_t VertexOffset = 0;
 		uint32_t IndexOffset = 0;
 		uint32_t IndexCount = 0;
@@ -96,16 +105,6 @@ namespace cerberus
 		explicit DrawStreamBuilder(uint32_t initialSize = 0)
 		{
 			m_Stream.reserve(initialSize);
-		}
-
-		inline void SetVertexBuffer(const Handle<GPUBuffer> vertexBuffer)
-		{
-			if (vertexBuffer != m_Draw.VertexBuffer)
-			{
-				m_DirtyFlags |= DrawStreamFlags::VERTEX_BUFFER;
-				m_Draw.VertexBuffer = vertexBuffer;
-			}
-
 		}
 
 		inline void SetVertexBufferOffset(const uint32_t vertexBufferOffset)
@@ -172,8 +171,6 @@ namespace cerberus
 		uint32_t BeginDrawArea()
 		{
 			m_DirtyFlags = 0;
-			if (m_Draw.VertexBuffer.IsValid())
-				m_DirtyFlags |= DrawStreamFlags::VERTEX_BUFFER;
 			if (m_Draw.IndexBuffer.IsValid())
 				m_DirtyFlags |= DrawStreamFlags::INDEX_BUFFER;
 			if (m_Draw.VertexOffset != 0)
@@ -199,7 +196,6 @@ namespace cerberus
 		inline void Draw()
 		{
 			Append(m_DirtyFlags);
-			if (m_DirtyFlags & DrawStreamFlags::VERTEX_BUFFER)   Append(m_Draw.VertexBuffer);
 			if (m_DirtyFlags & DrawStreamFlags::INDEX_BUFFER)    Append(m_Draw.IndexBuffer);
 			if (m_DirtyFlags & DrawStreamFlags::VERTEX_OFFSET)   Append(m_Draw.VertexOffset);
 			if (m_DirtyFlags & DrawStreamFlags::INDEX_OFFSET)    Append(m_Draw.IndexOffset);

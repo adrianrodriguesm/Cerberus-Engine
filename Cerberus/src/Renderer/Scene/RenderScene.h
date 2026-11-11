@@ -111,6 +111,10 @@ namespace cerberus
 		const std::array<DirectionalLightProxy, MaxDirectionalLightCount>& GetDirectionalLights() const { return m_DirectionalLights; }
 		uint32_t GetDirectionalLightCount() const { return m_DirectionalLightCount; }
 
+		// Shared vertex/index buffer pool every MeshSourceProxy this scene
+		// registers allocates out of -- see docs/tasks/T3-geometry-pool.md.
+		GeometryPool& GetGeometryPool() { return m_GeometryPool; }
+
 		// Explicit shutdown is useful because the owning SceneRenderer can decide to
 		// wait for the GPU before releasing render-scene resources. Safe to call more
 		// than once.
@@ -134,6 +138,12 @@ namespace cerberus
 		void ResetRayTracingDirtyFlags();
 
 	private:
+		// Declared first so it outlives every MeshSourceProxy allocated from
+		// it; Shutdown() destroys those (and flushes their deferred Free()
+		// callbacks) explicitly before returning regardless, but this keeps
+		// the member order itself consistent with that lifetime requirement.
+		GeometryPool m_GeometryPool;
+
 		struct MeshRegister
 		{
 			struct RegisteredMeshInstance
