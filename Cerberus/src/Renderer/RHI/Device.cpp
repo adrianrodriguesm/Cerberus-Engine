@@ -265,6 +265,8 @@ namespace cerberus
 		VkPhysicalDeviceFeatures deviceFeatures = {};
 		deviceFeatures.samplerAnisotropy = VK_TRUE; // Enable Anisotropy filtering
 		deviceFeatures.pipelineStatisticsQuery = VK_TRUE;
+		deviceFeatures.multiDrawIndirect = VK_TRUE;
+		deviceFeatures.drawIndirectFirstInstance = VK_TRUE; // instance-ID trick, see RenderScene
 
 		// Information to create logical device (sometimes called "device")
 		VkDeviceCreateInfo deviceCreateInfo = {};
@@ -279,10 +281,13 @@ namespace cerberus
 		// If a pNext(Chain) has been passed, we need to add it to the device creation info
 		VkPhysicalDeviceFeatures2 physicalDeviceFeatures2{};
 
-		VkPhysicalDeviceDescriptorIndexingFeatures supportedDescriptorIndexingFeatures{};
-		supportedDescriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-		VkPhysicalDeviceBufferDeviceAddressFeatures supportedBufferDeviceAddressFeatures{};
-		supportedBufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+		// Descriptor indexing + buffer device address used to be their own legacy
+		// extension structs here; T4 needs drawIndirectCount (Vulkan 1.2), and
+		// VUID-VkDeviceCreateInfo-pNext-02830 forbids chaining
+		// VkPhysicalDeviceVulkan12Features together with either of those two
+		// structs (it subsumes both), so they are merged into one 1.2 struct.
+		VkPhysicalDeviceVulkan12Features supportedVulkan12Features{};
+		supportedVulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
 		VkPhysicalDeviceRayTracingPipelineFeaturesKHR supportedRayTracingPipelineFeatures{};
 		supportedRayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
 		VkPhysicalDeviceAccelerationStructureFeaturesKHR supportedAccelerationStructureFeatures{};
@@ -297,8 +302,7 @@ namespace cerberus
 		supportedVulkan13Features.pNext = &supportedHostQueryResetFeatures;
 		supportedHostQueryResetFeatures.pNext = &supportedAccelerationStructureFeatures;
 		supportedAccelerationStructureFeatures.pNext = &supportedRayTracingPipelineFeatures;
-		supportedRayTracingPipelineFeatures.pNext = &supportedDescriptorIndexingFeatures;
-		supportedDescriptorIndexingFeatures.pNext = &supportedBufferDeviceAddressFeatures;
+		supportedRayTracingPipelineFeatures.pNext = &supportedVulkan12Features;
 
 		VkPhysicalDeviceFeatures2 supportedDeviceFeatures{};
 		supportedDeviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -309,42 +313,47 @@ namespace cerberus
 			"The selected GPU does not support sampler anisotropy");
 		CORE_ASSERT(supportedDeviceFeatures.features.pipelineStatisticsQuery,
 			"The selected GPU does not support pipeline statistics queries");
+		CORE_ASSERT(supportedDeviceFeatures.features.multiDrawIndirect,
+			"The selected GPU does not support multiDrawIndirect");
+		CORE_ASSERT(supportedDeviceFeatures.features.drawIndirectFirstInstance,
+			"The selected GPU does not support drawIndirectFirstInstance, required by the instance-ID trick (see RenderScene's indirect args)");
+		CORE_ASSERT(supportedVulkan12Features.drawIndirectCount,
+			"The selected GPU does not support drawIndirectCount");
 		CORE_ASSERT(
-			supportedDescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing,
+			supportedVulkan12Features.shaderSampledImageArrayNonUniformIndexing,
 			"The selected GPU does not support non-uniform sampled-image array indexing required by the RT texture table");
-		CORE_ASSERT(supportedDescriptorIndexingFeatures.runtimeDescriptorArray,
+		CORE_ASSERT(supportedVulkan12Features.runtimeDescriptorArray,
 			"The selected GPU does not support runtime descriptor arrays required by bindless textures");
-		CORE_ASSERT(supportedDescriptorIndexingFeatures.descriptorBindingPartiallyBound,
+		CORE_ASSERT(supportedVulkan12Features.descriptorBindingPartiallyBound,
 			"The selected GPU does not support partially-bound descriptor arrays");
-		CORE_ASSERT(supportedDescriptorIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind,
+		CORE_ASSERT(supportedVulkan12Features.descriptorBindingSampledImageUpdateAfterBind,
 			"The selected GPU does not support updating sampled images after bind");
 		CORE_ASSERT(
 			supportedVulkan13Features.dynamicRendering == VK_TRUE,
 			"The selected GPU does not support Vulkan 1.3 Dynamic Rendering");
-		CORE_ASSERT(supportedBufferDeviceAddressFeatures.bufferDeviceAddress,
+		CORE_ASSERT(supportedVulkan12Features.bufferDeviceAddress,
 			"The selected GPU does not support buffer device addresses");
 		CORE_ASSERT(supportedRayTracingPipelineFeatures.rayTracingPipeline,
 			"The selected GPU does not support ray tracing pipelines");
 		CORE_ASSERT(supportedAccelerationStructureFeatures.accelerationStructure,
 			"The selected GPU does not support acceleration structures");
 
-		VkPhysicalDeviceDescriptorIndexingFeatures enabledDescriptorIndexingFeatures{};
-		enabledDescriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-		enabledDescriptorIndexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
-		enabledDescriptorIndexingFeatures.runtimeDescriptorArray = VK_TRUE;
-		enabledDescriptorIndexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
-		enabledDescriptorIndexingFeatures.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
-
-		// Enable features required for ray tracing using feature chaining via pNext
-		VkPhysicalDeviceBufferDeviceAddressFeatures enabledBufferDeviceAddresFeatures = {};
-		enabledBufferDeviceAddresFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
-		enabledBufferDeviceAddresFeatures.bufferDeviceAddress = VK_TRUE;
-		enabledDescriptorIndexingFeatures.pNext = &enabledBufferDeviceAddresFeatures;
+		// Merged descriptor indexing + buffer device address + drawIndirectCount
+		// into one Vulkan12Features struct -- see the matching comment on the
+		// supported/query side above (VUID-VkDeviceCreateInfo-pNext-02830).
+		VkPhysicalDeviceVulkan12Features enabledVulkan12Features{};
+		enabledVulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+		enabledVulkan12Features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+		enabledVulkan12Features.runtimeDescriptorArray = VK_TRUE;
+		enabledVulkan12Features.descriptorBindingPartiallyBound = VK_TRUE;
+		enabledVulkan12Features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+		enabledVulkan12Features.bufferDeviceAddress = VK_TRUE;
+		enabledVulkan12Features.drawIndirectCount = VK_TRUE;
 
 		VkPhysicalDeviceRayTracingPipelineFeaturesKHR enabledRayTracingPipelineFeatures{};
 		enabledRayTracingPipelineFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
 		enabledRayTracingPipelineFeatures.rayTracingPipeline = VK_TRUE;
-		enabledRayTracingPipelineFeatures.pNext = &enabledDescriptorIndexingFeatures;
+		enabledRayTracingPipelineFeatures.pNext = &enabledVulkan12Features;
 
 		VkPhysicalDeviceAccelerationStructureFeaturesKHR enabledAccelerationStructureFeatures{};
 		enabledAccelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
@@ -353,8 +362,8 @@ namespace cerberus
 
 		// Core Vulkan 1.3 feature: no extension string required, only this feature
 		// struct. Kept as the new head of the chain so every previously enabled
-		// feature (acceleration structures, RT pipeline,
-		// descriptor indexing, buffer device address) stays enabled unchanged.
+		// feature (acceleration structures, RT pipeline, descriptor indexing,
+		// buffer device address, drawIndirectCount) stays enabled unchanged.
 		VkPhysicalDeviceVulkan13Features enabledVulkan13Features{};
 		enabledVulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
 		enabledVulkan13Features.dynamicRendering = VK_TRUE;

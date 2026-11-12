@@ -8,6 +8,21 @@
 #include <type_traits>
 namespace cerberus
 {
+	// Mirrors VkDrawIndexedIndirectCommand's layout exactly (same field order
+	// and widths), so an array of these can be uploaded straight into an
+	// IndirectBufferUsage buffer and read by vkCmdDrawIndexedIndirect(Count)
+	// with no raw Vulkan type above the RHI. See
+	// docs/tasks/T4-instances-indirect.md.
+	struct IndirectDrawCommand
+	{
+		uint32_t IndexCount = 0;
+		uint32_t InstanceCount = 1;
+		uint32_t FirstIndex = 0;
+		int32_t VertexOffset = 0;
+		uint32_t FirstInstance = 0;
+	};
+	static_assert(sizeof(IndirectDrawCommand) == 20, "IndirectDrawCommand must match VkDrawIndexedIndirectCommand's layout");
+
 	// 0 -> Global Perisistent data (env map)
 	// 1 -> Global dynamic data (once per frame) (e.g shadow map, camera)
 	// 2 -> Global dynamic data per render pass (once per frame)
@@ -23,11 +38,21 @@ namespace cerberus
 		uint32_t DrawOffset = 0;
 		uint32_t DrawCount = 0;
 
+		// The scene's GeometryPool index buffer -- constant across every draw
+		// in the area, same reasoning as VertexBufferAddress below. Bound by
+		// both ExecuteDrawStream (already was, via the stream's own
+		// INDEX_BUFFER flag) and ExecuteDrawIndirect (which has no stream to
+		// read it from).
+		Handle<GPUBuffer> IndexBuffer;
+
 		// The scene's GeometryPool vertex buffer address, for vertex pulling --
 		// constant across every draw in the area (one pool per RenderScene), so
 		// it lives here rather than in the per-draw stream. See
 		// docs/tasks/T3-geometry-pool.md and ExecuteDrawStream.
 		uint64_t VertexBufferAddress = 0;
+		// The scene's current-frame GPUInstanceData buffer address -- same
+		// reasoning as above. See docs/tasks/T4-instances-indirect.md.
+		uint64_t InstanceBufferAddress = 0;
 	};
 
 	enum DrawStreamFlags : uint16_t
@@ -44,15 +69,14 @@ namespace cerberus
 		INDEX_OFFSET = BIT(5),
 		INDEX_COUNT = BIT(6),
 
-		// Bindless material index, pushed as a constant into the already-bound
-		// geometry bind group's material table. Every consumer (PreDepth, Shadow,
-		// Forward) binds the same set of geometry buffers; only pipelines that
-		// actually shade (Forward) declare a push-constant range wide enough to
-		// read this field.
-		MATERIAL_INDEX = BIT(7),
-		// Per-instance world transform. Differs on essentially every draw, so
-		// SetWorldTransform() always marks this dirty rather than diffing.
-		WORLD_TRANSFORM = BIT(8),
+		// Index into the scene's GPUInstanceData buffer this draw's instance
+		// reads (gl_InstanceIndex, via vkCmdDrawIndexed's firstInstance --
+		// see docs/tasks/T4-instances-indirect.md). Replaces the old
+		// per-draw WorldTransform/MaterialIndex push constants: the shader
+		// now reads both from Instances[gl_InstanceIndex] instead. Differs
+		// on essentially every draw, so SetFirstInstance() always marks the
+		// stream dirty rather than diffing.
+		FIRST_INSTANCE = BIT(7),
 	};
 
 	struct DrawCallInfo
@@ -61,9 +85,7 @@ namespace cerberus
 		uint32_t VertexOffset = 0;
 		uint32_t IndexOffset = 0;
 		uint32_t IndexCount = 0;
-
-		glm::mat4 WorldTransform = glm::mat4(1.0f);
-		uint32_t MaterialIndex = 0;
+		uint32_t FirstInstance = 0;
 	};
 
 	// Reads the uint32_t-word stream produced by DrawStreamBuilder. Values are
@@ -144,23 +166,13 @@ namespace cerberus
 			}
 		}
 
-		// A mesh instance's world transform is essentially unique per draw, so this
+		// Essentially unique per draw (sequential instance index), so this
 		// always marks the stream dirty instead of diffing against the last value.
-		void SetWorldTransform(const glm::mat4& worldTransform)
+		void SetFirstInstance(const uint32_t firstInstance)
 		{
-			m_DirtyFlags |= DrawStreamFlags::WORLD_TRANSFORM;
-			m_Draw.WorldTransform = worldTransform;
+			m_DirtyFlags |= DrawStreamFlags::FIRST_INSTANCE;
+			m_Draw.FirstInstance = firstInstance;
 		}
-
-		void SetMaterialIndex(const uint32_t materialIndex)
-		{
-			if (materialIndex != m_Draw.MaterialIndex)
-			{
-				m_DirtyFlags |= DrawStreamFlags::MATERIAL_INDEX;
-				m_Draw.MaterialIndex = materialIndex;
-			}
-		}
-
 
 		std::span<const uint32_t> GetStream() const { return m_Stream; }
 		uint32_t GetDrawCount() const { return m_DrawCount; }
@@ -179,8 +191,7 @@ namespace cerberus
 				m_DirtyFlags |= DrawStreamFlags::INDEX_OFFSET;
 			if (m_Draw.IndexCount != 0)
 				m_DirtyFlags |= DrawStreamFlags::INDEX_COUNT;
-			m_DirtyFlags |= DrawStreamFlags::WORLD_TRANSFORM;
-			m_DirtyFlags |= DrawStreamFlags::MATERIAL_INDEX;
+			m_DirtyFlags |= DrawStreamFlags::FIRST_INSTANCE;
 
 			return static_cast<uint32_t>(m_Stream.size());
 		}
@@ -200,8 +211,7 @@ namespace cerberus
 			if (m_DirtyFlags & DrawStreamFlags::VERTEX_OFFSET)   Append(m_Draw.VertexOffset);
 			if (m_DirtyFlags & DrawStreamFlags::INDEX_OFFSET)    Append(m_Draw.IndexOffset);
 			if (m_DirtyFlags & DrawStreamFlags::INDEX_COUNT)     Append(m_Draw.IndexCount);
-			if (m_DirtyFlags & DrawStreamFlags::WORLD_TRANSFORM) Append(m_Draw.WorldTransform);
-			if (m_DirtyFlags & DrawStreamFlags::MATERIAL_INDEX)  Append(m_Draw.MaterialIndex);
+			if (m_DirtyFlags & DrawStreamFlags::FIRST_INSTANCE)  Append(m_Draw.FirstInstance);
 
 			m_DirtyFlags = 0;
 			m_DrawCount++;

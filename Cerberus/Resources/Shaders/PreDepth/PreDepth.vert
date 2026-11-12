@@ -1,6 +1,7 @@
 #version 450
 
 #include "../Common/VertexPulling.glsl"
+#include "../Common/InstanceData.glsl"
 
 layout(std140, set = 0, binding = 0) uniform CameraData
 {
@@ -10,18 +11,12 @@ layout(std140, set = 0, binding = 0) uniform CameraData
     vec4 Presentation;
 } Camera;
 
-// Same shape as ForwardPBR.vert's push_constant block (MaterialIndex and the
-// Reserved padding are unused here) -- see its comment and
+// Same shape as ForwardPBR.vert's/Shadow.vert's push_constant block -- see
 // DrawStreamPushConstants in GraphicsCommandList.cpp.
 layout(push_constant) uniform u_Renderer
 {
     VertexFloatBuffer VertexBuffer;
-    uvec2 Reserved0;
-    mat4 WorldTransform;
-    uint MaterialIndex;
-    uint Reserved1a;
-    uint Reserved1b;
-    uint Reserved1c;
+    InstanceDataBuffer Instances;
 } Draw;
 
 // Must match ForwardPBR.vert's gl_Position expression exactly (same operand
@@ -31,7 +26,8 @@ invariant gl_Position;
 
 void main()
 {
+    GPUInstanceData inst = Draw.Instances.Values[gl_InstanceIndex];
     SurfaceVertex vertex = LoadSurfaceVertex(Draw.VertexBuffer, gl_VertexIndex);
-    vec4 worldPosition = Draw.WorldTransform * vec4(vertex.Position, 1.0);
+    vec4 worldPosition = inst.WorldTransform * vec4(vertex.Position, 1.0);
     gl_Position = Camera.ViewProjection * worldPosition;
 }

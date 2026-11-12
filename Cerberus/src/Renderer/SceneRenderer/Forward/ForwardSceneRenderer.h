@@ -128,5 +128,11 @@ namespace cerberus
 		// Pass ordering and barriers for this renderer's frame; rebuilt (Reset()
 		// then re-added) every Render() call rather than reconstructed.
 		RenderGraph m_RenderGraph;
+
+		// Direct (DrawStream replay, one vkCmdDrawIndexed per instance) vs
+		// Indirect (one vkCmdDrawIndexedIndirect per pass, args filled by the
+		// CPU) -- toggle exposed in OnImGuiRender(). Both must produce the
+		// same image; see docs/tasks/T4-instances-indirect.md.
+		bool m_UseIndirectSubmission = false;
 	};
 }

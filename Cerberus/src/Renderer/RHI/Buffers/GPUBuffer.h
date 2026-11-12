@@ -20,6 +20,10 @@ namespace cerberus
 		UniformBufferUsage,
 		ShaderBindingTableUsage,
 		StorageBufferUsage,
+		// Instance data read via buffer_reference (BDA) in the vertex shader
+		InstanceBufferUsage,
+		// VkDrawIndexedIndirectCommand arrays, read by vkCmdDrawIndexedIndirect(Count).
+		IndirectBufferUsage,
 	};
 
 	struct GPUBufferSpecification

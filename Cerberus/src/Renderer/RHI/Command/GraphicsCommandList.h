@@ -67,6 +67,28 @@ namespace cerberus
 			uint32_t firstInstance = 0);
 
 		void DrawFullscreen(Handle<GraphicsPipeline> pipeline, Handle<BindGroup> bindGroup = {});
+
+		// args must hold IndirectDrawCommand entries (IndirectBufferUsage) --
+		// one vkCmdDrawIndexedIndirect for drawCount commands starting at
+		// offset. stride defaults to sizeof(IndirectDrawCommand) (tightly
+		// packed); pass a larger stride only if args interleaves other data
+		// between commands.
+		void DrawIndexedIndirect(
+			Handle<GPUBuffer> args,
+			uint64_t offset,
+			uint32_t drawCount,
+			uint32_t stride = sizeof(IndirectDrawCommand));
+		// Same as above, but the actual draw count is read from count (a
+		// single uint32_t at countOffset) at execution time, capped at
+		// maxDrawCount -- for when the count itself is GPU-written (week 2 /
+		// T5 GPU culling). In T4 count is just a CPU-filled upper bound.
+		void DrawIndexedIndirectCount(
+			Handle<GPUBuffer> args,
+			uint64_t offset,
+			Handle<GPUBuffer> count,
+			uint64_t countOffset,
+			uint32_t maxDrawCount,
+			uint32_t stride = sizeof(IndirectDrawCommand));
 		// Replays a stream encoded by DrawStreamBuilder, pushing { WorldTransform,
 		// MaterialIndex } once per draw. Every vertex shader that consumes a
 		// DrawStream (PreDepth, Shadow, Forward) declares the identical
@@ -74,6 +96,13 @@ namespace cerberus
 		// pipeline-layout reflection produces the same range everywhere and this
 		// can push unconditionally without special-casing per pipeline.
 		void ExecuteDrawStream(const DrawArea& drawArea, std::span<const uint32_t> drawStream);
+
+		// Same binding + push-constant setup as ExecuteDrawStream, but issues
+		// one vkCmdDrawIndexedIndirect instead of replaying a CPU-side
+		// stream. args must hold drawCount IndirectDrawCommand entries
+		// (RenderScene::BuildIndirectArgs), each already carrying its own
+		// firstInstance -- see docs/tasks/T4-instances-indirect.md.
+		void ExecuteDrawIndirect(const DrawArea& drawArea, Handle<GPUBuffer> args, uint32_t drawCount);
 
 		// Pushes against the currently bound pipeline's layout (set by the most
 		// recent BindGraphicsPipeline/ExecuteDrawStream call). Lets a pass push

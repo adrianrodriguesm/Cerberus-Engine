@@ -12,31 +12,19 @@ namespace cerberus
 	{
 		// Shared vertex-stage push-constant shape for every DrawStream consumer
 		// (PreDepth, Shadow, Forward -- each declares this same block, pipeline
-		// push-constant ranges are derived from it by shader reflection). Normal
-		// matrices are derived in ForwardPBR.vert from WorldTransform instead of
-		// being precomputed CPU-side, so this stays the one shape every pass shares.
-		//
-		// Reserved0/Reserved1 are not read by any shader; they exist only so this
-		// C++ struct's byte layout matches GLSL's push_constant block layout
-		// exactly (GLSL requires mat4 members aligned to 16 bytes within the
-		// block, which a leading 8-byte VertexBufferAddress would otherwise
-		// misalign WorldTransform against -- see Shadow.vert's separate
-		// LightViewProjection push in ShadowPass.cpp for the matching case this
-		// mirrors). Reserved1 additionally pads the whole shared block to a
-		// 16-byte boundary (96 bytes) so Shadow's own trailing LightViewProjection
-		// needs no further gap either.
+		// push-constant ranges are derived from it by shader reflection).
+		// WorldTransform/MaterialIndex moved into GPUInstanceData (read via
+		// InstanceBufferAddress[gl_InstanceIndex] in the shader) in T4; both
+		// members here are 8-byte buffer_reference handles, so this already
+		// lands on a 16-byte boundary with no padding -- Shadow.vert's
+		// trailing LightViewProjection push (ShadowPass.cpp) needs no gap.
 		struct DrawStreamPushConstants
 		{
 			uint64_t VertexBufferAddress = 0;
-			uint64_t Reserved0 = 0;
-			glm::mat4 WorldTransform = glm::mat4(1.0f);
-			uint32_t MaterialIndex = 0;
-			uint32_t Reserved1a = 0;
-			uint32_t Reserved1b = 0;
-			uint32_t Reserved1c = 0;
+			uint64_t InstanceBufferAddress = 0;
 		};
 
-		static_assert(sizeof(DrawStreamPushConstants) == 96,
+		static_assert(sizeof(DrawStreamPushConstants) == 16,
 			"DrawStreamPushConstants must match the Forward/PreDepth/Shadow vertex shaders");
 	}
 
@@ -447,6 +435,36 @@ namespace cerberus
 			++statistics->DrawCallCount;
 	}
 
+	void GraphicsCommandList::DrawIndexedIndirect(
+		Handle<GPUBuffer> args,
+		uint64_t offset,
+		uint32_t drawCount,
+		uint32_t stride)
+	{
+		GPUBuffer* argsBuffer = ResourceManager::GetBuffer(args);
+		CORE_ASSERT(argsBuffer, "Invalid indirect args buffer");
+		vkCmdDrawIndexedIndirect(GetNative(), argsBuffer->Buffer, offset, drawCount, stride);
+		if (RendererFrameStatistics* statistics = GetStatistics())
+			++statistics->DrawCallCount;
+	}
+
+	void GraphicsCommandList::DrawIndexedIndirectCount(
+		Handle<GPUBuffer> args,
+		uint64_t offset,
+		Handle<GPUBuffer> count,
+		uint64_t countOffset,
+		uint32_t maxDrawCount,
+		uint32_t stride)
+	{
+		GPUBuffer* argsBuffer = ResourceManager::GetBuffer(args);
+		GPUBuffer* countBuffer = ResourceManager::GetBuffer(count);
+		CORE_ASSERT(argsBuffer, "Invalid indirect args buffer");
+		CORE_ASSERT(countBuffer, "Invalid indirect count buffer");
+		vkCmdDrawIndexedIndirectCount(GetNative(), argsBuffer->Buffer, offset, countBuffer->Buffer, countOffset, maxDrawCount, stride);
+		if (RendererFrameStatistics* statistics = GetStatistics())
+			++statistics->DrawCallCount;
+	}
+
 	void GraphicsCommandList::DrawFullscreen(
 		Handle<GraphicsPipeline> pipeline,
 		Handle<BindGroup> bindGroup)
@@ -485,10 +503,8 @@ namespace cerberus
 				draw.IndexOffset = stream.Read<uint32_t>();
 			if (dirtyFlags & DrawStreamFlags::INDEX_COUNT)
 				draw.IndexCount = stream.Read<uint32_t>();
-			if (dirtyFlags & DrawStreamFlags::WORLD_TRANSFORM)
-				draw.WorldTransform = stream.Read<glm::mat4>();
-			if (dirtyFlags & DrawStreamFlags::MATERIAL_INDEX)
-				draw.MaterialIndex = stream.Read<uint32_t>();
+			if (dirtyFlags & DrawStreamFlags::FIRST_INSTANCE)
+				draw.FirstInstance = stream.Read<uint32_t>();
 
 			CORE_ASSERT(draw.IndexBuffer.IsValid(), "Draw stream has no index-buffer state");
 			CORE_ASSERT(draw.IndexCount > 0, "Draw stream has no index-count state");
@@ -496,15 +512,53 @@ namespace cerberus
 			// Every DrawStream-consuming vertex shader declares this same
 			// push_constant block shape (see the ExecuteDrawStream declaration), so
 			// this push is valid against whichever pipeline is currently bound.
+			// Both addresses are constant across the whole draw area (one
+			// GeometryPool / one GPUInstanceData buffer per RenderScene), so
+			// this re-pushes the same 16 bytes every draw rather than only
+			// once per area -- cheap, and keeps this loop simple.
 			DrawStreamPushConstants pushConstants;
 			pushConstants.VertexBufferAddress = drawArea.VertexBufferAddress;
-			pushConstants.WorldTransform = draw.WorldTransform;
-			pushConstants.MaterialIndex = draw.MaterialIndex;
+			pushConstants.InstanceBufferAddress = drawArea.InstanceBufferAddress;
 			PushConstants(
 				m_BoundPipelineLayout,
 				VK_SHADER_STAGE_VERTEX_BIT,
 				AsBytes(pushConstants));
-			DrawIndexed(draw.IndexCount, 1, draw.IndexOffset, static_cast<int32_t>(draw.VertexOffset), 0);
+			// firstInstance = this draw's index into GPUInstanceData -- the VS
+			// reads Instances[gl_InstanceIndex] instead of taking
+			// WorldTransform/MaterialIndex as push constants.
+			DrawIndexed(draw.IndexCount, 1, draw.IndexOffset, static_cast<int32_t>(draw.VertexOffset), draw.FirstInstance);
 		}
+	}
+
+	void GraphicsCommandList::ExecuteDrawIndirect(
+		const DrawArea& drawArea,
+		Handle<GPUBuffer> args,
+		uint32_t drawCount)
+	{
+		if (drawCount == 0)
+			return;
+
+		BindGraphicsPipeline(drawArea.GraphicsPipeline);
+		if (drawArea.BindGroup0.IsValid())
+			BindDescriptorSets(drawArea.BindGroup0, 0);
+		if (drawArea.BindGroup1.IsValid())
+			BindDescriptorSets(drawArea.BindGroup1, 1);
+
+		CORE_ASSERT(drawArea.IndexBuffer.IsValid(), "ExecuteDrawIndirect requires drawArea.IndexBuffer");
+		BindIndexBuffer(drawArea.IndexBuffer);
+
+		// Same push-constant shape as ExecuteDrawStream -- see its comment.
+		// Each IndirectDrawCommand already carries its own firstInstance
+		// (RenderScene::BuildIndirectArgs), so there is nothing per-draw left
+		// to push here.
+		DrawStreamPushConstants pushConstants;
+		pushConstants.VertexBufferAddress = drawArea.VertexBufferAddress;
+		pushConstants.InstanceBufferAddress = drawArea.InstanceBufferAddress;
+		PushConstants(
+			m_BoundPipelineLayout,
+			VK_SHADER_STAGE_VERTEX_BIT,
+			AsBytes(pushConstants));
+
+		DrawIndexedIndirect(args, 0, drawCount, sizeof(IndirectDrawCommand));
 	}
 }

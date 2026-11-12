@@ -36,6 +36,25 @@ namespace cerberus
 
 	static_assert(sizeof(RayTracingInstanceData) == 32, "RayTracingInstanceData must match the std430 shader layout");
 
+	// GPU-facing data indexed by gl_InstanceIndex in the raster vertex shaders
+	// (PreDepth, Shadow, Forward), one entry per raster mesh instance -- see
+	// docs/tasks/T4-instances-indirect.md. NormalTransform is the
+	// inverse-transpose of WorldTransform, computed here instead of per-vertex
+	// in the shader. WorldBoundingSphere (xyz center, w radius) is for GPU
+	// culling (T5); unused by anything in T4.
+	struct GPUInstanceData
+	{
+		glm::mat4 WorldTransform = math::MatFactory::CreateIdentityMat4();
+		glm::mat4 NormalTransform = math::MatFactory::CreateIdentityMat4();
+		glm::vec4 WorldBoundingSphere = glm::vec4(0.0f);
+		uint32_t MaterialIndex = 0;
+		uint32_t VertexOffset = 0; // global, from GeometryPool
+		uint32_t FirstIndex = 0;   // global
+		uint32_t IndexCount = 0;
+	};
+
+	static_assert(sizeof(GPUInstanceData) == 160, "GPUInstanceData must match the std430 shader layout");
+
 	struct SkyLightProxy
 	{
 		Handle<TextureCube> RadianceMap;
@@ -106,6 +125,34 @@ namespace cerberus
 		void BuildDrawStream();
 		std::span<const uint32_t> GetDrawStream() const { return m_DrawStream; }
 		uint32_t GetDrawStreamCount() const { return m_DrawStreamCount; }
+
+		// Rewrites the current frame-in-flight's GPUInstanceData buffer from
+		// RasterMeshInstances, in the same order BuildDrawStream() walks them
+		// (both Direct and Indirect submission rely on that order matching).
+		// Written every frame unconditionally rather than only on scene/
+		// transform changes -- simpler, and the task this is from (T4) allows
+		// it as long as it doesn't show up in the profile. TODO: dirty
+		// tracking if it does.
+		//
+		// Host-visible, CPU-written before the submit each frame-in-flight
+		// uses its own copy of this buffer, so the write is visible to the
+		// device with no barrier -- see docs/tasks/T4-instances-indirect.md.
+		// Do not add buffer tracking to RenderGraph for this in T4; that is a
+		// week-2 TODO, once compute writes it instead of the host.
+		void BuildInstanceBuffer(uint32_t frameIndex);
+		uint64_t GetInstanceBufferAddress(uint32_t frameIndex) const;
+		uint32_t GetInstanceCount() const { return static_cast<uint32_t>(m_MeshRegister.RasterMeshInstances.size()); }
+
+		// One IndirectDrawCommand per raster mesh instance, same order as
+		// BuildInstanceBuffer()/BuildDrawStream() (instanceCount=1,
+		// firstInstance=that instance's slot, so each indirect draw reads
+		// its own GPUInstanceData exactly like the Direct path's per-draw
+		// firstInstance does). A single range today -- no masked/blend
+		// pipeline bucketing exists yet to split on; see
+		// docs/tasks/T4-instances-indirect.md.
+		void BuildIndirectArgs(uint32_t frameIndex);
+		Handle<GPUBuffer> GetIndirectArgsBuffer(uint32_t frameIndex) const { return m_IndirectArgsBuffers[frameIndex]; }
+
 		const std::vector<RayTracingInstanceData>& GetRayTracingInstances() const { return m_RayTracingInstances; }
 		const SkyLightProxy& GetSkyLight() const { return m_SkyLight; }
 		const std::array<DirectionalLightProxy, MaxDirectionalLightCount>& GetDirectionalLights() const { return m_DirectionalLights; }
@@ -143,6 +190,16 @@ namespace cerberus
 		// callbacks) explicitly before returning regardless, but this keeps
 		// the member order itself consistent with that lifetime requirement.
 		GeometryPool m_GeometryPool;
+
+		// One GPUInstanceData buffer per frame-in-flight -- see
+		// BuildInstanceBuffer()'s comment. Capacity tracks each slot's current
+		// element count so BuildInstanceBuffer only recreates the buffer when
+		// the instance count grows past it, not on every call.
+		static constexpr uint32_t InstanceBufferFrameCount = 3;
+		std::array<Handle<GPUBuffer>, InstanceBufferFrameCount> m_InstanceBuffers;
+		std::array<uint32_t, InstanceBufferFrameCount> m_InstanceBufferCapacity{};
+		std::array<Handle<GPUBuffer>, InstanceBufferFrameCount> m_IndirectArgsBuffers;
+		std::array<uint32_t, InstanceBufferFrameCount> m_IndirectArgsCapacity{};
 
 		struct MeshRegister
 		{

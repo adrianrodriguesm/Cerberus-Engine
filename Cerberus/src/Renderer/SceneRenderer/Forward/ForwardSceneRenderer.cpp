@@ -641,7 +641,10 @@ namespace cerberus
 			UpdateEnvironmentBindings();
 			UpdateCompositeBindings();
 		}
+		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 		m_RenderScene->BuildDrawStream();
+		m_RenderScene->BuildInstanceBuffer(frameIndex);
+		m_RenderScene->BuildIndirectArgs(frameIndex);
 
 		// Primary-light-only shadows for now: cascades are a pure function of the
 		// current camera and light direction, so they're recomputed every frame
@@ -659,7 +662,6 @@ namespace cerberus
 			UpdateShadowBuffer();
 		}
 
-		const uint32_t frameIndex = Renderer::GetCurrentFrameIndex();
 		BindGroup* preDepthBindGroup = ResourceManager::GetBindGroup(m_PreDepthBindGroup);
 		BindGroup* skyBindGroup = ResourceManager::GetBindGroup(m_SkyBindGroup);
 		BindGroup* geometryBindGroup = ResourceManager::GetBindGroup(m_GeometryBindGroup);
@@ -684,6 +686,11 @@ namespace cerberus
 		const std::span<const uint32_t> drawStream = m_RenderScene->GetDrawStream();
 		const uint32_t drawStreamCount = m_RenderScene->GetDrawStreamCount();
 		const uint64_t vertexBufferAddress = m_RenderScene->GetGeometryPool().GetVertexBufferAddress();
+		const uint64_t instanceBufferAddress = m_RenderScene->GetInstanceBufferAddress(frameIndex);
+		const Handle<GPUBuffer> indexBuffer = m_RenderScene->GetGeometryPool().GetIndexBuffer();
+		const bool useIndirect = m_UseIndirectSubmission;
+		const Handle<GPUBuffer> indirectArgs = m_RenderScene->GetIndirectArgsBuffer(frameIndex);
+		const uint32_t indirectDrawCount = m_RenderScene->GetInstanceCount();
 
 		m_RenderGraph.AddGraphicsPass(
 			"PreDepth",
@@ -691,12 +698,13 @@ namespace cerberus
 			{
 				builder.WriteDepthAttachment(sceneDepthRG, LOAD_OP::CLEAR, STORE_OP::STORE);
 			},
-			[this, drawStream, drawStreamCount, vertexBufferAddress](GraphicsCommandList& graphics)
+			[this, drawStream, drawStreamCount, vertexBufferAddress, instanceBufferAddress, indexBuffer, useIndirect, indirectArgs, indirectDrawCount](GraphicsCommandList& graphics)
 			{
 				RenderPreDepthPass(
 					graphics,
 					PreDepthPassResources{ m_PreDepthPipeline, m_PreDepthBindGroup },
-					PreDepthPassParameters{ drawStream, drawStreamCount, vertexBufferAddress });
+					PreDepthPassParameters{ drawStream, drawStreamCount, vertexBufferAddress, instanceBufferAddress,
+						indexBuffer, useIndirect, indirectArgs, indirectDrawCount });
 			});
 
 		// Each cascade targets a different RenderTargetTexture, so (unlike Sky and
@@ -718,12 +726,13 @@ namespace cerberus
 					{
 						builder.WriteDepthAttachment(shadowMap, LOAD_OP::CLEAR, STORE_OP::STORE);
 					},
-					[this, drawStream, drawStreamCount, vertexBufferAddress, cascade](GraphicsCommandList& graphics)
+					[this, drawStream, drawStreamCount, vertexBufferAddress, instanceBufferAddress, indexBuffer, useIndirect, indirectArgs, indirectDrawCount, cascade](GraphicsCommandList& graphics)
 					{
 						RenderShadowPass(
 							graphics,
 							ShadowPassResources{ m_ShadowPipeline },
-							ShadowPassParameters{ drawStream, drawStreamCount, vertexBufferAddress },
+							ShadowPassParameters{ drawStream, drawStreamCount, vertexBufferAddress, instanceBufferAddress,
+								indexBuffer, useIndirect, indirectArgs, indirectDrawCount },
 							cascade);
 					});
 			}
@@ -759,12 +768,13 @@ namespace cerberus
 						builder.ReadTexture(shadowMap, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 				}
 			},
-			[this, drawStream, drawStreamCount, vertexBufferAddress](GraphicsCommandList& graphics)
+			[this, drawStream, drawStreamCount, vertexBufferAddress, instanceBufferAddress, indexBuffer, useIndirect, indirectArgs, indirectDrawCount](GraphicsCommandList& graphics)
 			{
 				RenderForwardPass(
 					graphics,
 					ForwardPassResources{ m_GeometryPipeline, m_GeometryBindGroup },
-					ForwardPassParameters{ drawStream, drawStreamCount, vertexBufferAddress });
+					ForwardPassParameters{ drawStream, drawStreamCount, vertexBufferAddress, instanceBufferAddress,
+						indexBuffer, useIndirect, indirectArgs, indirectDrawCount });
 			});
 
 		// Reads SceneColor and writes the LDR CompositeOutput that
@@ -807,6 +817,12 @@ namespace cerberus
 	void ForwardSceneRenderer::OnImGuiRender()
 	{
 		ImGui::Begin("Renderer");
+		{
+			static const char* submissionModes[] = { "Direct (DrawStream)", "Indirect" };
+			int submissionMode = m_UseIndirectSubmission ? 1 : 0;
+			if (ImGui::Combo("Submission", &submissionMode, submissionModes, 2))
+				m_UseIndirectSubmission = (submissionMode == 1);
+		}
 		if (ui::PropertyGridHeader("Statistics", true))
 		{
 			ImGui::TextUnformatted("Active renderer: Forward");

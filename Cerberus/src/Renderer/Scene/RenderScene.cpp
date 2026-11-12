@@ -64,6 +64,10 @@ namespace cerberus
 		// bind -- only the fixed-function index buffer stays bound.
 		builder.SetIndexBuffer(m_GeometryPool.GetIndexBuffer());
 
+		// Instance index assigned in the same order BuildInstanceBuffer()
+		// uploads GPUInstanceData -- the two must agree, since this is what
+		// firstInstance/gl_InstanceIndex looks up into that buffer.
+		uint32_t instanceIndex = 0;
 		for (Handle<MeshInstanceProxy> meshInstanceHandle : m_MeshRegister.RasterMeshInstances)
 		{
 			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
@@ -75,23 +79,160 @@ namespace cerberus
 			CORE_ASSERT(meshInstance->SubmeshIndex < meshSource->Submeshes.size(), "MeshInstanceProxy references an invalid submesh");
 
 			const SubmeshSourceProxy& submesh = meshSource->Submeshes[meshInstance->SubmeshIndex];
-			CORE_ASSERT(meshInstance->MaterialProxyIndex < m_MeshRegister.MaterialProxies.size(), "MeshInstanceProxy references an invalid raster MaterialProxy");
-			const MaterialProxy& materialProxy = m_MeshRegister.MaterialProxies[meshInstance->MaterialProxyIndex];
-			CORE_ASSERT(materialProxy.GPUMaterialIndex != InvalidMaterialProxyIndex, "Raster MaterialProxy has no GPU index");
 
 			// Vertex pulling reads through gl_VertexIndex, which vkCmdDrawIndexed
 			// already offsets by this same value -- see ExecuteDrawStream.
 			builder.SetVertexBufferOffset(meshSource->GlobalVertexOffset(submesh));
 			builder.SetIndexBufferOffset(meshSource->GlobalFirstIndex(submesh));
 			builder.SetIndexBufferCount(submesh.IndexCount);
-			builder.SetWorldTransform(meshInstance->WorldTransform);
-			builder.SetMaterialIndex(materialProxy.GPUMaterialIndex);
+			builder.SetFirstInstance(instanceIndex);
 			builder.Draw();
+			++instanceIndex;
 		}
 
 		const std::span<const uint32_t> stream = builder.GetStream();
 		m_DrawStream.assign(stream.begin(), stream.end());
 		m_DrawStreamCount = builder.GetDrawCount();
+	}
+
+	void RenderScene::BuildInstanceBuffer(uint32_t frameIndex)
+	{
+		CORE_PROFILE_FUNCTION();
+		CORE_ASSERT(frameIndex < InstanceBufferFrameCount, "Frame index out of range for the instance buffer set");
+
+		const uint32_t instanceCount = GetInstanceCount();
+
+		if (instanceCount > m_InstanceBufferCapacity[frameIndex])
+		{
+			Handle<GPUBuffer>& buffer = m_InstanceBuffers[frameIndex];
+			if (buffer.IsValid())
+				ResourceManager::DestroyBuffer(buffer);
+
+			GPUBufferSpecification spec;
+			spec.DebugName = "GPUInstanceData";
+			spec.MemoryUsage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+			spec.Size = instanceCount * static_cast<uint32_t>(sizeof(GPUInstanceData));
+			spec.Usage = GPUBufferUsage::InstanceBufferUsage;
+			buffer = ResourceManager::CreateBuffer(spec);
+			m_InstanceBufferCapacity[frameIndex] = instanceCount;
+		}
+
+		if (instanceCount == 0)
+			return;
+
+		std::vector<GPUInstanceData> instances;
+		instances.reserve(instanceCount);
+
+		for (Handle<MeshInstanceProxy> meshInstanceHandle : m_MeshRegister.RasterMeshInstances)
+		{
+			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
+			CORE_ASSERT(meshInstance, "Invalid MeshInstanceProxy");
+
+			MeshSourceProxy* meshSource = ResourceManager::GetMeshSourceProxy(meshInstance->MeshSource);
+			CORE_ASSERT(meshSource, "MeshInstanceProxy references an invalid MeshSourceProxy");
+			CORE_ASSERT(meshInstance->SubmeshIndex < meshSource->Submeshes.size(), "MeshInstanceProxy references an invalid submesh");
+
+			const SubmeshSourceProxy& submesh = meshSource->Submeshes[meshInstance->SubmeshIndex];
+			CORE_ASSERT(meshInstance->MaterialProxyIndex < m_MeshRegister.MaterialProxies.size(), "MeshInstanceProxy references an invalid raster MaterialProxy");
+			const MaterialProxy& materialProxy = m_MeshRegister.MaterialProxies[meshInstance->MaterialProxyIndex];
+
+			GPUInstanceData& instance = instances.emplace_back();
+			instance.WorldTransform = meshInstance->WorldTransform;
+			// Non-uniform scale needs the inverse-transpose; computed here once
+			// per instance per frame instead of per vertex (ForwardPBR.vert used
+			// to call inverse() every invocation -- removed in T4).
+			instance.NormalTransform = glm::mat4(glm::transpose(glm::inverse(glm::mat3(meshInstance->WorldTransform))));
+
+			const glm::vec3 localCenter(submesh.LocalBoundingSphere);
+			const glm::vec3 worldCenter = glm::vec3(meshInstance->WorldTransform * glm::vec4(localCenter, 1.0f));
+			// Conservative upper bound on scale under non-uniform transforms:
+			// the longest transformed basis vector, rather than assuming
+			// uniform scale.
+			const glm::mat3 linearPart(meshInstance->WorldTransform);
+			const float maxAxisScale = glm::sqrt(glm::max(glm::max(
+				glm::dot(linearPart[0], linearPart[0]),
+				glm::dot(linearPart[1], linearPart[1])),
+				glm::dot(linearPart[2], linearPart[2])));
+			instance.WorldBoundingSphere = glm::vec4(worldCenter, submesh.LocalBoundingSphere.w * maxAxisScale);
+
+			instance.MaterialIndex = materialProxy.GPUMaterialIndex;
+			instance.VertexOffset = meshSource->GlobalVertexOffset(submesh);
+			instance.FirstIndex = meshSource->GlobalFirstIndex(submesh);
+			instance.IndexCount = submesh.IndexCount;
+		}
+
+		GPUBuffer* gpuBuffer = ResourceManager::GetBuffer(m_InstanceBuffers[frameIndex]);
+		CORE_ASSERT(gpuBuffer, "Invalid instance buffer");
+
+		ResourceAllocator allocator("GPUInstanceData");
+		uint8_t* dest = allocator.MapMemory<uint8_t>(gpuBuffer->Allocation);
+		std::memcpy(dest, instances.data(), instances.size() * sizeof(GPUInstanceData));
+		allocator.UnmapMemory(gpuBuffer->Allocation);
+	}
+
+	uint64_t RenderScene::GetInstanceBufferAddress(uint32_t frameIndex) const
+	{
+		CORE_ASSERT(frameIndex < InstanceBufferFrameCount, "Frame index out of range for the instance buffer set");
+		GPUBuffer* buffer = ResourceManager::GetBuffer(m_InstanceBuffers[frameIndex]);
+		return buffer ? static_cast<uint64_t>(buffer->GetDeviceAddress()) : 0;
+	}
+
+	void RenderScene::BuildIndirectArgs(uint32_t frameIndex)
+	{
+		CORE_PROFILE_FUNCTION();
+		CORE_ASSERT(frameIndex < InstanceBufferFrameCount, "Frame index out of range for the indirect args buffer set");
+
+		const uint32_t instanceCount = GetInstanceCount();
+
+		if (instanceCount > m_IndirectArgsCapacity[frameIndex])
+		{
+			Handle<GPUBuffer>& buffer = m_IndirectArgsBuffers[frameIndex];
+			if (buffer.IsValid())
+				ResourceManager::DestroyBuffer(buffer);
+
+			GPUBufferSpecification spec;
+			spec.DebugName = "IndirectDrawArgs";
+			spec.MemoryUsage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+			spec.Size = instanceCount * static_cast<uint32_t>(sizeof(IndirectDrawCommand));
+			spec.Usage = GPUBufferUsage::IndirectBufferUsage;
+			buffer = ResourceManager::CreateBuffer(spec);
+			m_IndirectArgsCapacity[frameIndex] = instanceCount;
+		}
+
+		if (instanceCount == 0)
+			return;
+
+		std::vector<IndirectDrawCommand> commands;
+		commands.reserve(instanceCount);
+
+		uint32_t instanceIndex = 0;
+		for (Handle<MeshInstanceProxy> meshInstanceHandle : m_MeshRegister.RasterMeshInstances)
+		{
+			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
+			CORE_ASSERT(meshInstance, "Invalid MeshInstanceProxy");
+
+			MeshSourceProxy* meshSource = ResourceManager::GetMeshSourceProxy(meshInstance->MeshSource);
+			CORE_ASSERT(meshSource, "MeshInstanceProxy references an invalid MeshSourceProxy");
+			CORE_ASSERT(meshInstance->SubmeshIndex < meshSource->Submeshes.size(), "MeshInstanceProxy references an invalid submesh");
+
+			const SubmeshSourceProxy& submesh = meshSource->Submeshes[meshInstance->SubmeshIndex];
+
+			IndirectDrawCommand& command = commands.emplace_back();
+			command.IndexCount = submesh.IndexCount;
+			command.InstanceCount = 1;
+			command.FirstIndex = meshSource->GlobalFirstIndex(submesh);
+			command.VertexOffset = static_cast<int32_t>(meshSource->GlobalVertexOffset(submesh));
+			command.FirstInstance = instanceIndex;
+			++instanceIndex;
+		}
+
+		GPUBuffer* gpuBuffer = ResourceManager::GetBuffer(m_IndirectArgsBuffers[frameIndex]);
+		CORE_ASSERT(gpuBuffer, "Invalid indirect args buffer");
+
+		ResourceAllocator allocator("IndirectDrawArgs");
+		uint8_t* dest = allocator.MapMemory<uint8_t>(gpuBuffer->Allocation);
+		std::memcpy(dest, commands.data(), commands.size() * sizeof(IndirectDrawCommand));
+		allocator.UnmapMemory(gpuBuffer->Allocation);
 	}
 
 	void RenderScene::SetSkyLight(const Ref<EnvironmentMap>& environment, float intensity, uint32_t sampleLOD)
@@ -771,6 +912,24 @@ namespace cerberus
 
 	void RenderScene::Shutdown()
 	{
+		// Destroyed unconditionally (not gated by the early-return below,
+		// which only looks at mesh/material/AS state) -- Safe to call more
+		// than once since DestroyBuffer on an already-invalid handle is a
+		// no-op, and ResourceManager::DestroyBuffer defers via
+		// DeferredResourceDeletionQueue regardless of GPU state.
+		for (Handle<GPUBuffer>& instanceBuffer : m_InstanceBuffers)
+		{
+			if (instanceBuffer.IsValid())
+				ResourceManager::DestroyBuffer(instanceBuffer);
+			instanceBuffer = {};
+		}
+		for (Handle<GPUBuffer>& indirectArgsBuffer : m_IndirectArgsBuffers)
+		{
+			if (indirectArgsBuffer.IsValid())
+				ResourceManager::DestroyBuffer(indirectArgsBuffer);
+			indirectArgsBuffer = {};
+		}
+
 		auto& asInfo = m_MeshRegister.ASRegisterInfo;
 
 		// If no renderer resources are registered, this is a no-op.

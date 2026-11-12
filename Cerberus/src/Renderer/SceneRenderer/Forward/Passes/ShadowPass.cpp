@@ -16,10 +16,10 @@ namespace cerberus
 	{
 		// Offset of Shadow.vert's LightViewProjection push-constant member.
 		// ExecuteDrawStream pushes the shared DrawStreamPushConstants block
-		// (96 bytes, see GraphicsCommandList.cpp) at offset 0; mat4's 16-byte
-		// alignment needs the next member on a 16-byte boundary, which 96
-		// already is -- see docs/tasks/T3-geometry-pool.md.
-		constexpr uint32_t LightViewProjectionOffset = 96;
+		// (16 bytes: two buffer_reference handles, see GraphicsCommandList.cpp)
+		// at offset 0; that is already a 16-byte boundary, so mat4's alignment
+		// needs no further gap -- see docs/tasks/T4-instances-indirect.md.
+		constexpr uint32_t LightViewProjectionOffset = 16;
 	}
 
 	std::array<ShadowCascadeData, ShadowCascadeCount> ComputeShadowCascades(
@@ -132,12 +132,13 @@ namespace cerberus
 		const ShadowPassParameters& parameters,
 		const ShadowCascadeData& cascade)
 	{
-		if (parameters.DrawCount == 0)
+		if ((parameters.UseIndirect ? parameters.IndirectDrawCount : parameters.DrawCount) == 0)
 			return;
 
-		// Bind explicitly (rather than relying on ExecuteDrawStream's internal
-		// bind) so the cascade's light matrix can be pushed once, before the
-		// per-draw {WorldTransform, MaterialIndex} pushes inside the stream replay.
+		// Bind explicitly (rather than relying on ExecuteDrawStream/
+		// ExecuteDrawIndirect's internal bind) so the cascade's light matrix
+		// can be pushed once, before the shared VertexBufferAddress/
+		// InstanceBufferAddress push each of those does internally.
 		commandList.BindGraphicsPipeline(resources.Pipeline);
 		commandList.PushConstants(
 			VK_SHADER_STAGE_VERTEX_BIT,
@@ -148,7 +149,12 @@ namespace cerberus
 		drawArea.GraphicsPipeline = resources.Pipeline;
 		drawArea.DrawCount = parameters.DrawCount;
 		drawArea.VertexBufferAddress = parameters.VertexBufferAddress;
+		drawArea.InstanceBufferAddress = parameters.InstanceBufferAddress;
+		drawArea.IndexBuffer = parameters.IndexBuffer;
 
-		commandList.ExecuteDrawStream(drawArea, parameters.DrawStream);
+		if (parameters.UseIndirect)
+			commandList.ExecuteDrawIndirect(drawArea, parameters.IndirectArgs, parameters.IndirectDrawCount);
+		else
+			commandList.ExecuteDrawStream(drawArea, parameters.DrawStream);
 	}
 }

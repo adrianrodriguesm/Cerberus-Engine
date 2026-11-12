@@ -10,7 +10,7 @@ namespace cerberus
 		const PreDepthPassResources& resources,
 		const PreDepthPassParameters& parameters)
 	{
-		if (parameters.DrawCount == 0)
+		if ((parameters.UseIndirect ? parameters.IndirectDrawCount : parameters.DrawCount) == 0)
 			return;
 
 		DrawArea drawArea;
@@ -18,7 +18,12 @@ namespace cerberus
 		drawArea.BindGroup0 = resources.BindGroup;
 		drawArea.DrawCount = parameters.DrawCount;
 		drawArea.VertexBufferAddress = parameters.VertexBufferAddress;
+		drawArea.InstanceBufferAddress = parameters.InstanceBufferAddress;
+		drawArea.IndexBuffer = parameters.IndexBuffer;
 
-		commandList.ExecuteDrawStream(drawArea, parameters.DrawStream);
+		if (parameters.UseIndirect)
+			commandList.ExecuteDrawIndirect(drawArea, parameters.IndirectArgs, parameters.IndirectDrawCount);
+		else
+			commandList.ExecuteDrawStream(drawArea, parameters.DrawStream);
 	}
 }

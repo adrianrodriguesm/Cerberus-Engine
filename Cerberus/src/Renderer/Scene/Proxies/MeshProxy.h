@@ -5,6 +5,7 @@
 #include "Renderer/Scene/GeometryPool.h"
 #include "Renderer/Scene/Proxies/MaterialProxy.h"
 
+#include <limits>
 #include <span>
 namespace cerberus
 {
@@ -18,6 +19,12 @@ namespace cerberus
 		uint32_t MaterialIndex;
 		glm::mat4 Transform = math::MatFactory::CreateIdentityMat4();
 		Handle<AccelerationStructure> BLAS;
+		// Local-space bounding sphere (xyz center, w radius), computed once
+		// when the owning MeshSourceProxy is created (MeshSource exposes no
+		// bounds of its own). An AABB-derived sphere, not a minimal enclosing
+		// one -- conservative, which is what culling (T5) needs. Instance
+		// data (T4) transforms this to world space per instance.
+		glm::vec4 LocalBoundingSphere = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
 		SubmeshSourceProxy() = default;
 		SubmeshSourceProxy(uint32_t baseVertex, uint32_t baseIndex, uint32_t indexCount)
 			: BaseVertex(baseVertex), BaseIndex(baseIndex), IndexCount(indexCount)
@@ -57,6 +64,10 @@ namespace cerberus
 			Pool->Upload(Allocation, vertexData, vertexSize, indexData, indexSize);
 
 			// Add the submesh info
+			const float* vertexFloats = static_cast<const float*>(vertexData);
+			const uint32_t* indices = static_cast<const uint32_t*>(indexData);
+			constexpr uint32_t positionStrideFloats = GeometryPool::VertexStrideBytes / sizeof(float);
+
 			Submeshes.reserve(submeshes.size());
 			for (const auto& submesh : submeshes)
 			{
@@ -66,6 +77,22 @@ namespace cerberus
 				submeshProxy.BaseVertex = submesh.BaseVertex;
 				submeshProxy.MaterialIndex = submesh.MaterialIndex;
 				submeshProxy.Transform = submesh.Transform;
+
+				// AABB over the vertices this submesh's own indices reference
+				// (not its whole BaseVertex.. range, which may be shared/
+				// padded) -- see LocalBoundingSphere's comment.
+				glm::vec3 boundsMin(std::numeric_limits<float>::max());
+				glm::vec3 boundsMax(std::numeric_limits<float>::lowest());
+				for (uint32_t i = 0; i < submesh.IndexCount; ++i)
+				{
+					const uint32_t vertexIndex = submeshProxy.BaseVertex + indices[submeshProxy.BaseIndex + i];
+					const float* position = vertexFloats + static_cast<size_t>(vertexIndex) * positionStrideFloats;
+					boundsMin = glm::min(boundsMin, glm::vec3(position[0], position[1], position[2]));
+					boundsMax = glm::max(boundsMax, glm::vec3(position[0], position[1], position[2]));
+				}
+				const glm::vec3 center = (boundsMin + boundsMax) * 0.5f;
+				const float radius = submesh.IndexCount > 0 ? glm::length(boundsMax - center) : 0.0f;
+				submeshProxy.LocalBoundingSphere = glm::vec4(center, radius);
 			}
 		}
 

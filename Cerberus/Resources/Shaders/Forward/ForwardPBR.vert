@@ -1,6 +1,7 @@
 #version 450
 
 #include "../Common/VertexPulling.glsl"
+#include "../Common/InstanceData.glsl"
 
 layout(std140, set = 0, binding = 0) uniform CameraData
 {
@@ -10,19 +11,13 @@ layout(std140, set = 0, binding = 0) uniform CameraData
     vec4 Presentation;
 } Camera;
 
-// Reserved0/Reserved1* are unused padding -- see DrawStreamPushConstants in
-// GraphicsCommandList.cpp for why they have to be here (GLSL's 16-byte mat4
-// alignment, plus padding the whole block out to a 16-byte boundary for
-// Shadow.vert's separate trailing LightViewProjection push).
+// Same shape as PreDepth.vert's/Shadow.vert's -- see DrawStreamPushConstants
+// in GraphicsCommandList.cpp. WorldTransform/MaterialIndex now live in
+// GPUInstanceData, read through Instances via gl_InstanceIndex.
 layout(push_constant) uniform u_Renderer
 {
     VertexFloatBuffer VertexBuffer;
-    uvec2 Reserved0;
-    mat4 WorldTransform;
-    uint MaterialIndex;
-    uint Reserved1a;
-    uint Reserved1b;
-    uint Reserved1c;
+    InstanceDataBuffer Instances;
 } Draw;
 
 layout(location = 0) out vec3 v_WorldPosition;
@@ -39,18 +34,17 @@ invariant gl_Position;
 
 void main()
 {
+    GPUInstanceData inst = Draw.Instances.Values[gl_InstanceIndex];
     SurfaceVertex vertex = LoadSurfaceVertex(Draw.VertexBuffer, gl_VertexIndex);
 
-    vec4 worldPosition = Draw.WorldTransform * vec4(vertex.Position, 1.0);
-    // Non-uniform scale needs the inverse-transpose; computed here instead of
-    // CPU-side so every DrawStream consumer can share one push-constant shape.
-    mat3 normalMatrix = transpose(inverse(mat3(Draw.WorldTransform)));
+    vec4 worldPosition = inst.WorldTransform * vec4(vertex.Position, 1.0);
+    mat3 normalMatrix = mat3(inst.NormalTransform);
 
     v_WorldPosition = worldPosition.xyz;
     v_WorldNormal = normalize(normalMatrix * vertex.Normal);
-    v_WorldTangent = normalize(mat3(Draw.WorldTransform) * vertex.Tangent);
-    v_WorldBinormal = normalize(mat3(Draw.WorldTransform) * vertex.Binormal);
+    v_WorldTangent = normalize(mat3(inst.WorldTransform) * vertex.Tangent);
+    v_WorldBinormal = normalize(mat3(inst.WorldTransform) * vertex.Binormal);
     v_TexCoord = vertex.TexCoord;
-    v_MaterialIndex = Draw.MaterialIndex;
+    v_MaterialIndex = inst.MaterialIndex;
     gl_Position = Camera.ViewProjection * worldPosition;
 }
