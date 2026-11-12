@@ -1,0 +1,5 @@
+# Large generated scene bodies are local artifacts; regenerate from presets.
+# Keep their small camera sidecars and accounting manifests versioned.
+GPUStressTest_Medium.cscene
+GPUStressTest_High.cscene
+GPUStressTest_Extreme.cscene

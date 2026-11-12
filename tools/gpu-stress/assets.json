@@ -1,0 +1,70 @@
+{
+  "Cube": {
+    "source": "Cerberus-Editor/Resources/Meshes/Source/Default/Cube.fbx",
+    "sha256": "9ede89ac721567a53298b87245418dfc69f73b23c5a6fd693d3ce84d10bcc841",
+    "vertices": 128,
+    "triangles": 156,
+    "submeshes": 1,
+    "imported_min": [
+      -0.5,
+      -0.5,
+      -0.5
+    ],
+    "imported_max": [
+      0.5,
+      0.5,
+      0.5
+    ]
+  },
+  "Cylinder": {
+    "source": "Cerberus-Editor/Resources/Meshes/Source/Default/Cylinder.fbx",
+    "sha256": "1279e52bbc01055f9e529f36af61ba9917e42529e1379a4cc02e6a0ad626352f",
+    "vertices": 1357,
+    "triangles": 1408,
+    "submeshes": 1,
+    "imported_min": [
+      -0.5,
+      -0.5,
+      -0.5
+    ],
+    "imported_max": [
+      0.5,
+      0.5,
+      0.5
+    ]
+  },
+  "Torus": {
+    "source": "Cerberus-Editor/Resources/Meshes/Source/Default/Torus.fbx",
+    "sha256": "8da6749f8b76be3cfd13bcb95f22eda54622f4e88c77cfeb473f0d6c7dd0c02e",
+    "vertices": 1885,
+    "triangles": 3584,
+    "submeshes": 1,
+    "imported_min": [
+      -0.5000000074505806,
+      -0.10000000149011612,
+      -0.5000000074505806
+    ],
+    "imported_max": [
+      0.5000000074505806,
+      0.10000000149011612,
+      0.5000000074505806
+    ]
+  },
+  "Cone": {
+    "source": "Cerberus-Editor/Resources/Meshes/Source/Default/Cone.fbx",
+    "sha256": "bf8f627243f101b40aac93bcedce4e8095b684a45ab3f154a3a31a3ee09f1b79",
+    "vertices": 1869,
+    "triangles": 1536,
+    "submeshes": 1,
+    "imported_min": [
+      -0.5,
+      -0.5,
+      -0.5
+    ],
+    "imported_max": [
+      0.5,
+      0.5,
+      0.5
+    ]
+  }
+}

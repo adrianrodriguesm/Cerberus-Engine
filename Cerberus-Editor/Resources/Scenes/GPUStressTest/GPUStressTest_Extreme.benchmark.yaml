@@ -1,0 +1,43 @@
+{
+  "Cameras": [
+    {
+      "Name": "A Geometry Throughput",
+      "Position": [
+        0,
+        499.7,
+        504.7
+      ],
+      "Yaw": -90.0,
+      "Pitch": -31.889988554057126,
+      "FOV": 75,
+      "Near": 0.2,
+      "Far": 6000
+    },
+    {
+      "Name": "B Draw Call Overhead",
+      "Position": [
+        838,
+        3,
+        12
+      ],
+      "Yaw": -90.0,
+      "Pitch": 0.0,
+      "FOV": 65,
+      "Near": 0.2,
+      "Far": 6000
+    },
+    {
+      "Name": "C Visibility Occlusion",
+      "Position": [
+        1676,
+        2,
+        16
+      ],
+      "Yaw": -89.77203391045597,
+      "Pitch": 0.07598845147175155,
+      "FOV": 55,
+      "Near": 0.2,
+      "Far": 6000
+    }
+  ]
+}

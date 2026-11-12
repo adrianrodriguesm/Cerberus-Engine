@@ -1,0 +1,46 @@
+{
+  "scene": "GPUStressTest_High",
+  "preset": "High",
+  "mesh_instances": 50000,
+  "entities": 50002,
+  "triangles": 37889256,
+  "mesh_counts": {
+    "Cube": 34998,
+    "Cylinder": 6668,
+    "Torus": 5000,
+    "Cone": 3334
+  },
+  "districts": {
+    "A": {
+      "mesh_instances": 16680,
+      "triangles": 14798496
+    },
+    "B": {
+      "mesh_instances": 16660,
+      "triangles": 8310008
+    },
+    "C": {
+      "mesh_instances": 16660,
+      "triangles": 14780752
+    }
+  },
+  "unique_geometry_bytes": {
+    "vertices": 293384,
+    "indices": 80208,
+    "total": 373592
+  },
+  "t4_instance_and_args_bytes_per_frame": 9000000,
+  "t4_instance_and_args_bytes_three_frames": 27000000,
+  "triangles_submitted_with_predepth_four_shadows_forward": 227335536,
+  "fixed_geometry_pool_reserved_bytes": 402653184,
+  "scene_file_bytes": 16538202,
+  "scene_sha256": "580e10999313fb10f6bc066942f4fa4844f5165cabbf3416bcaaf74d0d103f29",
+  "camera_sha256": "1f2ddef5fed09db7338cfd4f87549e787174390d78a00c1fc3d786bf90b7573e",
+  "camera_targets": [
+    "A Geometry Throughput",
+    "B Draw Call Overhead",
+    "C Visibility Occlusion"
+  ],
+  "geometry_count_basis": "Bundled Assimp 4.x import with Cerberus flags; source SHA256 checked",
+  "runtime_validated": false
+}
