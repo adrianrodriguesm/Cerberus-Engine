@@ -1,9 +1,9 @@
 Scene: First Scene
-Renderer: PathTracer
+Renderer: Forward
 EditorCamera:
   Position: [18.303978, 5.29320145, 3.05609727]
-  Yaw: -164.519958
-  Pitch: -17.687748
+  Yaw: -164.584152
+  Pitch: -17.396265
 Entities:
   - Entity: 4837348124439365352
     RelationshipComponent:
@@ -33,7 +33,7 @@ Entities:
       Scale: [1, 1, 1]
     SkyLightComponent:
       AssetHandle: 12120527172450138203
-      Intensity: 2.20000005
+      Intensity: 0.600000024
       SampleLOD: 1
   - Entity: 13002030392834927472
     RelationshipComponent:
@@ -48,7 +48,7 @@ Entities:
       Scale: [1, 1, 1]
     DirectionalLightComponent:
       Radiance: [1, 1, 1]
-      Intensity: 3.42499995
+      Intensity: 0
   - Entity: 11660497299307709605
     RelationshipComponent:
       Parent: 0

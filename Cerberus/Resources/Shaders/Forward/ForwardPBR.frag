@@ -11,6 +11,12 @@ struct GPUMaterialData
     vec4 Parameters;
     // x = albedo, y = normal, z = metalness, w = roughness.
     uvec4 TextureIndices;
+    // x = emissive texture index, y/z/w reserved.
+    uvec4 TextureIndices2;
+    // x = packed metal-roughness (read TextureIndices.z/.w's shared texture as
+    // G=roughness, B=metalness instead of each map's own R),
+    // y = reconstruct normal Z from XY (BC5/2-channel normal maps).
+    vec4 Flags;
 };
 
 struct DirectionalLight
@@ -199,14 +205,22 @@ void main()
     if (IsValidTextureIndex(material.TextureIndices.x))
         albedo *= SampleMaterialTexture(material.TextureIndices.x, v_TexCoord).rgb;
 
+    bool packedSpecularGB = material.Flags.x > 0.5;
+
     float roughness = clamp(material.Parameters.x, 0.045, 1.0);
     if (IsValidTextureIndex(material.TextureIndices.w))
-        roughness *= SampleMaterialTexture(material.TextureIndices.w, v_TexCoord).r;
+    {
+        vec4 roughnessSample = SampleMaterialTexture(material.TextureIndices.w, v_TexCoord);
+        roughness *= packedSpecularGB ? roughnessSample.g : roughnessSample.r;
+    }
     roughness = clamp(roughness, 0.045, 1.0);
 
     float metalness = clamp(material.Parameters.y, 0.0, 1.0);
     if (IsValidTextureIndex(material.TextureIndices.z))
-        metalness *= SampleMaterialTexture(material.TextureIndices.z, v_TexCoord).r;
+    {
+        vec4 metalnessSample = SampleMaterialTexture(material.TextureIndices.z, v_TexCoord);
+        metalness *= packedSpecularGB ? metalnessSample.b : metalnessSample.r;
+    }
     metalness = clamp(metalness, 0.0, 1.0);
 
     vec3 normal = normalize(v_WorldNormal);
@@ -216,7 +230,12 @@ void main()
         vec3 referenceBinormal = normalize(v_WorldBinormal);
         float tangentSign = dot(cross(normal, tangent), referenceBinormal) < 0.0 ? -1.0 : 1.0;
         vec3 binormal = tangentSign * normalize(cross(normal, tangent));
-        vec3 tangentNormal = SampleMaterialTexture(material.TextureIndices.y, v_TexCoord).xyz * 2.0 - 1.0;
+        vec4 normalSample = SampleMaterialTexture(material.TextureIndices.y, v_TexCoord);
+        vec2 tangentNormalXY = normalSample.xy * 2.0 - 1.0;
+        float tangentNormalZ = material.Flags.y > 0.5
+            ? sqrt(clamp(1.0 - dot(tangentNormalXY, tangentNormalXY), 0.0, 1.0))
+            : normalSample.z * 2.0 - 1.0;
+        vec3 tangentNormal = vec3(tangentNormalXY, tangentNormalZ);
         normal = normalize(mat3(tangent, binormal, normal) * tangentNormal);
     }
 
@@ -260,7 +279,11 @@ void main()
         reflectionDirection,
         roughness * max(radianceMipCount - 1.0, 0.0)).rgb * fresnel;
     radiance += (diffuseIBL + specularIBL) * skyIntensity;
-    radiance += albedo * max(material.Parameters.z, 0.0);
+
+    vec3 emissiveColor = albedo;
+    if (IsValidTextureIndex(material.TextureIndices2.x))
+        emissiveColor = SampleMaterialTexture(material.TextureIndices2.x, v_TexCoord).rgb;
+    radiance += emissiveColor * max(material.Parameters.z, 0.0);
 
     // SceneColor stays linear HDR; tonemap/exposure/gamma happen once in the
     // Composite pass instead of being duplicated in every shading shader.

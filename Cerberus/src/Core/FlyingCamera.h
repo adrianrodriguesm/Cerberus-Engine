@@ -19,6 +19,9 @@ namespace cerberus
 		void OnEvent(Event& e);
 
 		void SetViewportSize(float width, float height);
+		// Far clip also bounds far-plane frustum culling -- raise it when a
+		// large scene has geometry being culled beyond the default distance.
+		void SetClipPlanes(float nearClip, float farClip);
 
 		const glm::mat4& GetViewMatrix() const { return m_ViewMatrix; }
 		glm::mat4 GetViewProjectionMatrix() const { return m_Projection * m_ViewMatrix; }

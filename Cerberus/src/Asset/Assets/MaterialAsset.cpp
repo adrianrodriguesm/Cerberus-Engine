@@ -17,7 +17,8 @@ namespace cerberus
 		uint32_t albedoTextureIndex,
 		uint32_t normalTextureIndex,
 		uint32_t metalnessTextureIndex,
-		uint32_t roughnessTextureIndex) const
+		uint32_t roughnessTextureIndex,
+		uint32_t emissiveTextureIndex) const
 	{
 		GPUMaterialData data{};
 		data.AlbedoColor = glm::vec4(m_Data.AlbedoColor, 1.0f);
@@ -31,6 +32,16 @@ namespace cerberus
 			normalTextureIndex,
 			metalnessTextureIndex,
 			roughnessTextureIndex);
+		data.TextureIndices2 = glm::uvec4(
+			emissiveTextureIndex,
+			InvalidMaterialTextureIndex,
+			InvalidMaterialTextureIndex,
+			InvalidMaterialTextureIndex);
+		data.Flags = glm::vec4(
+			m_Data.PackedSpecularGB ? 1.0f : 0.0f,
+			m_Data.ReconstructNormalZ ? 1.0f : 0.0f,
+			0.0f,
+			0.0f);
 		return data;
 	}
 
@@ -72,6 +83,26 @@ namespace cerberus
 	void MaterialAsset::SetEmission(float value)
 	{
 		m_Data.Emission = value;
+	}
+
+	bool MaterialAsset::IsPackedSpecularGB() const
+	{
+		return m_Data.PackedSpecularGB;
+	}
+
+	void MaterialAsset::SetPackedSpecularGB(bool value)
+	{
+		m_Data.PackedSpecularGB = value;
+	}
+
+	bool MaterialAsset::ShouldReconstructNormalZ() const
+	{
+		return m_Data.ReconstructNormalZ;
+	}
+
+	void MaterialAsset::SetReconstructNormalZ(bool value)
+	{
+		m_Data.ReconstructNormalZ = value;
 	}
 
 	AssetHandle MaterialAsset::GetAlbedoMapHandle() const
@@ -159,6 +190,26 @@ namespace cerberus
 	void MaterialAsset::ClearRoughnessMap()
 	{
 		m_Data.Textures.RoughnessMap = 0;
+	}
+
+	AssetHandle MaterialAsset::GetEmissiveMapHandle() const
+	{
+		return m_Data.Textures.EmissiveMap;
+	}
+
+	void MaterialAsset::SetEmissiveMap(AssetHandle textureAsset)
+	{
+		m_Data.Textures.EmissiveMap = textureAsset;
+	}
+
+	bool MaterialAsset::IsUsingEmissiveMap() const
+	{
+		return m_Data.Textures.HasEmissiveMap();
+	}
+
+	void MaterialAsset::ClearEmissiveMap()
+	{
+		m_Data.Textures.EmissiveMap = 0;
 	}
 
 	///////////////////////////////////////////////////////////////

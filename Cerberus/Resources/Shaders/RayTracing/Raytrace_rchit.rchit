@@ -80,13 +80,21 @@ void main()
     if (IsValidRTTextureIndex(material.TextureIndices.x))
         albedo *= SampleRTTexture(material.TextureIndices.x, texCoord).rgb;
 
+    bool packedSpecularGB = material.Flags.x > 0.5;
+
     float roughness = material.Parameters.x;
     if (IsValidRTTextureIndex(material.TextureIndices.w))
-        roughness *= SampleRTTexture(material.TextureIndices.w, texCoord).r;
+    {
+        vec4 roughnessSample = SampleRTTexture(material.TextureIndices.w, texCoord);
+        roughness *= packedSpecularGB ? roughnessSample.g : roughnessSample.r;
+    }
 
     float metalness = material.Parameters.y;
     if (IsValidRTTextureIndex(material.TextureIndices.z))
-        metalness *= SampleRTTexture(material.TextureIndices.z, texCoord).r;
+    {
+        vec4 metalnessSample = SampleRTTexture(material.TextureIndices.z, texCoord);
+        metalness *= packedSpecularGB ? metalnessSample.b : metalnessSample.r;
+    }
 
     if (material.Parameters.w > 0.5 &&
         IsValidRTTextureIndex(material.TextureIndices.y) &&
@@ -123,7 +131,10 @@ void main()
     Payload.Metalness = clamp(metalness, 0.0, 1.0);
     Payload.Albedo = albedo;
     Payload.MaterialIndex = materialIndex;
-    Payload.Emission = vec3(max(material.Parameters.z, 0.0));
+    vec3 emissiveColor = vec3(1.0);
+    if (IsValidRTTextureIndex(material.TextureIndices2.x))
+        emissiveColor = SampleRTTexture(material.TextureIndices2.x, texCoord).rgb;
+    Payload.Emission = emissiveColor * max(material.Parameters.z, 0.0);
     Payload.Hit = 1u;
     Payload.TexCoord = texCoord;
     Payload.InstanceIndex = instanceIndex;

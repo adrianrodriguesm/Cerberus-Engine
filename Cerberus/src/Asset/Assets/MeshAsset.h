@@ -40,6 +40,12 @@ namespace cerberus
 		// Version 1 compatibility: old .meta files keyed materials by submesh.
 		// They are migrated to MaterialSlots the next time the MeshSource is loaded.
 		std::map<uint32_t, AssetHandle> SubmeshMaterials;
+
+		// aiProcess_OptimizeMeshes merges meshes sharing a material, which destroys
+		// the per-object granularity later per-instance/mesh culling needs. Defaults
+		// to true (existing behavior); absent from every .meta written before this
+		// existed, which also defaults to true on load.
+		bool OptimizeMeshes = true;
 	};
 
 	// MeshSource is a representation of an actual asset file on disk (e.g .fbx, .obj, etc)
@@ -72,6 +78,8 @@ namespace cerberus
 		std::vector<Ref<MaterialAsset>>& GetMaterialsAsset() { return m_MaterialsAsset; }
 		const std::vector<Ref<MaterialAsset>>& GetMaterialsAsset() const { return m_MaterialsAsset; }
 		uint32_t GetMaterialSlotCount() const { return (uint32_t)m_MaterialsAsset.size(); }
+
+		bool GetOptimizeMeshes() const { return m_Properties.OptimizeMeshes; }
 
 		static AssetType GetStaticType() { return AssetType::MeshSource; }
 		AssetType GetAssetType() const { return GetStaticType(); }

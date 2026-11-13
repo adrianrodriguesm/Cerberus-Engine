@@ -2,12 +2,14 @@
 #include "MeshAsset.h"
 
 #include "Asset/AssetManager.h"
+#include "Asset/Assets/TextureAsset.h"
 
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 #include <assimp/Importer.hpp>
 #include <assimp/DefaultLogger.hpp>
 #include <assimp/LogStream.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <filesystem>
 #include <algorithm>
 #include <cctype>
@@ -33,15 +35,26 @@ namespace cerberus
 		return result;
 	}
 
-	static const uint32_t s_MeshImportFlags =
-		aiProcess_CalcTangentSpace |        // Create binormals/tangents just in case
-		aiProcess_Triangulate |             // Make sure we're triangles
-		aiProcess_SortByPType |             // Split meshes by primitive type
-		aiProcess_GenNormals |              // Make sure we have legit normals
-		aiProcess_GenUVCoords |             // Convert UVs if required 
-		aiProcess_OptimizeMeshes |          // Batch draws where possible
-		aiProcess_JoinIdenticalVertices |
-		aiProcess_ValidateDataStructure;    // Validation
+	static uint32_t GetMeshImportFlags(bool optimizeMeshes)
+	{
+		uint32_t flags =
+			aiProcess_CalcTangentSpace |        // Create binormals/tangents just in case
+			aiProcess_Triangulate |             // Make sure we're triangles
+			aiProcess_SortByPType |             // Split meshes by primitive type
+			aiProcess_GenNormals |              // Make sure we have legit normals
+			aiProcess_GenUVCoords |             // Convert UVs if required
+			aiProcess_JoinIdenticalVertices |
+			aiProcess_ValidateDataStructure;    // Validation
+
+		// Merges meshes sharing a material -- fewer draws, but destroys the
+		// per-object granularity later per-instance/mesh culling needs. Off for
+		// scenes (e.g. Bistro) that care about that granularity more than draw count
+		// at import time; see docs/tasks/T5-bistro-baseline.md.
+		if (optimizeMeshes)
+			flags |= aiProcess_OptimizeMeshes;
+
+		return flags;
+	}
 
 	struct LogStream : public Assimp::LogStream
 	{
@@ -66,7 +79,7 @@ namespace cerberus
 		LogStream::Initialize();
 
 		m_Importer = CreateScope<Assimp::Importer>();
-		const aiScene* scene = m_Importer->ReadFile(m_Properties.Filepath.string(), s_MeshImportFlags);
+		const aiScene* scene = m_Importer->ReadFile(m_Properties.Filepath.string(), GetMeshImportFlags(m_Properties.OptimizeMeshes));
 
 		if (!scene || !scene->HasMeshes())
 		{
@@ -76,9 +89,40 @@ namespace cerberus
 
 		m_Scene = scene;
 
+		// FBX stores geometry in the DCC tool's native modeling unit, not a fixed
+		// unit, and (at least for this importer's default flags) Assimp does not
+		// convert it -- a scene authored in meters (Bistro: UnitScaleFactor=100,
+		// i.e. 100 of the file's own units per meter) comes back with raw vertex
+		// positions still in those units. Baking 1/UnitScaleFactor into the root
+		// transform (rather than rescaling every vertex) folds the conversion into
+		// the same node-transform pipeline every other node offset already goes
+		// through. Formats with no such metadata (glTF, OBJ -- Sponza, DamagedHelmet,
+		// the Cerberus gun) read back 1.0 here and are completely unaffected.
+		// Assimp's FBX importer stores this metadata value as a float (see
+		// fbx_simple_property(UnitScaleFactor, float, 1) in FBXDocument.h), not a
+		// double -- Get<T> checks the stored type exactly, so asking for a double
+		// here always silently returns false (this is also why Assimp's own
+		// internal up-axis/scale correction in FBXConverter.cpp, which makes the
+		// same double-typed request, never actually applies for this vendored
+		// Assimp version).
+		float unitScaleFactor = 1.0f;
+		if (scene->mMetaData && scene->mMetaData->Get("UnitScaleFactor", unitScaleFactor) && unitScaleFactor > 0.0f)
+		{
+			if (unitScaleFactor != 1.0f)
+				NV_MESH_LOG("{0}: FBX UnitScaleFactor = {1}, scaling geometry by 1/{1}", m_Properties.Filepath.string(), unitScaleFactor);
+		}
+		else
+		{
+			unitScaleFactor = 1.0f;
+		}
+		const glm::mat4 unitScaleTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f / unitScaleFactor));
+
 		LoadGeometry();
-		TraverseNodes(scene->mRootNode);
+		TraverseNodes(scene->mRootNode, unitScaleTransform);
 		LoadMaterials();
+
+		NV_MESH_LOG("{0}: OptimizeMeshes={1} submeshes={2} vertices={3} indices={4}",
+			m_Properties.Filepath.string(), m_Properties.OptimizeMeshes, m_Submeshes.size(), m_Vertices.size(), m_Indices.size());
 	}
 
 	MeshSource::~MeshSource()
@@ -306,6 +350,44 @@ namespace cerberus
 						(contains("roughness") || contains("_rough")))
 					{
 						materialAsset->SetRoughnessMap(texture);
+						changed = true;
+					}
+					else if (materialAsset->GetEmissiveMapHandle() == 0 &&
+						(contains("emissive") || contains("emission")))
+					{
+						materialAsset->SetEmissiveMap(texture);
+						changed = true;
+					}
+					// Lumberyard-style combined "_Specular" map: R unused, G =
+					// roughness, B = metalness (verified by decoding real Bistro
+					// textures -- see docs/benchmarks/bistro-inspection.md). Only
+					// takes the slot if the material has no dedicated metalness/
+					// roughness map of its own.
+					else if (materialAsset->GetMetalnessMapHandle() == 0 &&
+						materialAsset->GetRoughnessMapHandle() == 0 &&
+						(contains("specular") || contains("_spec")))
+					{
+						materialAsset->SetMetalnessMap(texture);
+						materialAsset->SetRoughnessMap(texture);
+						materialAsset->SetPackedSpecularGB(true);
+						changed = true;
+					}
+				}
+			}
+
+			if (materialAsset->GetNormalMapHandle() != 0)
+			{
+				// BC5/ATI2 normal maps store only XY -- the shader must
+				// reconstruct Z from them instead of sampling a nonexistent
+				// stored one. Detected from the already-imported texture's real
+				// GPU format rather than assumed from the source file extension.
+				Ref<TextureAsset> normalMapTexture = AssetManager::GetAsset<TextureAsset>(materialAsset->GetNormalMapHandle());
+				if (normalMapTexture &&
+					(normalMapTexture->GetFormat() == ImageFormat::BC5_UNORM || normalMapTexture->GetFormat() == ImageFormat::BC5_SNORM))
+				{
+					if (!materialAsset->ShouldReconstructNormalZ())
+					{
+						materialAsset->SetReconstructNormalZ(true);
 						changed = true;
 					}
 				}

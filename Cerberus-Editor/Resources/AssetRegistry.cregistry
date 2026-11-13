@@ -659,6 +659,9 @@ Assets:
   - Handle: 3851816877174300327
     FilePath: Resources/Meshes/Source/Bunny/bunny/data/bun045.ply
     Type: MeshSource
+  - Handle: 3868366382972556736
+    FilePath: Resources/Scenes/GPUStressTest/GPUStressTest_Extreme.cscene
+    Type: Scene
   - Handle: 3878080324381233046
     FilePath: Resources/Meshes/Source/Bistro_v5_2/Textures/MASTER_Concrete1_Specular.dds
     Type: Texture
@@ -752,6 +755,9 @@ Assets:
   - Handle: 4420944814497407070
     FilePath: Resources/Meshes/Source/Bistro_v5_2/Textures/Sidewalkbarrier_Specular.dds
     Type: Texture
+  - Handle: 4421304461328254539
+    FilePath: Resources/Scenes/GPUStressTest/GPUStressTest_High.cscene
+    Type: Scene
   - Handle: 4437939153708337553
     FilePath: Resources/Meshes/Source/Bistro_v5_2/Textures/MASTER_Bronze_BLENDSHADER_BaseColor.dds
     Type: Texture
@@ -1838,6 +1844,9 @@ Assets:
   - Handle: 10478010468723703010
     FilePath: Resources/Meshes/Source/Bistro_v5_2/Textures/Pavement_Cobblestone_Wet_Leaves_BLENDSHADER_Specular.dds
     Type: Texture
+  - Handle: 10498931162128314077
+    FilePath: Resources/Scenes/GPUStressTest/GPUStressTest.cscene
+    Type: Scene
   - Handle: 10514580710528334036
     FilePath: Resources/Meshes/Source/Sponza/16275776544635328252.png
     Type: Texture
@@ -2462,6 +2471,9 @@ Assets:
   - Handle: 13678566521165017911
     FilePath: Resources/Meshes/Source/Bistro_v5_2/Textures/Shopsign_Bakery_Specular.dds
     Type: Texture
+  - Handle: 13689643735533052498
+    FilePath: Resources/Scenes/GPUStressTest/GPUStressTest_Medium.cscene
+    Type: Scene
   - Handle: 13695292721918567217
     FilePath: Resources/Meshes/Source/Bistro_v5_2/Textures/Paris_StringLights_01_Blue_Color_Specular.dds
     Type: Texture

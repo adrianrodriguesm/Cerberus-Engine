@@ -969,6 +969,25 @@ namespace cerberus
 					RequestSceneRenderer(SceneRendererType::PathTracer);
 				ImGui::EndMenu();
 			}
+
+			if (ImGui::BeginMenu("Camera"))
+			{
+				// The editor's own far-clip plane -- separate from any
+				// scene/gameplay camera. Large scenes (e.g. a city block or an
+				// outdoor level) can easily exceed the default far plane, which
+				// then frustum-culls geometry that is still well within what the
+				// user wants to see. Exposed here rather than hardcoded so it can
+				// be raised per-scene without a rebuild.
+				float nearClip = m_Camera.GetNearPlane();
+				float farClip = m_Camera.GetFarPlane();
+				ImGui::PushItemWidth(120.0f);
+				if (ImGui::DragFloat("Near Clip", &nearClip, 0.05f, 0.001f, farClip - 0.01f, "%.3f"))
+					m_Camera.SetClipPlanes(nearClip, farClip);
+				if (ImGui::DragFloat("Far Clip", &farClip, 10.0f, nearClip + 0.01f, 1000000.0f, "%.1f"))
+					m_Camera.SetClipPlanes(nearClip, farClip);
+				ImGui::PopItemWidth();
+				ImGui::EndMenu();
+			}
 			ImGui::EndMenuBar();
 		}
 	}

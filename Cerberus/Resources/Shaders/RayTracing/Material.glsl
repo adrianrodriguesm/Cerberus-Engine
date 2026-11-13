@@ -16,6 +16,14 @@ struct GPUMaterialData
     // z = MetalnessTextureIndex
     // w = RoughnessTextureIndex
     uvec4 TextureIndices;
+
+    // x = emissive texture index, y/z/w reserved.
+    uvec4 TextureIndices2;
+
+    // x = packed metal-roughness (TextureIndices.z/.w share one texture; read
+    // its G as roughness and B as metalness instead of each map's own R),
+    // y = reconstruct normal Z from XY (BC5/2-channel normal maps).
+    vec4 Flags;
 };
 
 layout(std430, set = 0, binding = 3) readonly buffer MaterialBuffer

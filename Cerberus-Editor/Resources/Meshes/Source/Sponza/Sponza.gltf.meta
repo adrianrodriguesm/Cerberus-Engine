@@ -1,5 +1,6 @@
 MeshSourceImporter:
   Version: 2
+  OptimizeMeshes: true
   Materials:
     - MaterialSlot: 0
       MaterialHandle: 6095182811893659649

@@ -18,6 +18,16 @@ namespace cerberus
 		// x = Roughness, y = Metalness, z = Emission, w = UseNormalMap
 		glm::vec4 Parameters = glm::vec4(0.4f, 0.0f, 0.0f, 0.0f);
 		glm::uvec4 TextureIndices = glm::uvec4(InvalidMaterialTextureIndex);
+		// x = emissive texture index (tints AlbedoColor.rgb * Parameters.z as its
+		// own colour instead of reusing the albedo texture), y/z/w reserved.
+		glm::uvec4 TextureIndices2 = glm::uvec4(InvalidMaterialTextureIndex);
+		// x = packed metal-roughness (TextureIndices.z/.w point at one texture;
+		// read its G as roughness and B as metalness instead of each map's own R
+		// -- see docs/tasks/T5-bistro-baseline.md), y = reconstruct normal-map Z
+		// from XY instead of sampling it (BC5/2-channel normal maps store no Z).
+		// Both default to 0 so every material imported before this field existed
+		// keeps its exact current (unpacked, stored-Z) behavior.
+		glm::vec4 Flags = glm::vec4(0.0f);
 	};
 
 	struct MaterialProxy

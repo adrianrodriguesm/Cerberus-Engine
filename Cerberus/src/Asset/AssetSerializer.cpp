@@ -18,9 +18,11 @@ namespace cerberus
 		out << YAML::BeginMap;
 		out << YAML::Key << "MeshSourceImporter" << YAML::Value << YAML::BeginMap;
 		out << YAML::Key << "Version" << YAML::Value << 2;
-		out << YAML::Key << "Materials" << YAML::Value << YAML::BeginSeq;
 
 		Ref<MeshSource> meshSource = std::dynamic_pointer_cast<MeshSource>(asset);
+		out << YAML::Key << "OptimizeMeshes" << YAML::Value << meshSource->GetOptimizeMeshes();
+		out << YAML::Key << "Materials" << YAML::Value << YAML::BeginSeq;
+
 		const auto& materialAssets = meshSource->GetMaterialsAsset();
 		for (uint32_t materialSlot = 0; materialSlot < materialAssets.size(); materialSlot++)
 		{
@@ -63,6 +65,12 @@ namespace cerberus
 		// material slots that are not currently referenced by a submesh.
 		if (importerNode.IsMap())
 		{
+			// Absent on every .meta written before this existed -- defaults to
+			// true there, matching the aiProcess_OptimizeMeshes-always-on behavior
+			// those imports already happened with.
+			if (importerNode["OptimizeMeshes"])
+				meshSourceProp.OptimizeMeshes = importerNode["OptimizeMeshes"].as<bool>();
+
 			const YAML::Node materials = importerNode["Materials"];
 			if (materials && materials.IsSequence())
 			{
@@ -478,12 +486,15 @@ namespace cerberus
 			out << YAML::Key << "Metalness" << YAML::Value << material->GetMetalness();
 			out << YAML::Key << "Roughness" << YAML::Value << material->GetRoughness();
 			out << YAML::Key << "Emission" << YAML::Value << material->GetEmission();
+			out << YAML::Key << "PackedSpecularGB" << YAML::Value << material->IsPackedSpecularGB();
+			out << YAML::Key << "ReconstructNormalZ" << YAML::Value << material->ShouldReconstructNormalZ();
 
 			// Texture asset handles. Runtime GPU texture handles / bindless indices are created later by RenderScene/MaterialProxy.
 			out << YAML::Key << "AlbedoMapHandle" << YAML::Value << (uint64_t)material->GetAlbedoMapHandle();
 			out << YAML::Key << "NormalMapHandle" << YAML::Value << (uint64_t)material->GetNormalMapHandle();
 			out << YAML::Key << "MetalnessMapHandle" << YAML::Value << (uint64_t)material->GetMetalnessMapHandle();
 			out << YAML::Key << "RoughnessMapHandle" << YAML::Value << (uint64_t)material->GetRoughnessMapHandle();
+			out << YAML::Key << "EmissiveMapHandle" << YAML::Value << (uint64_t)material->GetEmissiveMapHandle();
 
 			out << YAML::EndMap;
 		}
@@ -515,6 +526,14 @@ namespace cerberus
 		if (rootNode["Emission"])
 			material->SetEmission(rootNode["Emission"].as<float>());
 
+		// Absent on every material serialized before these existed -- default
+		// false there, matching the unpacked/stored-Z behavior they already render with.
+		if (rootNode["PackedSpecularGB"])
+			material->SetPackedSpecularGB(rootNode["PackedSpecularGB"].as<bool>());
+
+		if (rootNode["ReconstructNormalZ"])
+			material->SetReconstructNormalZ(rootNode["ReconstructNormalZ"].as<bool>());
+
 		if (rootNode["AlbedoMapHandle"])
 			material->SetAlbedoMap((AssetHandle)rootNode["AlbedoMapHandle"].as<uint64_t>());
 
@@ -526,6 +545,9 @@ namespace cerberus
 
 		if (rootNode["RoughnessMapHandle"])
 			material->SetRoughnessMap((AssetHandle)rootNode["RoughnessMapHandle"].as<uint64_t>());
+
+		if (rootNode["EmissiveMapHandle"])
+			material->SetEmissiveMap((AssetHandle)rootNode["EmissiveMapHandle"].as<uint64_t>());
 
 		// SetNormalMap enables normal sampling for newly assigned textures. Restore
 		// the serialized user toggle afterwards so a present-but-disabled normal map

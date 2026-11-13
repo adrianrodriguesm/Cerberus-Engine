@@ -376,12 +376,14 @@ namespace cerberus
 		const uint32_t normalTextureIndex = RegisterTextureProxy(materialAsset->GetNormalMapHandle(), false);
 		const uint32_t metalnessTextureIndex = RegisterTextureProxy(materialAsset->GetMetalnessMapHandle(), false);
 		const uint32_t roughnessTextureIndex = RegisterTextureProxy(materialAsset->GetRoughnessMapHandle(), false);
+		const uint32_t emissiveTextureIndex = RegisterTextureProxy(materialAsset->GetEmissiveMapHandle(), true);
 
 		return materialAsset->BuildGPUMaterialData(
 			albedoTextureIndex,
 			normalTextureIndex,
 			metalnessTextureIndex,
-			roughnessTextureIndex);
+			roughnessTextureIndex,
+			emissiveTextureIndex);
 	}
 
 	bool RenderScene::UpdateMaterialProxy(const Ref<MaterialAsset>& materialAsset)

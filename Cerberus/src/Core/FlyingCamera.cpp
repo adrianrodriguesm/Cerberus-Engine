@@ -209,6 +209,16 @@ namespace cerberus
 
 	}
 
+	void FlyingCamera::SetClipPlanes(float nearClip, float farClip)
+	{
+		if (m_NearClip != nearClip || m_FarClip != farClip)
+		{
+			m_NearClip = nearClip;
+			m_FarClip = farClip;
+			UpdateProjection();
+		}
+	}
+
 	bool FlyingCamera::OnMouseScroll(MouseScrolledEvent& event)
 	{
 		if (m_State != CameraState::FreeMovement)

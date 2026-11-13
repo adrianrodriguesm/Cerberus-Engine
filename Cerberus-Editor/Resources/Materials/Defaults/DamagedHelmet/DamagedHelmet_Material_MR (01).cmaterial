@@ -4,7 +4,10 @@ Material:
   Metalness: 0
   Roughness: 1
   Emission: 0
+  PackedSpecularGB: false
+  ReconstructNormalZ: false
   AlbedoMapHandle: 15014066350684825392
   NormalMapHandle: 7918014648360710985
   MetalnessMapHandle: 14122789374367128100
   RoughnessMapHandle: 14122789374367128100
+  EmissiveMapHandle: 10917895246471221562

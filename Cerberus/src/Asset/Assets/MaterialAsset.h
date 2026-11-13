@@ -21,11 +21,13 @@ namespace cerberus
 		AssetHandle NormalMap = 0;
 		AssetHandle MetalnessMap = 0;
 		AssetHandle RoughnessMap = 0;
+		AssetHandle EmissiveMap = 0;
 
 		bool HasAlbedoMap() const { return AlbedoMap != 0; }
 		bool HasNormalMap() const { return NormalMap != 0; }
 		bool HasMetalnessMap() const { return MetalnessMap != 0; }
 		bool HasRoughnessMap() const { return RoughnessMap != 0; }
+		bool HasEmissiveMap() const { return EmissiveMap != 0; }
 	};
 
 	// CPU/high-level material data. This is renderer-agnostic and serializable.
@@ -37,6 +39,13 @@ namespace cerberus
 		float Roughness = 0.4f;
 		float Emission = 0.0f;
 		bool UseNormalMap = false;
+		// MetalnessMap/RoughnessMap point at the same combined texture (e.g. a
+		// Lumberyard-style "_Specular" map) and should be read as G=roughness,
+		// B=metalness rather than each map's own R channel.
+		bool PackedSpecularGB = false;
+		// NormalMap is BC5/2-channel; reconstruct Z from XY instead of sampling
+		// a stored (nonexistent) Z.
+		bool ReconstructNormalZ = false;
 
 		MaterialTextureAssetSlots Textures;
 	};
@@ -58,7 +67,8 @@ namespace cerberus
 			uint32_t albedoTextureIndex = InvalidMaterialTextureIndex,
 			uint32_t normalTextureIndex = InvalidMaterialTextureIndex,
 			uint32_t metalnessTextureIndex = InvalidMaterialTextureIndex,
-			uint32_t roughnessTextureIndex = InvalidMaterialTextureIndex) const;
+			uint32_t roughnessTextureIndex = InvalidMaterialTextureIndex,
+			uint32_t emissiveTextureIndex = InvalidMaterialTextureIndex) const;
 
 		glm::vec3& GetAlbedoColor();
 		void SetAlbedoColor(const glm::vec3& color);
@@ -71,6 +81,12 @@ namespace cerberus
 
 		float& GetEmission();
 		void SetEmission(float value);
+
+		bool IsPackedSpecularGB() const;
+		void SetPackedSpecularGB(bool value);
+
+		bool ShouldReconstructNormalZ() const;
+		void SetReconstructNormalZ(bool value);
 
 		// Texture asset handles. The renderer later resolves these to GPU texture handles
 		// and bindless texture indices through MaterialProxy/RenderScene.
@@ -94,6 +110,11 @@ namespace cerberus
 		void SetRoughnessMap(AssetHandle textureAsset);
 		bool IsUsingRoughnessMap() const;
 		void ClearRoughnessMap();
+
+		AssetHandle GetEmissiveMapHandle() const;
+		void SetEmissiveMap(AssetHandle textureAsset);
+		bool IsUsingEmissiveMap() const;
+		void ClearEmissiveMap();
 
 		static AssetType GetStaticType() { return AssetType::Material; }
 		virtual AssetType GetAssetType() const override { return GetStaticType(); }
