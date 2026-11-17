@@ -412,6 +412,16 @@ namespace cerberus
 		vkCmdSetScissor(GetNative(), 0, 1, &scissor);
 	}
 
+	void GraphicsCommandList::RecordDrawCall()
+	{
+		if (RendererFrameStatistics* statistics = GetStatistics())
+		{
+			++statistics->DrawCallCount;
+			if (m_MaskedDrawStatistics)
+				++statistics->MaskedDrawCallCount;
+		}
+	}
+
 	void GraphicsCommandList::Draw(
 		uint32_t vertexCount,
 		uint32_t instanceCount,
@@ -419,8 +429,7 @@ namespace cerberus
 		uint32_t firstInstance)
 	{
 		vkCmdDraw(GetNative(), vertexCount, instanceCount, firstVertex, firstInstance);
-		if (RendererFrameStatistics* statistics = GetStatistics())
-			++statistics->DrawCallCount;
+		RecordDrawCall();
 	}
 
 	void GraphicsCommandList::DrawIndexed(
@@ -431,8 +440,7 @@ namespace cerberus
 		uint32_t firstInstance)
 	{
 		vkCmdDrawIndexed(GetNative(), indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
-		if (RendererFrameStatistics* statistics = GetStatistics())
-			++statistics->DrawCallCount;
+		RecordDrawCall();
 	}
 
 	void GraphicsCommandList::DrawIndexedIndirect(
@@ -444,8 +452,7 @@ namespace cerberus
 		GPUBuffer* argsBuffer = ResourceManager::GetBuffer(args);
 		CORE_ASSERT(argsBuffer, "Invalid indirect args buffer");
 		vkCmdDrawIndexedIndirect(GetNative(), argsBuffer->Buffer, offset, drawCount, stride);
-		if (RendererFrameStatistics* statistics = GetStatistics())
-			++statistics->DrawCallCount;
+		RecordDrawCall();
 	}
 
 	void GraphicsCommandList::DrawIndexedIndirectCount(
@@ -461,8 +468,7 @@ namespace cerberus
 		CORE_ASSERT(argsBuffer, "Invalid indirect args buffer");
 		CORE_ASSERT(countBuffer, "Invalid indirect count buffer");
 		vkCmdDrawIndexedIndirectCount(GetNative(), argsBuffer->Buffer, offset, countBuffer->Buffer, countOffset, maxDrawCount, stride);
-		if (RendererFrameStatistics* statistics = GetStatistics())
-			++statistics->DrawCallCount;
+		RecordDrawCall();
 	}
 
 	void GraphicsCommandList::DrawFullscreen(
@@ -533,7 +539,8 @@ namespace cerberus
 	void GraphicsCommandList::ExecuteDrawIndirect(
 		const DrawArea& drawArea,
 		Handle<GPUBuffer> args,
-		uint32_t drawCount)
+		uint32_t drawCount,
+		uint64_t byteOffset)
 	{
 		if (drawCount == 0)
 			return;
@@ -559,6 +566,10 @@ namespace cerberus
 			VK_SHADER_STAGE_VERTEX_BIT,
 			AsBytes(pushConstants));
 
-		DrawIndexedIndirect(args, 0, drawCount, sizeof(IndirectDrawCommand));
+		const GPUBuffer* buffer = ResourceManager::GetBuffer(args);
+		CORE_ASSERT(buffer && byteOffset % sizeof(uint32_t) == 0
+			&& byteOffset + uint64_t(drawCount) * sizeof(IndirectDrawCommand) <= buffer->Size,
+			"Indirect draw range exceeds argument buffer");
+		DrawIndexedIndirect(args, byteOffset, drawCount, sizeof(IndirectDrawCommand));
 	}
 }

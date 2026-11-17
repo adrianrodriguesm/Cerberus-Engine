@@ -12,6 +12,7 @@ namespace cerberus
 	struct GPUBuffer;
 	class GraphicsCommandList;
 	class GraphicsPipeline;
+	class BindGroup;
 
 	constexpr uint32_t ShadowCascadeCount = 4;
 
@@ -36,6 +37,7 @@ namespace cerberus
 	struct ShadowPassResources
 	{
 		Handle<GraphicsPipeline> Pipeline;
+		Handle<BindGroup> BindGroup;
 	};
 
 	struct ShadowPassParameters
@@ -53,6 +55,8 @@ namespace cerberus
 		bool UseIndirect = false;
 		Handle<GPUBuffer> IndirectArgs;
 		uint32_t IndirectDrawCount = 0;
+		uint64_t IndirectByteOffset = 0;
+		uint32_t StreamOffset = 0;
 	};
 
 	// Depth-only pass from one cascade's light-space view, called once per

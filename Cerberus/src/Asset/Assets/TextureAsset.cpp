@@ -7,6 +7,53 @@ namespace cerberus
 {
 	namespace
 	{
+		// Inspect top-level BC alpha selectors, rather than treating every RGBA
+		// container as masked (many ordinary albedos contain only alpha=255).
+		template<typename Pixels>
+		bool HasBCAlpha(const Pixels& pixels, ImageFormat format)
+		{
+			const bool bc1 = format == ImageFormat::BC1_RGBA || format == ImageFormat::BC1_SRGBA;
+			const bool bc2 = format == ImageFormat::BC2_RGBA || format == ImageFormat::BC2_SRGBA;
+			const bool bc3 = format == ImageFormat::BC3_RGBA || format == ImageFormat::BC3_SRGBA;
+			if (!bc1 && !bc2 && !bc3)
+				return false;
+			const size_t stride = bc1 ? 8 : 16;
+			for (size_t offset = 0; offset + stride <= pixels.size(); offset += stride)
+			{
+				const auto* block = pixels.data() + offset;
+				if (bc1)
+				{
+					const uint16_t c0 = uint16_t(block[0]) | (uint16_t(block[1]) << 8);
+					const uint16_t c1 = uint16_t(block[2]) | (uint16_t(block[3]) << 8);
+					if (c0 <= c1)
+						for (uint32_t i = 0; i < 16; ++i)
+							if (((block[4 + i / 4] >> (2 * (i % 4))) & 3) == 3)
+								return true;
+				}
+				else if (bc2)
+				{
+					for (uint32_t i = 0; i < 8; ++i)
+						if (block[i] != 255) return true;
+				}
+				else
+				{
+					uint64_t selectors = 0;
+					for (uint32_t i = 0; i < 6; ++i)
+						selectors |= uint64_t(block[2 + i]) << (8 * i);
+					for (uint32_t i = 0; i < 16; ++i)
+					{
+						const uint32_t selector = (selectors >> (3 * i)) & 7;
+						const bool opaque = selector == 0 ? block[0] == 255
+							: selector == 1 ? block[1] == 255
+							: (block[0] <= block[1] && selector == 7)
+								|| (block[0] == 255 && block[1] == 255 && selector <= 5);
+						if (!opaque) return true;
+					}
+				}
+			}
+			return false;
+		}
+
 		ImageFormat ImageFormatFromDDS(const dds::Image& image)
 		{
 			switch (dds::getVulkanFormat(image.format, image.supportsAlpha))
@@ -81,6 +128,14 @@ namespace cerberus
 
 			m_Width = ddsImage.width;
 			m_Height = ddsImage.height;
+			m_HasAlphaContent = HasBCAlpha(ddsImage.mipmaps.front(), m_Format);
+			// BC1 RGB uses selector 3 as black, while BC1 RGBA uses it as
+			// transparent. The DDS alpha flag distinguishes authoring intent.
+			if ((m_Format == ImageFormat::BC1_RGBA || m_Format == ImageFormat::BC1_SRGBA) && !ddsImage.supportsAlpha)
+				m_HasAlphaContent = false;
+			// BC7 alpha intent is supplied by the DDS header; no BC7 CPU decoder.
+			if (m_Format == ImageFormat::BC7_RGBA || m_Format == ImageFormat::BC7_SRGBA)
+				m_HasAlphaContent = ddsImage.supportsAlpha;
 			NV_CORE_INFO("Loaded DDS {0}: {1}x{2}, {3} mips, VkFormat {4}",
 				m_Metadata.FilePath.string(), m_Width, m_Height, m_MipData.size(),
 				static_cast<int>(utils::VulkanImageFormat(m_Format)));
@@ -123,6 +178,12 @@ namespace cerberus
 			return;
 		}
 
+		if (!isHDR)
+		{
+			const auto* pixels = static_cast<const uint8_t*>(decodedPixels);
+			for (uint64_t i = 3; i < decodedSize; i += 4)
+				if (pixels[i] != 255) { m_HasAlphaContent = true; break; }
+		}
 		// stb_image owns the decode allocation. Copy into Cerberus Buffer storage so
 		// TextureAsset has one allocator/deallocator pair for both LDR and HDR data.
 		m_ImageData = Buffer::Copy(decodedPixels, static_cast<uint32_t>(decodedSize));

@@ -45,6 +45,7 @@ namespace cerberus
 		AssetType GetAssetType() const { return GetStaticType(); }
 
 		ImageFormat GetFormat() const { return m_Format; }
+		bool HasAlphaContent() const { return m_HasAlphaContent; }
 		uint32_t GetWidth() const { return m_Width; }
 		uint32_t GetHeight() const { return m_Height; }
 		const Buffer& GetPixelData() const { return m_ImageData; }
@@ -58,6 +59,7 @@ namespace cerberus
 		uint32_t m_Width = 0;
 		uint32_t m_Height = 0;
 		ImageFormat m_Format = ImageFormat::None;
+		bool m_HasAlphaContent = false;
 		Buffer m_ImageData;
 		std::vector<TextureMipData> m_MipData;
 	};

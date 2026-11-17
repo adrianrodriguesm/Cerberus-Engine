@@ -15,6 +15,19 @@
 
 namespace cerberus
 {
+	// Opaque then Masked, each split by culling state. Stable within each range.
+	struct RasterDrawRange
+	{
+		uint32_t FirstInstance = 0;
+		uint32_t Count = 0;
+		uint32_t StreamOffset = 0; // uint32 words, independently decodable
+	};
+	constexpr uint32_t RasterBucketCount = 4;
+	// Opaque back/none, then masked back/none; shared with pipeline setup.
+	constexpr uint32_t GetRasterBucketIndex(bool masked, bool twoSided)
+	{
+		return uint32_t(masked) * 2u + uint32_t(twoSided);
+	}
 	class Texture2D;
 	class TextureCube;
 	struct EnvironmentMap;
@@ -125,6 +138,7 @@ namespace cerberus
 		void BuildDrawStream();
 		std::span<const uint32_t> GetDrawStream() const { return m_DrawStream; }
 		uint32_t GetDrawStreamCount() const { return m_DrawStreamCount; }
+		const std::array<RasterDrawRange, RasterBucketCount>& GetDrawRanges() const { return m_DrawRanges; }
 
 		// Rewrites the current frame-in-flight's GPUInstanceData buffer from
 		// RasterMeshInstances, in the same order BuildDrawStream() walks them
@@ -147,9 +161,9 @@ namespace cerberus
 		// BuildInstanceBuffer()/BuildDrawStream() (instanceCount=1,
 		// firstInstance=that instance's slot, so each indirect draw reads
 		// its own GPUInstanceData exactly like the Direct path's per-draw
-		// firstInstance does). A single range today -- no masked/blend
-		// pipeline bucketing exists yet to split on; see
-		// docs/tasks/T4-instances-indirect.md.
+		// firstInstance does). BuildDrawStream prepares the shared bucket order
+		// first. GetDrawRanges returns contiguous Opaque/Masked ranges, each
+		// subdivided by culling state. Indirect offsets are FirstInstance * 20.
 		void BuildIndirectArgs(uint32_t frameIndex);
 		Handle<GPUBuffer> GetIndirectArgsBuffer(uint32_t frameIndex) const { return m_IndirectArgsBuffers[frameIndex]; }
 
@@ -190,6 +204,9 @@ namespace cerberus
 		// callbacks) explicitly before returning regardless, but this keeps
 		// the member order itself consistent with that lifetime requirement.
 		GeometryPool m_GeometryPool;
+		std::vector<Handle<MeshInstanceProxy>> m_OrderedRasterInstances;
+		std::vector<uint32_t> m_RasterBucketIndices;
+		std::array<RasterDrawRange, RasterBucketCount> m_DrawRanges{};
 
 		// One GPUInstanceData buffer per frame-in-flight -- see
 		// BuildInstanceBuffer()'s comment. Capacity tracks each slot's current

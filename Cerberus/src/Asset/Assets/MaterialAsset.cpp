@@ -18,7 +18,8 @@ namespace cerberus
 		uint32_t normalTextureIndex,
 		uint32_t metalnessTextureIndex,
 		uint32_t roughnessTextureIndex,
-		uint32_t emissiveTextureIndex) const
+		uint32_t emissiveTextureIndex,
+		uint32_t opacityTextureIndex) const
 	{
 		GPUMaterialData data{};
 		data.AlbedoColor = glm::vec4(m_Data.AlbedoColor, 1.0f);
@@ -34,7 +35,7 @@ namespace cerberus
 			roughnessTextureIndex);
 		data.TextureIndices2 = glm::uvec4(
 			emissiveTextureIndex,
-			InvalidMaterialTextureIndex,
+			opacityTextureIndex,
 			InvalidMaterialTextureIndex,
 			InvalidMaterialTextureIndex);
 		data.Flags = glm::vec4(
@@ -42,6 +43,8 @@ namespace cerberus
 			m_Data.ReconstructNormalZ ? 1.0f : 0.0f,
 			0.0f,
 			0.0f);
+		data.AlphaParameters = glm::vec4(m_Data.AlphaCutoff,
+			m_Data.Alpha == AlphaMode::Masked ? 1.0f : 0.0f, m_Data.TwoSided ? 1.0f : 0.0f, 0.0f);
 		return data;
 	}
 

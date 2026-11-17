@@ -538,6 +538,15 @@ namespace cerberus
 		// Core/Profiler.h).
 		const bool profilingEnabled = Profiler::IsEnabled();
 
+		RendererFrameStatistics localStatistics{};
+		if (!statistics)
+			statistics = &localStatistics;
+		for (Pass& pass : m_Passes)
+		{
+			pass.DrawCallCount = 0;
+			pass.MaskedDrawCallCount = 0;
+		}
+
 		GraphicsCommandList graphics(commandBuffer.GetRecordingView(frameIndex), statistics);
 		RayTracingCommandList rayTracing(commandBuffer.GetRecordingView(frameIndex), statistics);
 		ComputeCommandList compute(commandBuffer.GetRecordingView(frameIndex), statistics);
@@ -612,7 +621,12 @@ namespace cerberus
 						{
 							pass.GPUTimeQueryID = commandBuffer.BeginTimestampQueryRenderThread();
 						}
+						const uint32_t drawsBefore = statistics->DrawCallCount;
+						const uint32_t maskedDrawsBefore = statistics->MaskedDrawCallCount;
+						graphics.SetMaskedDrawStatistics(false);
 						pass.GraphicsExecute(graphics);
+						pass.DrawCallCount = statistics->DrawCallCount - drawsBefore;
+						pass.MaskedDrawCallCount = statistics->MaskedDrawCallCount - maskedDrawsBefore;
 						if (profilingEnabled)
 						{
 							commandBuffer.EndTimestampQueryRenderThread(pass.GPUTimeQueryID);
@@ -629,7 +643,12 @@ namespace cerberus
 						{
 							pass.GPUTimeQueryID = commandBuffer.BeginTimestampQueryRenderThread();
 						}
+						const uint32_t drawsBefore = statistics->DrawCallCount;
+						const uint32_t maskedDrawsBefore = statistics->MaskedDrawCallCount;
+						graphics.SetMaskedDrawStatistics(false);
 						pass.GraphicsExecute(graphics);
+						pass.DrawCallCount = statistics->DrawCallCount - drawsBefore;
+						pass.MaskedDrawCallCount = statistics->MaskedDrawCallCount - maskedDrawsBefore;
 						if (profilingEnabled)
 						{
 							commandBuffer.EndTimestampQueryRenderThread(pass.GPUTimeQueryID);
@@ -697,7 +716,8 @@ namespace cerberus
 			const float gpuTimeMs = pass.GPUTimeQueryID != InvalidQueryID
 				? commandBuffer.GetExecutionGPUTime(pass.GPUTimeQueryID)
 				: 0.0f;
-			m_PassTimingsCache.push_back(RGPassTiming{ pass.Name, type, gpuTimeMs });
+			m_PassTimingsCache.push_back(RGPassTiming{ pass.Name, type, gpuTimeMs,
+				pass.DrawCallCount, pass.MaskedDrawCallCount });
 		}
 		return m_PassTimingsCache;
 	}
@@ -722,12 +742,18 @@ namespace cerberus
 		ImGui::Text("%zu passes compiled, %u culled", m_ExecutionOrder.size(), culledCount);
 
 		const std::span<const RGPassTiming> passTimings = GetPassTimings(commandBuffer);
+		ImGui::TextDisabled("Draw calls (?)");
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("CPU draw submissions from the latest graph execution.\nAn indirect call can contain multiple draws.");
 
-		if (ImGui::BeginTable("RenderGraphPasses", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+		if (ImGui::BeginTable("RenderGraphPasses", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
 		{
 			ImGui::TableSetupColumn("Pass");
 			ImGui::TableSetupColumn("Type");
 			ImGui::TableSetupColumn("Scope");
+			ImGui::TableSetupColumn("Draw calls");
+			ImGui::TableSetupColumn("Default");
+			ImGui::TableSetupColumn("Programmable (masked)");
 			ImGui::TableSetupColumn("GPU Time");
 			ImGui::TableHeadersRow();
 
@@ -745,6 +771,12 @@ namespace cerberus
 				ImGui::TextUnformatted(typeName);
 				ImGui::TableNextColumn();
 				ImGui::TextUnformatted(pass.MergesWithPrevious ? "merged" : "-");
+				ImGui::TableNextColumn();
+				ImGui::Text("%u", pass.DrawCallCount);
+				ImGui::TableNextColumn();
+				ImGui::Text("%u", pass.DrawCallCount - pass.MaskedDrawCallCount);
+				ImGui::TableNextColumn();
+				ImGui::Text("%u", pass.MaskedDrawCallCount);
 				ImGui::TableNextColumn();
 				if (pass.GPUTimeQueryID != InvalidQueryID)
 					ImGui::Text("%.3f ms", timing.GPUTimeMs);

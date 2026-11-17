@@ -147,13 +147,15 @@ namespace cerberus
 
 		DrawArea drawArea;
 		drawArea.GraphicsPipeline = resources.Pipeline;
+		drawArea.BindGroup0 = resources.BindGroup;
 		drawArea.DrawCount = parameters.DrawCount;
+		drawArea.DrawOffset = parameters.StreamOffset;
 		drawArea.VertexBufferAddress = parameters.VertexBufferAddress;
 		drawArea.InstanceBufferAddress = parameters.InstanceBufferAddress;
 		drawArea.IndexBuffer = parameters.IndexBuffer;
 
 		if (parameters.UseIndirect)
-			commandList.ExecuteDrawIndirect(drawArea, parameters.IndirectArgs, parameters.IndirectDrawCount);
+			commandList.ExecuteDrawIndirect(drawArea, parameters.IndirectArgs, parameters.IndirectDrawCount, parameters.IndirectByteOffset);
 		else
 			commandList.ExecuteDrawStream(drawArea, parameters.DrawStream);
 	}

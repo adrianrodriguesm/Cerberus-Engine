@@ -282,6 +282,28 @@ namespace cerberus
 				return false;
 
 			bool changed = false;
+			if (!materialAsset->HasImportedAlphaProperties())
+			{
+				std::string name = sourceMaterial->GetName().C_Str();
+				std::transform(name.begin(), name.end(), name.begin(),
+					[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+				aiString gltfAlphaMode;
+				sourceMaterial->Get("$mat.gltf.alphaMode", 0, 0, gltfAlphaMode);
+				const std::string mode = gltfAlphaMode.C_Str();
+				const bool blend = mode == "BLEND" || name.find("blendshader") != std::string::npos;
+				int twoSided = 0;
+				sourceMaterial->Get(AI_MATKEY_TWOSIDED, twoSided);
+				materialAsset->SetTwoSided(twoSided != 0 || name.find("doublesided") != std::string::npos);
+				materialAsset->SetOpacityMap(importMaterialTexture(sourceMaterial, aiTextureType_OPACITY));
+				if (!blend && (mode == "MASK" || name.find("masked") != std::string::npos
+					|| materialAsset->GetOpacityMapHandle() != 0))
+					materialAsset->SetAlphaMode(AlphaMode::Masked);
+				float cutoff = 0.5f;
+				sourceMaterial->Get("$mat.gltf.alphaCutoff", 0, 0, cutoff);
+				materialAsset->SetAlphaCutoff(cutoff);
+				// Albedo detection is deferred until all texture slots are populated below.
+				changed = true;
+			}
 			if (materialAsset->GetAlbedoMapHandle() == 0)
 			{
 				const AssetHandle albedoMap = importMaterialTexture(sourceMaterial, aiTextureType_DIFFUSE);
@@ -328,7 +350,14 @@ namespace cerberus
 					if (!texture)
 						continue;
 
-					if (materialAsset->GetAlbedoMapHandle() == 0 &&
+					if (!materialAsset->HasImportedAlphaProperties() && materialAsset->GetOpacityMapHandle() == 0
+						&& (contains("opacity") || contains("alpha_mask")))
+					{
+						materialAsset->SetOpacityMap(texture);
+						materialAsset->SetAlphaMode(AlphaMode::Masked);
+						changed = true;
+					}
+					else if (materialAsset->GetAlbedoMapHandle() == 0 &&
 						(contains("basecolor") || contains("base_color") || contains("albedo") || contains("diffuse")))
 					{
 						materialAsset->SetAlbedoMap(texture);
@@ -393,6 +422,25 @@ namespace cerberus
 				}
 			}
 
+			if (!materialAsset->HasImportedAlphaProperties())
+			{
+				std::string name = sourceMaterial->GetName().C_Str();
+				std::transform(name.begin(), name.end(), name.begin(),
+					[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+				aiString gltfAlphaMode;
+				sourceMaterial->Get("$mat.gltf.alphaMode", 0, 0, gltfAlphaMode);
+				const std::string mode = gltfAlphaMode.C_Str();
+				if (mode != "OPAQUE" && mode != "BLEND" && name.find("blendshader") == std::string::npos
+					&& materialAsset->GetAlbedoMapHandle())
+				{
+					const auto albedo = AssetManager::GetAsset<TextureAsset>(materialAsset->GetAlbedoMapHandle());
+					if (albedo && albedo->HasAlphaContent())
+						materialAsset->SetAlphaMode(AlphaMode::Masked);
+				}
+				if (mode == "OPAQUE" || mode == "BLEND" || name.find("blendshader") != std::string::npos)
+					materialAsset->SetAlphaMode(AlphaMode::Opaque);
+				materialAsset->SetAlphaPropertiesImported(true);
+			}
 			return changed;
 		};
 

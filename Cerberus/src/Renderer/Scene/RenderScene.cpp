@@ -55,6 +55,41 @@ namespace cerberus
 	void RenderScene::BuildDrawStream()
 	{
 		CORE_PROFILE_FUNCTION();
+		const auto& instances = m_MeshRegister.RasterMeshInstances;
+		m_OrderedRasterInstances.resize(instances.size());
+		m_RasterBucketIndices.resize(instances.size());
+		m_DrawRanges = {};
+		// Classify once, then scatter stably into contiguous pipeline ranges.
+		// Resolved pointers are cached and scattered alongside the handles
+		// below so the draw-stream loop further down doesn't re-resolve them.
+		std::vector<MeshInstanceProxy*> resolvedInstances(instances.size());
+		for (size_t i = 0; i < instances.size(); ++i)
+		{
+			MeshInstanceProxy* instance = ResourceManager::GetMeshInstanceProxy(instances[i]);
+			CORE_ASSERT(instance, "Invalid MeshInstanceProxy");
+			CORE_ASSERT(instance->MaterialProxyIndex < m_MeshRegister.MaterialProxies.size(),
+				"MeshInstanceProxy references an invalid raster MaterialProxy");
+			resolvedInstances[i] = instance;
+			const auto& alpha = m_MeshRegister.MaterialProxies[instance->MaterialProxyIndex].GPUData.AlphaParameters;
+			const uint32_t bucket = GetRasterBucketIndex(alpha.y > 0.5f, alpha.z > 0.5f);
+			m_RasterBucketIndices[i] = bucket;
+			++m_DrawRanges[bucket].Count;
+		}
+		std::array<uint32_t, RasterBucketCount> writeOffsets{};
+		uint32_t first = 0;
+		for (uint32_t bucket = 0; bucket < RasterBucketCount; ++bucket)
+		{
+			m_DrawRanges[bucket].FirstInstance = first;
+			writeOffsets[bucket] = first;
+			first += m_DrawRanges[bucket].Count;
+		}
+		std::vector<MeshInstanceProxy*> orderedInstancePtrs(instances.size());
+		for (size_t i = 0; i < instances.size(); ++i)
+		{
+			const uint32_t dest = writeOffsets[m_RasterBucketIndices[i]]++;
+			m_OrderedRasterInstances[dest] = instances[i];
+			orderedInstancePtrs[dest] = resolvedInstances[i];
+		}
 
 		DrawStreamBuilder builder;
 		// One global pool index buffer for every draw now, instead of one
@@ -68,26 +103,29 @@ namespace cerberus
 		// uploads GPUInstanceData -- the two must agree, since this is what
 		// firstInstance/gl_InstanceIndex looks up into that buffer.
 		uint32_t instanceIndex = 0;
-		for (Handle<MeshInstanceProxy> meshInstanceHandle : m_MeshRegister.RasterMeshInstances)
+		for (auto& range : m_DrawRanges)
 		{
-			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
-			CORE_ASSERT(meshInstance, "Invalid MeshInstanceProxy");
+			range.StreamOffset = builder.BeginDrawArea();
+			for (uint32_t draw = 0; draw < range.Count; ++draw)
+			{
+				MeshInstanceProxy* meshInstance = orderedInstancePtrs[instanceIndex];
 
-			MeshSourceProxy* meshSource = ResourceManager::GetMeshSourceProxy(meshInstance->MeshSource);
-			CORE_ASSERT(meshSource, "MeshInstanceProxy references an invalid MeshSourceProxy");
-			CORE_ASSERT(meshSource->Allocation.IsValid(), "MeshSourceProxy has no geometry pool allocation");
-			CORE_ASSERT(meshInstance->SubmeshIndex < meshSource->Submeshes.size(), "MeshInstanceProxy references an invalid submesh");
+				MeshSourceProxy* meshSource = ResourceManager::GetMeshSourceProxy(meshInstance->MeshSource);
+				CORE_ASSERT(meshSource, "MeshInstanceProxy references an invalid MeshSourceProxy");
+				CORE_ASSERT(meshSource->Allocation.IsValid(), "MeshSourceProxy has no geometry pool allocation");
+				CORE_ASSERT(meshInstance->SubmeshIndex < meshSource->Submeshes.size(), "MeshInstanceProxy references an invalid submesh");
 
-			const SubmeshSourceProxy& submesh = meshSource->Submeshes[meshInstance->SubmeshIndex];
+				const SubmeshSourceProxy& submesh = meshSource->Submeshes[meshInstance->SubmeshIndex];
 
-			// Vertex pulling reads through gl_VertexIndex, which vkCmdDrawIndexed
-			// already offsets by this same value -- see ExecuteDrawStream.
-			builder.SetVertexBufferOffset(meshSource->GlobalVertexOffset(submesh));
-			builder.SetIndexBufferOffset(meshSource->GlobalFirstIndex(submesh));
-			builder.SetIndexBufferCount(submesh.IndexCount);
-			builder.SetFirstInstance(instanceIndex);
-			builder.Draw();
-			++instanceIndex;
+				// Vertex pulling reads through gl_VertexIndex, which vkCmdDrawIndexed
+				// already offsets by this same value -- see ExecuteDrawStream.
+				builder.SetVertexBufferOffset(meshSource->GlobalVertexOffset(submesh));
+				builder.SetIndexBufferOffset(meshSource->GlobalFirstIndex(submesh));
+				builder.SetIndexBufferCount(submesh.IndexCount);
+				builder.SetFirstInstance(instanceIndex);
+				builder.Draw();
+				++instanceIndex;
+			}
 		}
 
 		const std::span<const uint32_t> stream = builder.GetStream();
@@ -123,7 +161,7 @@ namespace cerberus
 		std::vector<GPUInstanceData> instances;
 		instances.reserve(instanceCount);
 
-		for (Handle<MeshInstanceProxy> meshInstanceHandle : m_MeshRegister.RasterMeshInstances)
+		for (Handle<MeshInstanceProxy> meshInstanceHandle : m_OrderedRasterInstances)
 		{
 			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
 			CORE_ASSERT(meshInstance, "Invalid MeshInstanceProxy");
@@ -206,7 +244,7 @@ namespace cerberus
 		commands.reserve(instanceCount);
 
 		uint32_t instanceIndex = 0;
-		for (Handle<MeshInstanceProxy> meshInstanceHandle : m_MeshRegister.RasterMeshInstances)
+		for (Handle<MeshInstanceProxy> meshInstanceHandle : m_OrderedRasterInstances)
 		{
 			MeshInstanceProxy* meshInstance = ResourceManager::GetMeshInstanceProxy(meshInstanceHandle);
 			CORE_ASSERT(meshInstance, "Invalid MeshInstanceProxy");
@@ -377,13 +415,14 @@ namespace cerberus
 		const uint32_t metalnessTextureIndex = RegisterTextureProxy(materialAsset->GetMetalnessMapHandle(), false);
 		const uint32_t roughnessTextureIndex = RegisterTextureProxy(materialAsset->GetRoughnessMapHandle(), false);
 		const uint32_t emissiveTextureIndex = RegisterTextureProxy(materialAsset->GetEmissiveMapHandle(), true);
+		const uint32_t opacityTextureIndex = RegisterTextureProxy(materialAsset->GetOpacityMapHandle(), false);
 
 		return materialAsset->BuildGPUMaterialData(
 			albedoTextureIndex,
 			normalTextureIndex,
 			metalnessTextureIndex,
 			roughnessTextureIndex,
-			emissiveTextureIndex);
+			emissiveTextureIndex, opacityTextureIndex);
 	}
 
 	bool RenderScene::UpdateMaterialProxy(const Ref<MaterialAsset>& materialAsset)

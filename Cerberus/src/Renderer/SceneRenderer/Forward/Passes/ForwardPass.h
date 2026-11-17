@@ -33,6 +33,8 @@ namespace cerberus
 		bool UseIndirect = false;
 		Handle<GPUBuffer> IndirectArgs;
 		uint32_t IndirectDrawCount = 0;
+		uint64_t IndirectByteOffset = 0;
+		uint32_t StreamOffset = 0;
 	};
 
 	void RenderForwardPass(

@@ -14,6 +14,7 @@ namespace cerberus
 	struct RendererFrameStatistics
 	{
 		uint32_t DrawCallCount = 0;
+		uint32_t MaskedDrawCallCount = 0;
 		uint32_t ComputeDispatchCount = 0;
 		uint32_t RayTracingDispatchCount = 0;
 	};

@@ -4,7 +4,15 @@ Material:
   Metalness: 0
   Roughness: 1
   Emission: 0
+  AlphaMode: Masked
+  AlphaCutoff: 0.5
+  TwoSided: true
+  AlphaPropertiesImported: true
+  OpacityMapHandle: 0
+  PackedSpecularGB: false
+  ReconstructNormalZ: false
   AlbedoMapHandle: 6269892616642238736
   NormalMapHandle: 4063574727633971189
   MetalnessMapHandle: 0
   RoughnessMapHandle: 0
+  EmissiveMapHandle: 0

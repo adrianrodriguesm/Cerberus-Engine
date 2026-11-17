@@ -17,6 +17,20 @@ namespace cerberus
 {
 	namespace
 	{
+		struct RasterBucketConfiguration
+		{
+			const char* PreDepthShader;
+			const char* ShadowShader;
+			const char* ForwardShader;
+			CullMode Culling;
+		};
+		constexpr std::array<RasterBucketConfiguration, RasterBucketCount> RasterBuckets{{
+			{ "PreDepth", "Shadow", "ForwardPBR", CullMode::Back },
+			{ "PreDepth", "Shadow", "ForwardPBR", CullMode::None },
+			{ "PreDepthMasked", "ShadowMasked", "ForwardPBRMasked", CullMode::Back },
+			{ "PreDepthMasked", "ShadowMasked", "ForwardPBRMasked", CullMode::None }
+		}};
+
 		constexpr uint32_t ForwardCameraBinding = 0;
 		constexpr uint32_t ForwardMaterialBinding = 1;
 		constexpr uint32_t ForwardTextureBinding = 2;
@@ -117,6 +131,13 @@ namespace cerberus
 		};
 		shaderLibrary.Load(preDepthShaderSpecification, true);
 
+		ShaderSpecification maskedPreDepth;
+		maskedPreDepth.Name = "PreDepthMasked";
+		maskedPreDepth.Stages = {
+			{ VK_SHADER_STAGE_VERTEX_BIT, "engine://Shaders/PreDepth/PreDepthMasked.vert" },
+			{ VK_SHADER_STAGE_FRAGMENT_BIT, "engine://Shaders/Common/MaskedDepth.frag" }
+		};
+
 		ShaderSpecification geometryShaderSpecification;
 		geometryShaderSpecification.Name = "ForwardPBR";
 		geometryShaderSpecification.Stages = {
@@ -124,6 +145,21 @@ namespace cerberus
 			{ VK_SHADER_STAGE_FRAGMENT_BIT, "engine://Shaders/Forward/ForwardPBR.frag" }
 		};
 		shaderLibrary.Load(geometryShaderSpecification, true);
+		
+		ShaderSpecification maskedForward = geometryShaderSpecification;
+		maskedForward.Name = "ForwardPBRMasked";
+		maskedForward.Stages[1].FilePath = "engine://Shaders/Forward/ForwardPBRMasked.frag";
+		shaderLibrary.Load(maskedForward, true);
+
+		shaderLibrary.Load(maskedPreDepth, true);
+		ShaderSpecification maskedShadow;
+		maskedShadow.Name = "ShadowMasked";
+		maskedShadow.Stages = {
+			{ VK_SHADER_STAGE_VERTEX_BIT, "engine://Shaders/Shadow/ShadowMasked.vert" },
+			{ VK_SHADER_STAGE_FRAGMENT_BIT, "engine://Shaders/Common/MaskedDepth.frag" }
+		};
+		shaderLibrary.Load(maskedShadow, true);
+		
 
 		ShaderSpecification skyShaderSpecification;
 		skyShaderSpecification.Name = "ForwardSky";
@@ -238,6 +274,28 @@ namespace cerberus
 		// the scene's GeometryPool instead (see docs/tasks/T3-geometry-pool.md).
 		// Pipeline.cpp already handles an empty Layout correctly.
 		m_GeometryPipeline = ResourceManager::CreateGraphicsPipeline(geometryPipelineSpecification);
+		m_PreDepthBucketPipelines[0] = m_PreDepthPipeline;
+		m_ShadowBucketPipelines[0] = m_ShadowPipeline;
+		m_ForwardBucketPipelines[0] = m_GeometryPipeline;
+		for (uint32_t bucket = 1; bucket < RasterBucketCount; ++bucket)
+		{
+			const auto& configuration = RasterBuckets[bucket];
+			auto preDepth = preDepthPipelineSpecification;
+			preDepth.Shader = shaderLibrary.Get(configuration.PreDepthShader);
+			preDepth.CullMode = configuration.Culling;
+			preDepth.DebugName = "PreDepth bucket " + std::to_string(bucket);
+			m_PreDepthBucketPipelines[bucket] = ResourceManager::CreateGraphicsPipeline(preDepth);
+			auto shadow = shadowPipelineSpecification;
+			shadow.Shader = shaderLibrary.Get(configuration.ShadowShader);
+			shadow.CullMode = configuration.Culling;
+			shadow.DebugName = "Shadow bucket " + std::to_string(bucket);
+			m_ShadowBucketPipelines[bucket] = ResourceManager::CreateGraphicsPipeline(shadow);
+			auto forward = geometryPipelineSpecification;
+			forward.Shader = shaderLibrary.Get(configuration.ForwardShader);
+			forward.CullMode = configuration.Culling;
+			forward.DebugName = "Forward bucket " + std::to_string(bucket);
+			m_ForwardBucketPipelines[bucket] = ResourceManager::CreateGraphicsPipeline(forward);
+		}
 
 		PipelineSpecification compositePipelineSpecification;
 		compositePipelineSpecification.DebugName = "Forward Composite";
@@ -333,6 +391,19 @@ namespace cerberus
 		BindGroup* geometryBindGroup = ResourceManager::GetBindGroup(m_GeometryBindGroup);
 		CORE_ASSERT(preDepthBindGroup && skyBindGroup && geometryBindGroup, "Failed to create Forward bind groups");
 		preDepthBindGroup->SetUniformBuffer(m_CameraBufferSet, ForwardCameraBinding);
+		BindGroupLayout::BindGroupLayoutInfo maskedLayout;
+		maskedLayout.Set = 0;
+		maskedLayout.StorageBuffers = { BufferBinding("MaterialTable", ForwardMaterialBinding, VK_SHADER_STAGE_ALL) };
+		maskedLayout.ImageSamplers = { ImageBinding("MaterialTextures", ForwardTextureBinding,
+			m_RenderScene->GetTextureRegistry().GetCapacity(), VK_SHADER_STAGE_FRAGMENT_BIT, true) };
+		m_MaskedShadowLayout = ResourceManager::CreateBindGroupLayout(maskedLayout);
+		m_MaskedShadowBindGroup = ResourceManager::CreateBindGroup({ m_MaskedShadowLayout, DescriptorAllocationLifetime::Persistent });
+		maskedLayout.UniformBuffers = { BufferBinding("CameraData", ForwardCameraBinding, VK_SHADER_STAGE_ALL) };
+		m_MaskedPreDepthLayout = ResourceManager::CreateBindGroupLayout(maskedLayout);
+		m_MaskedPreDepthBindGroup = ResourceManager::CreateBindGroup({ m_MaskedPreDepthLayout, DescriptorAllocationLifetime::Persistent });
+		ResourceManager::GetBindGroup(m_MaskedPreDepthBindGroup)->SetUniformBuffer(m_CameraBufferSet, ForwardCameraBinding);
+		ResourceManager::GetBindGroup(m_MaskedPreDepthBindGroup)->SetStorageBuffer(m_MaterialBufferSet, ForwardMaterialBinding);
+		ResourceManager::GetBindGroup(m_MaskedShadowBindGroup)->SetStorageBuffer(m_MaterialBufferSet, ForwardMaterialBinding);
 		skyBindGroup->SetUniformBuffer(m_CameraBufferSet, ForwardCameraBinding);
 		skyBindGroup->SetUniformBuffer(m_LightingBufferSet, ForwardLightingBinding);
 		geometryBindGroup->SetUniformBuffer(m_CameraBufferSet, ForwardCameraBinding);
@@ -362,6 +433,16 @@ namespace cerberus
 
 	void ForwardSceneRenderer::DestroyRasterResources()
 	{
+		for (uint32_t bucket = 1; bucket < RasterBucketCount; ++bucket)
+		{
+			ResourceManager::DestroyGraphicsPipeline(m_PreDepthBucketPipelines[bucket]);
+			ResourceManager::DestroyGraphicsPipeline(m_ShadowBucketPipelines[bucket]);
+			ResourceManager::DestroyGraphicsPipeline(m_ForwardBucketPipelines[bucket]);
+		}
+		ResourceManager::DestroyBindGroup(m_MaskedPreDepthBindGroup);
+		ResourceManager::DestroyBindGroup(m_MaskedShadowBindGroup);
+		ResourceManager::DestroyBindGroupLayout(m_MaskedPreDepthLayout);
+		ResourceManager::DestroyBindGroupLayout(m_MaskedShadowLayout);
 		if (m_GeometryBindGroup.IsValid())
 			ResourceManager::DestroyBindGroup(m_GeometryBindGroup);
 		if (m_SkyBindGroup.IsValid())
@@ -430,6 +511,9 @@ namespace cerberus
 		shaderLibrary.Unload("PreDepth");
 		shaderLibrary.Unload("Composite");
 		shaderLibrary.Unload("Shadow");
+		shaderLibrary.Unload("PreDepthMasked");
+		shaderLibrary.Unload("ShadowMasked");
+		shaderLibrary.Unload("ForwardPBRMasked");
 	}
 
 	void ForwardSceneRenderer::SetViewportSize(uint32_t width, uint32_t height)
@@ -591,6 +675,10 @@ namespace cerberus
 			imageViews,
 			fallbackTexture->GetImageView(),
 			ForwardTextureBinding);
+		for (auto group : { m_MaskedPreDepthBindGroup, m_MaskedShadowBindGroup })
+		{
+			ResourceManager::GetBindGroup(group)->SetImageViewArray(imageViews, fallbackTexture->GetImageView(), ForwardTextureBinding);
+		}
 		m_TextureRegistryRevision = textureRegistry.GetRevision();
 	}
 
@@ -668,6 +756,8 @@ namespace cerberus
 		BindGroup* compositeBindGroup = ResourceManager::GetBindGroup(m_CompositeBindGroup);
 		CORE_ASSERT(preDepthBindGroup && skyBindGroup && geometryBindGroup && compositeBindGroup, "Invalid Forward bind groups");
 		preDepthBindGroup->Update(frameIndex);
+		ResourceManager::GetBindGroup(m_MaskedPreDepthBindGroup)->Update(frameIndex);
+		ResourceManager::GetBindGroup(m_MaskedShadowBindGroup)->Update(frameIndex);
 		skyBindGroup->Update(frameIndex);
 		geometryBindGroup->Update(frameIndex);
 		compositeBindGroup->Update(frameIndex);
@@ -684,13 +774,16 @@ namespace cerberus
 		}
 
 		const std::span<const uint32_t> drawStream = m_RenderScene->GetDrawStream();
-		const uint32_t drawStreamCount = m_RenderScene->GetDrawStreamCount();
 		const uint64_t vertexBufferAddress = m_RenderScene->GetGeometryPool().GetVertexBufferAddress();
 		const uint64_t instanceBufferAddress = m_RenderScene->GetInstanceBufferAddress(frameIndex);
 		const Handle<GPUBuffer> indexBuffer = m_RenderScene->GetGeometryPool().GetIndexBuffer();
 		const bool useIndirect = m_UseIndirectSubmission;
 		const Handle<GPUBuffer> indirectArgs = m_RenderScene->GetIndirectArgsBuffer(frameIndex);
-		const uint32_t indirectDrawCount = m_RenderScene->GetInstanceCount();
+		const auto drawRanges = m_RenderScene->GetDrawRanges();
+		const std::array<Handle<BindGroup>, RasterBucketCount> preDepthBindings{
+			m_PreDepthBindGroup, m_PreDepthBindGroup, m_MaskedPreDepthBindGroup, m_MaskedPreDepthBindGroup };
+		const std::array<Handle<BindGroup>, RasterBucketCount> shadowBindings{
+			Handle<BindGroup>{}, Handle<BindGroup>{}, m_MaskedShadowBindGroup, m_MaskedShadowBindGroup };
 
 		m_RenderGraph.AddGraphicsPass(
 			"PreDepth",
@@ -698,13 +791,18 @@ namespace cerberus
 			{
 				builder.WriteDepthAttachment(sceneDepthRG, LOAD_OP::CLEAR, STORE_OP::STORE);
 			},
-			[this, drawStream, drawStreamCount, vertexBufferAddress, instanceBufferAddress, indexBuffer, useIndirect, indirectArgs, indirectDrawCount](GraphicsCommandList& graphics)
+			[this, drawStream, vertexBufferAddress, instanceBufferAddress, indexBuffer, useIndirect, indirectArgs, drawRanges, preDepthBindings](GraphicsCommandList& graphics)
 			{
-				RenderPreDepthPass(
-					graphics,
-					PreDepthPassResources{ m_PreDepthPipeline, m_PreDepthBindGroup },
-					PreDepthPassParameters{ drawStream, drawStreamCount, vertexBufferAddress, instanceBufferAddress,
-						indexBuffer, useIndirect, indirectArgs, indirectDrawCount });
+				for (uint32_t bucket = 0; bucket < RasterBucketCount; ++bucket)
+				{
+					const auto& range = drawRanges[bucket];
+					graphics.SetMaskedDrawStatistics(bucket >= GetRasterBucketIndex(true, false));
+					RenderPreDepthPass(graphics,
+						PreDepthPassResources{ m_PreDepthBucketPipelines[bucket], preDepthBindings[bucket] },
+						PreDepthPassParameters{ drawStream, range.Count, vertexBufferAddress, instanceBufferAddress,
+							indexBuffer, useIndirect, indirectArgs, range.Count,
+							uint64_t(range.FirstInstance) * sizeof(IndirectDrawCommand), range.StreamOffset });
+				}
 			});
 
 		// Each cascade targets a different RenderTargetTexture, so (unlike Sky and
@@ -726,14 +824,18 @@ namespace cerberus
 					{
 						builder.WriteDepthAttachment(shadowMap, LOAD_OP::CLEAR, STORE_OP::STORE);
 					},
-					[this, drawStream, drawStreamCount, vertexBufferAddress, instanceBufferAddress, indexBuffer, useIndirect, indirectArgs, indirectDrawCount, cascade](GraphicsCommandList& graphics)
+					[this, drawStream, vertexBufferAddress, instanceBufferAddress, indexBuffer, useIndirect, indirectArgs, drawRanges, cascade, shadowBindings](GraphicsCommandList& graphics)
 					{
-						RenderShadowPass(
-							graphics,
-							ShadowPassResources{ m_ShadowPipeline },
-							ShadowPassParameters{ drawStream, drawStreamCount, vertexBufferAddress, instanceBufferAddress,
-								indexBuffer, useIndirect, indirectArgs, indirectDrawCount },
-							cascade);
+						for (uint32_t bucket = 0; bucket < RasterBucketCount; ++bucket)
+						{
+							const auto& range = drawRanges[bucket];
+							graphics.SetMaskedDrawStatistics(bucket >= GetRasterBucketIndex(true, false));
+							RenderShadowPass(graphics,
+								ShadowPassResources{ m_ShadowBucketPipelines[bucket], shadowBindings[bucket] },
+								ShadowPassParameters{ drawStream, range.Count, vertexBufferAddress, instanceBufferAddress,
+									indexBuffer, useIndirect, indirectArgs, range.Count,
+									uint64_t(range.FirstInstance) * sizeof(IndirectDrawCommand), range.StreamOffset }, cascade);
+						}
 					});
 			}
 		}
@@ -768,13 +870,18 @@ namespace cerberus
 						builder.ReadTexture(shadowMap, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 				}
 			},
-			[this, drawStream, drawStreamCount, vertexBufferAddress, instanceBufferAddress, indexBuffer, useIndirect, indirectArgs, indirectDrawCount](GraphicsCommandList& graphics)
+			[this, drawStream, vertexBufferAddress, instanceBufferAddress, indexBuffer, useIndirect, indirectArgs, drawRanges](GraphicsCommandList& graphics)
 			{
-				RenderForwardPass(
-					graphics,
-					ForwardPassResources{ m_GeometryPipeline, m_GeometryBindGroup },
-					ForwardPassParameters{ drawStream, drawStreamCount, vertexBufferAddress, instanceBufferAddress,
-						indexBuffer, useIndirect, indirectArgs, indirectDrawCount });
+				for (uint32_t bucket = 0; bucket < RasterBucketCount; ++bucket)
+				{
+					const auto& range = drawRanges[bucket];
+					graphics.SetMaskedDrawStatistics(bucket >= GetRasterBucketIndex(true, false));
+					RenderForwardPass(graphics,
+						ForwardPassResources{ m_ForwardBucketPipelines[bucket], m_GeometryBindGroup },
+						ForwardPassParameters{ drawStream, range.Count, vertexBufferAddress, instanceBufferAddress,
+							indexBuffer, useIndirect, indirectArgs, range.Count,
+							uint64_t(range.FirstInstance) * sizeof(IndirectDrawCommand), range.StreamOffset });
+				}
 			});
 
 		// Reads SceneColor and writes the LDR CompositeOutput that
@@ -820,7 +927,9 @@ namespace cerberus
 		{
 			static const char* submissionModes[] = { "Direct (DrawStream)", "Indirect" };
 			int submissionMode = m_UseIndirectSubmission ? 1 : 0;
-			if (ImGui::Combo("Submission", &submissionMode, submissionModes, 2))
+			if (m_SubmissionLockedForBenchmark)
+				ImGui::Text("Submission: %s (benchmark)", submissionModes[submissionMode]);
+			else if (ImGui::Combo("Submission", &submissionMode, submissionModes, 2))
 				m_UseIndirectSubmission = (submissionMode == 1);
 		}
 		if (ui::PropertyGridHeader("Statistics", true))

@@ -354,6 +354,46 @@ namespace cerberus
 			ui::EndTreeNode();
 		}
 
+		if (ui::PropertyGridHeader("Alpha masking", true))
+		{
+			// Tracked separately from materialChanged (which is already true
+			// after any earlier, unrelated section edit) so an edit to e.g.
+			// Roughness alone can't mark alpha properties as user-authored.
+			bool alphaChanged = false;
+			const char* modes[] = { "Opaque", "Masked" };
+			int mode = static_cast<int>(m_Material->GetAlphaMode());
+			bool twoSided = m_Material->IsTwoSided();
+			float cutoff = m_Material->GetAlphaCutoff();
+			if (ImGui::Combo("Alpha mode", &mode, modes, 2))
+			{
+				m_Material->SetAlphaMode(static_cast<AlphaMode>(mode));
+				alphaChanged = commitChanges = true;
+			}
+			if (ImGui::SliderFloat("Alpha cutoff", &cutoff, 0.0f, 1.0f))
+			{
+				m_Material->SetAlphaCutoff(cutoff);
+				alphaChanged = true;
+			}
+			commitChanges |= ImGui::IsItemDeactivatedAfterEdit();
+			if (ImGui::Checkbox("Two sided", &twoSided))
+			{
+				m_Material->SetTwoSided(twoSided);
+				alphaChanged = commitChanges = true;
+			}
+			TextureSlotEditResult opacity = DrawTextureSlot("Opacity (red channel)", m_Material->GetOpacityMapHandle(), TextureColorSpace::Linear);
+			if (opacity.Changed)
+			{
+				m_Material->SetOpacityMap(opacity.TextureAsset);
+				alphaChanged = commitChanges = true;
+			}
+			if (alphaChanged)
+			{
+				m_Material->SetAlphaPropertiesImported(true);
+				materialChanged = true;
+			}
+			ui::EndTreeNode();
+		}
+
 		if (materialChanged)
 		{
 			m_IsDirty = true;

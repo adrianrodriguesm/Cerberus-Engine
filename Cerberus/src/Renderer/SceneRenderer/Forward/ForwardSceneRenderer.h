@@ -42,6 +42,9 @@ namespace cerberus
 		std::span<const RGPassTiming> GetLastFramePassTimings() const override;
 		uint32_t GetTotalTriangleCount() const override { return m_RenderScene ? m_RenderScene->GetTotalTriangleCount() : 0u; }
 		uint32_t GetMeshInstanceCount() const override { return m_RenderScene ? m_RenderScene->GetMeshInstanceCount() : 0u; }
+		bool UsesIndirectSubmission() const { return m_UseIndirectSubmission; }
+		void SetIndirectSubmission(bool enabled) { m_UseIndirectSubmission = enabled; }
+		void LockSubmissionForBenchmark(bool locked) { m_SubmissionLockedForBenchmark = locked; }
 
 	private:
 		void CreateRasterResources();
@@ -109,6 +112,14 @@ namespace cerberus
 		Handle<GraphicsPipeline> m_SkyPipeline;
 		Handle<GraphicsPipeline> m_GeometryPipeline;
 		Handle<GraphicsPipeline> m_CompositePipeline;
+		// Opaque back/none, Masked back/none; slot zero aliases the existing PSO.
+		std::array<Handle<GraphicsPipeline>, RasterBucketCount> m_PreDepthBucketPipelines;
+		std::array<Handle<GraphicsPipeline>, RasterBucketCount> m_ShadowBucketPipelines;
+		std::array<Handle<GraphicsPipeline>, RasterBucketCount> m_ForwardBucketPipelines;
+		Handle<BindGroupLayout> m_MaskedPreDepthLayout;
+		Handle<BindGroupLayout> m_MaskedShadowLayout;
+		Handle<BindGroup> m_MaskedPreDepthBindGroup;
+		Handle<BindGroup> m_MaskedShadowBindGroup;
 
 		Handle<BindGroupLayout> m_PreDepthBindGroupLayout;
 		Handle<BindGroup> m_PreDepthBindGroup;
@@ -130,9 +141,10 @@ namespace cerberus
 		RenderGraph m_RenderGraph;
 
 		// Direct (DrawStream replay, one vkCmdDrawIndexed per instance) vs
-		// Indirect (one vkCmdDrawIndexedIndirect per pass, args filled by the
+		// Indirect (one vkCmdDrawIndexedIndirect per nonempty pipeline range, args filled by the
 		// CPU) -- toggle exposed in OnImGuiRender(). Both must produce the
 		// same image; see docs/tasks/T4-instances-indirect.md.
 		bool m_UseIndirectSubmission = false;
+		bool m_SubmissionLockedForBenchmark = false;
 	};
 }

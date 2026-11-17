@@ -54,6 +54,9 @@ namespace cerberus
 		void SetViewport(const VkViewport& viewport);
 		void SetScissor(const VkRect2D& scissor);
 
+		// Classifies subsequent submissions for the renderer statistics only.
+		void SetMaskedDrawStatistics(bool masked) { m_MaskedDrawStatistics = masked; }
+
 		void Draw(
 			uint32_t vertexCount,
 			uint32_t instanceCount = 1,
@@ -102,7 +105,7 @@ namespace cerberus
 		// stream. args must hold drawCount IndirectDrawCommand entries
 		// (RenderScene::BuildIndirectArgs), each already carrying its own
 		// firstInstance -- see docs/tasks/T4-instances-indirect.md.
-		void ExecuteDrawIndirect(const DrawArea& drawArea, Handle<GPUBuffer> args, uint32_t drawCount);
+		void ExecuteDrawIndirect(const DrawArea& drawArea, Handle<GPUBuffer> args, uint32_t drawCount, uint64_t byteOffset = 0);
 
 		// Pushes against the currently bound pipeline's layout (set by the most
 		// recent BindGraphicsPipeline/ExecuteDrawStream call). Lets a pass push
@@ -115,6 +118,8 @@ namespace cerberus
 			uint32_t offset = 0);
 
 	private:
+		void RecordDrawCall();
+		bool m_MaskedDrawStatistics = false;
 		VkPipelineLayout m_BoundPipelineLayout = VK_NULL_HANDLE;
 
 		// Attachments of the currently open rendering scope, kept only to drive the

@@ -486,6 +486,11 @@ namespace cerberus
 			out << YAML::Key << "Metalness" << YAML::Value << material->GetMetalness();
 			out << YAML::Key << "Roughness" << YAML::Value << material->GetRoughness();
 			out << YAML::Key << "Emission" << YAML::Value << material->GetEmission();
+			out << YAML::Key << "AlphaMode" << YAML::Value << (material->GetAlphaMode() == AlphaMode::Masked ? "Masked" : "Opaque");
+			out << YAML::Key << "AlphaCutoff" << YAML::Value << material->GetAlphaCutoff();
+			out << YAML::Key << "TwoSided" << YAML::Value << material->IsTwoSided();
+			out << YAML::Key << "AlphaPropertiesImported" << YAML::Value << material->HasImportedAlphaProperties();
+			out << YAML::Key << "OpacityMapHandle" << YAML::Value << (uint64_t)material->GetOpacityMapHandle();
 			out << YAML::Key << "PackedSpecularGB" << YAML::Value << material->IsPackedSpecularGB();
 			out << YAML::Key << "ReconstructNormalZ" << YAML::Value << material->ShouldReconstructNormalZ();
 
@@ -513,6 +518,16 @@ namespace cerberus
 
 		Ref<MaterialAsset> material = CreateRef<MaterialAsset>(metadata.FilePath.stem().string());
 		YAML::Node rootNode = data["Material"];
+		if (rootNode["AlphaMode"])
+			material->SetAlphaMode(rootNode["AlphaMode"].as<std::string>() == "Masked" ? AlphaMode::Masked : AlphaMode::Opaque);
+		if (rootNode["AlphaCutoff"])
+			material->SetAlphaCutoff(rootNode["AlphaCutoff"].as<float>());
+		if (rootNode["TwoSided"])
+			material->SetTwoSided(rootNode["TwoSided"].as<bool>());
+		material->SetAlphaPropertiesImported(rootNode["AlphaPropertiesImported"]
+			? rootNode["AlphaPropertiesImported"].as<bool>() : bool(rootNode["AlphaMode"]));
+		if (rootNode["OpacityMapHandle"])
+			material->SetOpacityMap(rootNode["OpacityMapHandle"].as<uint64_t>());
 
 		if (rootNode["AlbedoColor"])
 			material->SetAlbedoColor(rootNode["AlbedoColor"].as<glm::vec3>());

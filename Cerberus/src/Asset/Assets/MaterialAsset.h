@@ -12,6 +12,7 @@
 namespace cerberus
 {
 	struct GPUMaterialData;
+	enum class AlphaMode : uint8_t { Opaque, Masked };
 
 	static constexpr uint32_t InvalidMaterialTextureIndex = 0xFFFFFFFFu;
 
@@ -22,6 +23,7 @@ namespace cerberus
 		AssetHandle MetalnessMap = 0;
 		AssetHandle RoughnessMap = 0;
 		AssetHandle EmissiveMap = 0;
+		AssetHandle OpacityMap = 0;
 
 		bool HasAlbedoMap() const { return AlbedoMap != 0; }
 		bool HasNormalMap() const { return NormalMap != 0; }
@@ -39,6 +41,11 @@ namespace cerberus
 		float Roughness = 0.4f;
 		float Emission = 0.0f;
 		bool UseNormalMap = false;
+		AlphaMode Alpha = AlphaMode::Opaque;
+		float AlphaCutoff = 0.5f;
+		bool TwoSided = false;
+		// Allows the importer to upgrade old materials once without overriding edits.
+		bool AlphaPropertiesImported = false;
 		// MetalnessMap/RoughnessMap point at the same combined texture (e.g. a
 		// Lumberyard-style "_Specular" map) and should be read as G=roughness,
 		// B=metalness rather than each map's own R channel.
@@ -68,7 +75,19 @@ namespace cerberus
 			uint32_t normalTextureIndex = InvalidMaterialTextureIndex,
 			uint32_t metalnessTextureIndex = InvalidMaterialTextureIndex,
 			uint32_t roughnessTextureIndex = InvalidMaterialTextureIndex,
-			uint32_t emissiveTextureIndex = InvalidMaterialTextureIndex) const;
+			uint32_t emissiveTextureIndex = InvalidMaterialTextureIndex,
+			uint32_t opacityTextureIndex = InvalidMaterialTextureIndex) const;
+
+		AlphaMode GetAlphaMode() const { return m_Data.Alpha; }
+		void SetAlphaMode(AlphaMode value) { m_Data.Alpha = value; }
+		float GetAlphaCutoff() const { return m_Data.AlphaCutoff; }
+		void SetAlphaCutoff(float value) { m_Data.AlphaCutoff = glm::clamp(value, 0.0f, 1.0f); }
+		bool IsTwoSided() const { return m_Data.TwoSided; }
+		void SetTwoSided(bool value) { m_Data.TwoSided = value; }
+		bool HasImportedAlphaProperties() const { return m_Data.AlphaPropertiesImported; }
+		void SetAlphaPropertiesImported(bool value) { m_Data.AlphaPropertiesImported = value; }
+		AssetHandle GetOpacityMapHandle() const { return m_Data.Textures.OpacityMap; }
+		void SetOpacityMap(AssetHandle value) { m_Data.Textures.OpacityMap = value; }
 
 		glm::vec3& GetAlbedoColor();
 		void SetAlbedoColor(const glm::vec3& color);
