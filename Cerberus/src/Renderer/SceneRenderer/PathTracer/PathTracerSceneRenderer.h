@@ -41,6 +41,9 @@ namespace cerberus
 		virtual std::span<const RGPassTiming> GetLastFramePassTimings() const override;
 		virtual uint32_t GetTotalTriangleCount() const override { return m_RenderScene ? m_RenderScene->GetTotalTriangleCount() : 0u; }
 		virtual uint32_t GetMeshInstanceCount() const override { return m_RenderScene ? m_RenderScene->GetMeshInstanceCount() : 0u; }
+		virtual GeometryPool::Stats GetGeometryPoolStats() const override { return m_RenderScene ? m_RenderScene->GetGeometryPool().GetStats() : GeometryPool::Stats{}; }
+		virtual uint32_t GetTextureRegistryUsedCount() const override { return m_RenderScene ? m_RenderScene->GetTextureRegistry().GetUsedCount() : 0u; }
+		virtual uint32_t GetTextureRegistryCapacity() const override { return m_RenderScene ? m_RenderScene->GetTextureRegistry().GetCapacity() : 0u; }
 
 		// Real-time (denoised) vs. reference-accumulation mode -- same flag the
 		// "Denoiser (SVGF)" checkbox in OnImGuiRender() drives. Exposed so a

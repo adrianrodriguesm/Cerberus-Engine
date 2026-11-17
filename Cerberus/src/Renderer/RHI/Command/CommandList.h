@@ -17,6 +17,11 @@ namespace cerberus
 		uint32_t MaskedDrawCallCount = 0;
 		uint32_t ComputeDispatchCount = 0;
 		uint32_t RayTracingDispatchCount = 0;
+		// Actual geometry submitted, independent of Direct-vs-Indirect batching
+		// (unlike DrawCallCount above) -- see
+		// GraphicsCommandList::RecordSubmittedGeometry.
+		uint32_t InstancesSubmitted = 0;
+		uint32_t TrianglesSubmitted = 0;
 	};
 
 	// Non-owning recording view over an already-begun Vulkan command buffer.

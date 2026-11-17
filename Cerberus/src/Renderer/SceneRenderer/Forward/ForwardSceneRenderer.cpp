@@ -797,6 +797,7 @@ namespace cerberus
 				{
 					const auto& range = drawRanges[bucket];
 					graphics.SetMaskedDrawStatistics(bucket >= GetRasterBucketIndex(true, false));
+					graphics.RecordSubmittedGeometry(range.Count, range.TriangleCount);
 					RenderPreDepthPass(graphics,
 						PreDepthPassResources{ m_PreDepthBucketPipelines[bucket], preDepthBindings[bucket] },
 						PreDepthPassParameters{ drawStream, range.Count, vertexBufferAddress, instanceBufferAddress,
@@ -830,6 +831,7 @@ namespace cerberus
 						{
 							const auto& range = drawRanges[bucket];
 							graphics.SetMaskedDrawStatistics(bucket >= GetRasterBucketIndex(true, false));
+							graphics.RecordSubmittedGeometry(range.Count, range.TriangleCount);
 							RenderShadowPass(graphics,
 								ShadowPassResources{ m_ShadowBucketPipelines[bucket], shadowBindings[bucket] },
 								ShadowPassParameters{ drawStream, range.Count, vertexBufferAddress, instanceBufferAddress,
@@ -876,6 +878,7 @@ namespace cerberus
 				{
 					const auto& range = drawRanges[bucket];
 					graphics.SetMaskedDrawStatistics(bucket >= GetRasterBucketIndex(true, false));
+					graphics.RecordSubmittedGeometry(range.Count, range.TriangleCount);
 					RenderForwardPass(graphics,
 						ForwardPassResources{ m_ForwardBucketPipelines[bucket], m_GeometryBindGroup },
 						ForwardPassParameters{ drawStream, range.Count, vertexBufferAddress, instanceBufferAddress,

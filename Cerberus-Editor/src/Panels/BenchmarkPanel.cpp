@@ -7,6 +7,7 @@
 #include "Renderer/Core/Renderer.h"
 #include "ImGui/ImGuiUI.h"
 #include "Renderer/Core/RendererContext.h"
+#include "Renderer/Memory/ResourceAllocator.h"
 #include "Renderer/RHI/Device.h"
 #include "Renderer/RHI/Swapchain.h"
 #include "Renderer/SceneRenderer/PathTracer/PathTracerSceneRenderer.h"
@@ -17,6 +18,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <ctime>
 #include <fstream>
 #include <iomanip>
@@ -50,6 +52,29 @@ namespace cerberus
 			case VK_PRESENT_MODE_FIFO_RELAXED_KHR: return "FifoRelaxed";
 			default: return "Unknown";
 			}
+		}
+
+		// Sums the named root-level CPU profiler scopes from the last fully
+		// completed frame (same one-frame lag as GetLastFramePassTimings()).
+		// LayerUpdate covers command-buffer recording (Scene/SceneRenderer
+		// update+Render); FrameSubmit is the vkQueueSubmit call -- together,
+		// "CPU record + submit" without the ImGui-build or Present/vsync-wait
+		// time Timestep's whole-frame delta would also include.
+		float SumCPUProfileScopes(std::span<const char* const> names)
+		{
+			float totalMs = 0.0f;
+			for (const CPUProfileEntry& entry : Profiler::GetCPUEntries())
+			{
+				for (const char* name : names)
+				{
+					if (std::strcmp(entry.Name, name) == 0)
+					{
+						totalMs += entry.Milliseconds;
+						break;
+					}
+				}
+			}
+			return totalMs;
 		}
 
 		const char* PassTypeToString(RGPassType type)
@@ -286,6 +311,7 @@ namespace cerberus
 		m_FrameTotalMs.clear();
 		m_CpuFrameMs.clear();
 		m_FrameDrawCallSum = m_FrameMaskedDrawCallSum = 0.0;
+		m_FrameInstancesSubmittedSum = m_FrameTrianglesSubmittedSum = 0.0;
 	}
 
 	const char* BenchmarkPanel::CurrentModeName() const
@@ -317,7 +343,7 @@ namespace cerberus
 		return &m_RunCamera;
 	}
 
-	void BenchmarkPanel::EndFrame(SceneRenderer& sceneRenderer, Timestep ts)
+	void BenchmarkPanel::EndFrame(SceneRenderer& sceneRenderer)
 	{
 		if (!m_FrameCountsForSampling)
 			return;
@@ -344,8 +370,12 @@ namespace cerberus
 			it->second.GpuTimesMs.push_back(timing.GPUTimeMs);
 			it->second.DrawCallSum += timing.DrawCallCount;
 			it->second.MaskedDrawCallSum += timing.MaskedDrawCallCount;
+			it->second.InstancesSubmittedSum += timing.InstancesSubmitted;
+			it->second.TrianglesSubmittedSum += timing.TrianglesSubmitted;
 			m_FrameDrawCallSum += timing.DrawCallCount;
 			m_FrameMaskedDrawCallSum += timing.MaskedDrawCallCount;
+			m_FrameInstancesSubmittedSum += timing.InstancesSubmitted;
+			m_FrameTrianglesSubmittedSum += timing.TrianglesSubmitted;
 			frameTotalMs += timing.GPUTimeMs;
 		}
 
@@ -355,7 +385,8 @@ namespace cerberus
 
 		if (m_CpuFrameMs.capacity() == 0)
 			m_CpuFrameMs.reserve(m_SampleFrames);
-		m_CpuFrameMs.push_back(ts.GetSeconds() * 1000.0f);
+		static constexpr const char* kCpuRecordSubmitScopes[] = { "LayerUpdate", "FrameSubmit" };
+		m_CpuFrameMs.push_back(SumCPUProfileScopes(kCpuRecordSubmitScopes));
 
 		++m_FrameCounter;
 		if (m_FrameCounter < m_SampleFrames)
@@ -389,7 +420,7 @@ namespace cerberus
 		const std::string& cameraName = m_Cameras[m_CurrentCameraIndex].Name;
 
 		auto appendRow = [&](const std::string& passName, const char* typeName, std::vector<float> samples,
-			bool hasDrawCounts, double draws, double maskedDraws)
+			bool hasDrawCounts, double draws, double maskedDraws, double instancesSubmitted, double trianglesSubmitted)
 		{
 			CSVRow row;
 			row.Camera = cameraName;
@@ -405,6 +436,8 @@ namespace cerberus
 				row.DrawCalls = draws / row.Samples;
 				row.MaskedDrawCalls = maskedDraws / row.Samples;
 				row.DefaultDrawCalls = row.DrawCalls - row.MaskedDrawCalls;
+				row.SubmittedInstances = instancesSubmitted / row.Samples;
+				row.SubmittedTriangles = trianglesSubmitted / row.Samples;
 			}
 			ComputeStats(std::move(samples), row.MeanMs, row.MedianMs, row.MinMs, row.MaxMs, row.P95Ms);
 			m_PendingRows.push_back(std::move(row));
@@ -412,10 +445,12 @@ namespace cerberus
 
 		for (auto& [passName, accumulator] : m_PassAccumulators)
 			appendRow(passName, PassTypeToString(accumulator.Type), accumulator.GpuTimesMs,
-				true, accumulator.DrawCallSum, accumulator.MaskedDrawCallSum);
+				true, accumulator.DrawCallSum, accumulator.MaskedDrawCallSum,
+				accumulator.InstancesSubmittedSum, accumulator.TrianglesSubmittedSum);
 
-		appendRow("FrameTotal", "Frame", m_FrameTotalMs, true, m_FrameDrawCallSum, m_FrameMaskedDrawCallSum);
-		appendRow("CPUFrameTime", "CPU", m_CpuFrameMs, false, 0.0, 0.0);
+		appendRow("FrameTotal", "Frame", m_FrameTotalMs, true, m_FrameDrawCallSum, m_FrameMaskedDrawCallSum,
+			m_FrameInstancesSubmittedSum, m_FrameTrianglesSubmittedSum);
+		appendRow("CPUFrameTime", "CPU", m_CpuFrameMs, false, 0.0, 0.0, 0.0, 0.0);
 	}
 
 	void BenchmarkPanel::RestoreRunSettings()
@@ -466,6 +501,8 @@ namespace cerberus
 		localtime_s(&localTime, &now);
 		char timestamp[32];
 		std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d_%H%M%S", &localTime);
+		char isoDate[32];
+		std::strftime(isoDate, sizeof(isoDate), "%Y-%m-%d %H:%M:%S", &localTime);
 
 		const std::string sceneName = m_Scene
 			? AssetManager::GetMetadata(m_Scene).FilePath.stem().string()
@@ -510,6 +547,7 @@ namespace cerberus
 			meshInstanceCount = m_ActiveSceneRenderer->GetMeshInstanceCount();
 		}
 
+		out << "# date: " << isoDate << "\n";
 		out << "# scene: " << sceneName << "\n";
 		out << "# renderer: " << rendererName << "\n";
 		if (m_RunRendererType == SceneRendererType::PathTracer)
@@ -533,13 +571,31 @@ namespace cerberus
 		out << "# warmup_frames: " << m_EffectiveWarmupFrames << "\n";
 		out << "# sample_frames: " << m_SampleFrames << "\n";
 
-		out << "# schema_version: 2\n";
+		// Memory section: VMA-wide allocator totals plus this scene's
+		// GeometryPool/texture-registry occupancy, all read right before
+		// RestoreRunSettings() starts tearing the run's state back down.
+		const GPUMemoryStats vmaStats = ResourceAllocator::GetStats();
+		out << "# vma_used_bytes: " << vmaStats.Used << "\n";
+		out << "# vma_free_bytes: " << vmaStats.Free << "\n";
+		if (m_ActiveSceneRenderer)
+		{
+			const GeometryPool::Stats poolStats = m_ActiveSceneRenderer->GetGeometryPoolStats();
+			out << "# geometry_pool_vertex_used_bytes: " << poolStats.UsedVertexBytes << "\n";
+			out << "# geometry_pool_vertex_capacity_bytes: " << poolStats.CapacityVertexBytes << "\n";
+			out << "# geometry_pool_index_used_bytes: " << poolStats.UsedIndexBytes << "\n";
+			out << "# geometry_pool_index_capacity_bytes: " << poolStats.CapacityIndexBytes << "\n";
+			out << "# texture_registry_used: " << m_ActiveSceneRenderer->GetTextureRegistryUsedCount() << "\n";
+			out << "# texture_registry_capacity: " << m_ActiveSceneRenderer->GetTextureRegistryCapacity() << "\n";
+		}
+
+		out << "# schema_version: 3\n";
 		out << "# draw_calls_semantics: mean CPU API submissions per sampled frame; indirect batches count once\n";
 		out << "# scene_counts_semantics: scene instances and triangles, not per-pass submitted totals\n";
-		out << "# cpu_frame_semantics: application frame delta, includes GPU waits and presentation\n";
+		out << "# submitted_semantics: mean actual geometry submitted per sampled frame for this pass; equals scene_instances/scene_triangles today since nothing is culled yet\n";
+		out << "# cpu_frame_semantics: CPU time recording and submitting command buffers (Profiler's LayerUpdate+FrameSubmit scopes), excludes ImGui build and Present/vsync wait\n";
 		out.imbue(std::locale::classic());
 		out << std::setprecision(9);
-		out << "camera,pass,type,mean_ms,median_ms,min_ms,max_ms,p95_ms,samples,mode,draw_calls,default_draw_calls,masked_draw_calls,scene_instances,scene_triangles\n";
+		out << "camera,pass,type,mean_ms,median_ms,min_ms,max_ms,p95_ms,samples,mode,draw_calls,default_draw_calls,masked_draw_calls,scene_instances,scene_triangles,submitted_instances,submitted_triangles\n";
 		for (const CSVRow& row : m_PendingRows)
 		{
 			out << CSVText(row.Camera) << "," << CSVText(row.Pass) << "," << row.Type << ","
@@ -549,7 +605,12 @@ namespace cerberus
 				out << row.DrawCalls << "," << row.DefaultDrawCalls << "," << row.MaskedDrawCalls;
 			else
 				out << ",,";
-			out << "," << row.SceneInstances << "," << row.SceneTriangles << "\n";
+			out << "," << row.SceneInstances << "," << row.SceneTriangles << ",";
+			if (row.HasDrawCounts)
+				out << row.SubmittedInstances << "," << row.SubmittedTriangles;
+			else
+				out << ",";
+			out << "\n";
 		}
 
 		NV_CORE_INFO("[BenchmarkPanel] Wrote {0}", csvPath.string());

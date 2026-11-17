@@ -65,6 +65,9 @@ namespace cerberus
 		// CPU submissions from the latest Execute(); indirect batches count once.
 		uint32_t DrawCallCount = 0;
 		uint32_t MaskedDrawCallCount = 0;
+		// Actual geometry submitted, independent of Direct-vs-Indirect batching.
+		uint32_t InstancesSubmitted = 0;
+		uint32_t TrianglesSubmitted = 0;
 	};
 
 	// One pass's declared use of one imported resource. LoadOp/StoreOp only
@@ -255,6 +258,8 @@ namespace cerberus
 			// CPU draw submissions recorded by the most recent Execute().
 			uint32_t DrawCallCount = 0;
 			uint32_t MaskedDrawCallCount = 0;
+			uint32_t InstancesSubmitted = 0;
+			uint32_t TrianglesSubmitted = 0;
 		};
 
 		void RecordAccess(uint32_t passIndex, RGResourceAccess access);

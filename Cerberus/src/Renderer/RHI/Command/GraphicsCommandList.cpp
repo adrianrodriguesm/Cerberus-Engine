@@ -422,6 +422,15 @@ namespace cerberus
 		}
 	}
 
+	void GraphicsCommandList::RecordSubmittedGeometry(uint32_t instanceCount, uint32_t triangleCount)
+	{
+		if (RendererFrameStatistics* statistics = GetStatistics())
+		{
+			statistics->InstancesSubmitted += instanceCount;
+			statistics->TrianglesSubmitted += triangleCount;
+		}
+	}
+
 	void GraphicsCommandList::Draw(
 		uint32_t vertexCount,
 		uint32_t instanceCount,

@@ -545,6 +545,8 @@ namespace cerberus
 		{
 			pass.DrawCallCount = 0;
 			pass.MaskedDrawCallCount = 0;
+			pass.InstancesSubmitted = 0;
+			pass.TrianglesSubmitted = 0;
 		}
 
 		GraphicsCommandList graphics(commandBuffer.GetRecordingView(frameIndex), statistics);
@@ -623,10 +625,14 @@ namespace cerberus
 						}
 						const uint32_t drawsBefore = statistics->DrawCallCount;
 						const uint32_t maskedDrawsBefore = statistics->MaskedDrawCallCount;
+						const uint32_t instancesBefore = statistics->InstancesSubmitted;
+						const uint32_t trianglesBefore = statistics->TrianglesSubmitted;
 						graphics.SetMaskedDrawStatistics(false);
 						pass.GraphicsExecute(graphics);
 						pass.DrawCallCount = statistics->DrawCallCount - drawsBefore;
 						pass.MaskedDrawCallCount = statistics->MaskedDrawCallCount - maskedDrawsBefore;
+						pass.InstancesSubmitted = statistics->InstancesSubmitted - instancesBefore;
+						pass.TrianglesSubmitted = statistics->TrianglesSubmitted - trianglesBefore;
 						if (profilingEnabled)
 						{
 							commandBuffer.EndTimestampQueryRenderThread(pass.GPUTimeQueryID);
@@ -645,10 +651,14 @@ namespace cerberus
 						}
 						const uint32_t drawsBefore = statistics->DrawCallCount;
 						const uint32_t maskedDrawsBefore = statistics->MaskedDrawCallCount;
+						const uint32_t instancesBefore = statistics->InstancesSubmitted;
+						const uint32_t trianglesBefore = statistics->TrianglesSubmitted;
 						graphics.SetMaskedDrawStatistics(false);
 						pass.GraphicsExecute(graphics);
 						pass.DrawCallCount = statistics->DrawCallCount - drawsBefore;
 						pass.MaskedDrawCallCount = statistics->MaskedDrawCallCount - maskedDrawsBefore;
+						pass.InstancesSubmitted = statistics->InstancesSubmitted - instancesBefore;
+						pass.TrianglesSubmitted = statistics->TrianglesSubmitted - trianglesBefore;
 						if (profilingEnabled)
 						{
 							commandBuffer.EndTimestampQueryRenderThread(pass.GPUTimeQueryID);
@@ -717,7 +727,8 @@ namespace cerberus
 				? commandBuffer.GetExecutionGPUTime(pass.GPUTimeQueryID)
 				: 0.0f;
 			m_PassTimingsCache.push_back(RGPassTiming{ pass.Name, type, gpuTimeMs,
-				pass.DrawCallCount, pass.MaskedDrawCallCount });
+				pass.DrawCallCount, pass.MaskedDrawCallCount,
+				pass.InstancesSubmitted, pass.TrianglesSubmitted });
 		}
 		return m_PassTimingsCache;
 	}

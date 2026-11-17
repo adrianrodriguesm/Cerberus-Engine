@@ -2,6 +2,7 @@
 #include "Scene/Scene.h"
 #include "Asset/Assets/MeshAsset.h"
 #include "Renderer/Scene/Camera.h"
+#include "Renderer/Scene/GeometryPool.h"
 #include "Renderer/RHI/Image.h"
 #include "Renderer/Core/RenderObjectID.h"
 #include "Renderer/RenderGraph/RenderGraph.h"
@@ -62,5 +63,11 @@ namespace cerberus
 		virtual uint32_t GetTotalTriangleCount() const = 0;
 		virtual uint32_t GetMeshInstanceCount() const = 0;
 
+		// Memory footprint for reporting (e.g. a benchmark CSV's memory
+		// section) -- this renderer's RenderScene's GeometryPool usage and
+		// bindless texture registry occupancy.
+		virtual GeometryPool::Stats GetGeometryPoolStats() const = 0;
+		virtual uint32_t GetTextureRegistryUsedCount() const = 0;
+		virtual uint32_t GetTextureRegistryCapacity() const = 0;
 	};
 }

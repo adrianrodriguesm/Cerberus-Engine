@@ -42,6 +42,9 @@ namespace cerberus
 		std::span<const RGPassTiming> GetLastFramePassTimings() const override;
 		uint32_t GetTotalTriangleCount() const override { return m_RenderScene ? m_RenderScene->GetTotalTriangleCount() : 0u; }
 		uint32_t GetMeshInstanceCount() const override { return m_RenderScene ? m_RenderScene->GetMeshInstanceCount() : 0u; }
+		GeometryPool::Stats GetGeometryPoolStats() const override { return m_RenderScene ? m_RenderScene->GetGeometryPool().GetStats() : GeometryPool::Stats{}; }
+		uint32_t GetTextureRegistryUsedCount() const override { return m_RenderScene ? m_RenderScene->GetTextureRegistry().GetUsedCount() : 0u; }
+		uint32_t GetTextureRegistryCapacity() const override { return m_RenderScene ? m_RenderScene->GetTextureRegistry().GetCapacity() : 0u; }
 		bool UsesIndirectSubmission() const { return m_UseIndirectSubmission; }
 		void SetIndirectSubmission(bool enabled) { m_UseIndirectSubmission = enabled; }
 		void LockSubmissionForBenchmark(bool locked) { m_SubmissionLockedForBenchmark = locked; }

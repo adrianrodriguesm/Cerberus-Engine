@@ -21,6 +21,11 @@ namespace cerberus
 		uint32_t FirstInstance = 0;
 		uint32_t Count = 0;
 		uint32_t StreamOffset = 0; // uint32 words, independently decodable
+		// Sum of this range's instances' submesh.IndexCount / 3, computed once
+		// in BuildDrawStream() -- lets a benchmark report what was actually
+		// submitted per pass instead of the whole scene's static triangle
+		// count, which matters once culling (weeks 2-3) makes the two differ.
+		uint32_t TriangleCount = 0;
 	};
 	constexpr uint32_t RasterBucketCount = 4;
 	// Opaque back/none, then masked back/none; shared with pipeline setup.

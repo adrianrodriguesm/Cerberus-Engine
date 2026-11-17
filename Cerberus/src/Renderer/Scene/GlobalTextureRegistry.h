@@ -24,6 +24,9 @@ namespace cerberus
 		void ReleaseTexture(AssetHandle textureAsset, bool srgb);
 
 		uint32_t GetCapacity() const { return m_Capacity; }
+		// Distinct (asset, colour-space) textures currently registered --
+		// for reporting (e.g. a benchmark CSV's memory section), not a hot path.
+		uint32_t GetUsedCount() const { return static_cast<uint32_t>(m_Entries.size()); }
 		uint64_t GetRevision() const { return m_Revision; }
 		std::span<const Handle<Texture2D>> GetTextureHandles() const { return m_TextureSlots; }
 

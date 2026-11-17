@@ -57,6 +57,13 @@ namespace cerberus
 		// Classifies subsequent submissions for the renderer statistics only.
 		void SetMaskedDrawStatistics(bool masked) { m_MaskedDrawStatistics = masked; }
 
+		// Attributes actual submitted geometry to the renderer statistics --
+		// independent of whether it took one Direct draw per instance or one
+		// Indirect batch, unlike DrawCallCount. The caller (a bucket's range)
+		// already knows both counts; this has no way to derive them from a
+		// draw call alone. A no-op call for an empty range is harmless.
+		void RecordSubmittedGeometry(uint32_t instanceCount, uint32_t triangleCount);
+
 		void Draw(
 			uint32_t vertexCount,
 			uint32_t instanceCount = 1,

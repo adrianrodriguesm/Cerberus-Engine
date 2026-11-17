@@ -124,6 +124,7 @@ namespace cerberus
 				builder.SetIndexBufferCount(submesh.IndexCount);
 				builder.SetFirstInstance(instanceIndex);
 				builder.Draw();
+				range.TriangleCount += submesh.IndexCount / 3;
 				++instanceIndex;
 			}
 		}

@@ -254,7 +254,7 @@ namespace cerberus
 		// run, so the readback has to happen here, after it -- not folded
 		// into the BeginFrame() call above.
 		if (benchmarkCamera)
-			m_BenchmarkPanel->EndFrame(*m_SceneRenderer, ts);
+			m_BenchmarkPanel->EndFrame(*m_SceneRenderer);
 
 		// --benchmark <scene> <out.csv>: the CSV is written as part of
 		// finishing the run (see BenchmarkPanel::FinishRun), so once the run

@@ -1,7 +1,6 @@
 #pragma once
 #include "EditorPanel.h"
 #include "Core/FlyingCamera.h"
-#include "Core/Timestep.h"
 #include "Renderer/SceneRenderer/SceneRenderer.h"
 
 #include <filesystem>
@@ -76,7 +75,7 @@ namespace cerberus
 		// already recorded. Reads them back, accumulates, and advances the
 		// run's state machine (next camera, or finishes the run and writes
 		// the CSV).
-		void EndFrame(SceneRenderer& sceneRenderer, Timestep ts);
+		void EndFrame(SceneRenderer& sceneRenderer);
 
 		// Also called directly by EditorLayer for the --benchmark <scene>
 		// <out.csv> CLI path, which has no "Run benchmark" button click to
@@ -94,6 +93,10 @@ namespace cerberus
 			std::vector<float> GpuTimesMs;
 			double DrawCallSum = 0.0;
 			double MaskedDrawCallSum = 0.0;
+			// Actual geometry submitted this pass, independent of Direct-vs-
+			// Indirect batching -- unlike DrawCallSum above.
+			double InstancesSubmittedSum = 0.0;
+			double TrianglesSubmittedSum = 0.0;
 		};
 
 		struct CSVRow
@@ -107,6 +110,11 @@ namespace cerberus
 			bool HasDrawCounts = false;
 			double DrawCalls = 0.0, DefaultDrawCalls = 0.0, MaskedDrawCalls = 0.0;
 			uint32_t SceneInstances = 0, SceneTriangles = 0;
+			// Mean actual geometry submitted per sampled frame for this pass --
+			// equals SceneInstances/SceneTriangles today (nothing is culled
+			// yet), but tracked separately so it stays correct once culling
+			// (weeks 2-3) makes a pass submit less than the whole scene.
+			double SubmittedInstances = 0.0, SubmittedTriangles = 0.0;
 		};
 
 		std::filesystem::path GetSidecarPath() const;
@@ -146,6 +154,7 @@ namespace cerberus
 		// duration instead of re-casting m_ActiveSceneRenderer at every site.
 		class ForwardSceneRenderer* m_ActiveForwardRenderer = nullptr;
 		double m_FrameDrawCallSum = 0.0, m_FrameMaskedDrawCallSum = 0.0;
+		double m_FrameInstancesSubmittedSum = 0.0, m_FrameTrianglesSubmittedSum = 0.0;
 		SceneRendererType m_RunRendererType = SceneRendererType::Forward;
 		// Only meaningful when m_RunRendererType is PathTracer -- restored in
 		// FinishRun(). See StartRun()'s comment on forcing denoised mode.
