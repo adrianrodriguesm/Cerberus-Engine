@@ -4,11 +4,13 @@
 #include "Asset/AssetManager.h"
 #include "Core/Application.h"
 #include "Core/Profiler.h"
+#include "Renderer/Core/Renderer.h"
 #include "ImGui/ImGuiUI.h"
 #include "Renderer/Core/RendererContext.h"
 #include "Renderer/RHI/Device.h"
 #include "Renderer/RHI/Swapchain.h"
 #include "Renderer/SceneRenderer/PathTracer/PathTracerSceneRenderer.h"
+#include "Renderer/SceneRenderer/Forward/ForwardSceneRenderer.h"
 #include "Renderer/SceneRenderer/SceneRendererType.h"
 #include "Utils/FileSystem.h"
 #include "Utils/SerializationUtils.h"
@@ -17,6 +19,8 @@
 #include <cmath>
 #include <ctime>
 #include <fstream>
+#include <iomanip>
+#include <locale>
 #include <imgui/imgui.h>
 #include <yaml-cpp/yaml.h>
 
@@ -24,6 +28,18 @@ namespace cerberus
 {
 	namespace
 	{
+		std::string CSVText(const std::string& value)
+		{
+			std::string escaped = "\"";
+			for (char ch : value)
+			{
+				if (ch == '"')
+					escaped += '"';
+				escaped += ch;
+			}
+			return escaped + '"';
+		}
+
 		const char* PresentModeToString(VkPresentModeKHR mode)
 		{
 			switch (mode)
@@ -199,6 +215,7 @@ namespace cerberus
 
 	void BenchmarkPanel::SetSceneContext(const Ref<Scene>& context)
 	{
+		Shutdown();
 		m_Scene = context;
 		LoadCameras();
 	}
@@ -209,6 +226,20 @@ namespace cerberus
 			return;
 
 		m_RunRendererType = m_Scene->GetRendererType();
+		// Timestamp results lag recording by a frame-in-flight slot. Drain old
+		// camera/mode results during every warm-up, even with a tiny UI value.
+		// Clamped into a run-scoped copy -- m_WarmupFrames is the user's own
+		// UI value and must not be silently rewritten by this floor.
+		m_EffectiveWarmupFrames = std::max(m_WarmupFrames, Renderer::GetRendererConfig().FramesInFlight + 1u);
+		m_SampleFrames = std::max(m_SampleFrames, 1u);
+		m_RunIndirectSubmission = false;
+		m_ActiveForwardRenderer = dynamic_cast<ForwardSceneRenderer*>(m_ActiveSceneRenderer);
+		if (m_ActiveForwardRenderer)
+		{
+			m_PreRunIndirectSubmission = m_ActiveForwardRenderer->UsesIndirectSubmission();
+			m_ActiveForwardRenderer->SetIndirectSubmission(false);
+			m_ActiveForwardRenderer->LockSubmissionForBenchmark(true);
+		}
 
 		// Force the fixed benchmark resolution now; EditorLayer's per-frame
 		// viewport auto-size is gated off by IsRunning() for the duration, so
@@ -253,6 +284,13 @@ namespace cerberus
 		m_PassAccumulators.clear();
 		m_FrameTotalMs.clear();
 		m_CpuFrameMs.clear();
+		m_FrameDrawCallSum = m_FrameMaskedDrawCallSum = 0.0;
+	}
+
+	const char* BenchmarkPanel::CurrentModeName() const
+	{
+		return m_RunRendererType == SceneRendererType::Forward
+			? (m_RunIndirectSubmission ? "Indirect" : "Direct") : "PathTracer";
 	}
 
 	const FlyingCamera* BenchmarkPanel::BeginFrame()
@@ -264,7 +302,7 @@ namespace cerberus
 		if (m_RunState == RunState::WarmingUp)
 		{
 			++m_FrameCounter;
-			if (m_FrameCounter >= m_WarmupFrames)
+			if (m_FrameCounter >= m_EffectiveWarmupFrames)
 			{
 				m_RunState = RunState::Sampling;
 				m_FrameCounter = 0;
@@ -303,6 +341,10 @@ namespace cerberus
 				it->second.GpuTimesMs.reserve(m_SampleFrames);
 			}
 			it->second.GpuTimesMs.push_back(timing.GPUTimeMs);
+			it->second.DrawCallSum += timing.DrawCallCount;
+			it->second.MaskedDrawCallSum += timing.MaskedDrawCallCount;
+			m_FrameDrawCallSum += timing.DrawCallCount;
+			m_FrameMaskedDrawCallSum += timing.MaskedDrawCallCount;
 			frameTotalMs += timing.GPUTimeMs;
 		}
 
@@ -319,13 +361,23 @@ namespace cerberus
 			return;
 
 		FlushCurrentCameraStats();
-		++m_CurrentCameraIndex;
+		if (m_RunRendererType == SceneRendererType::Forward && !m_RunIndirectSubmission)
+		{
+			m_RunIndirectSubmission = true;
+		}
+		else
+		{
+			m_RunIndirectSubmission = false;
+			++m_CurrentCameraIndex;
+		}
 		if (m_CurrentCameraIndex >= m_Cameras.size())
 		{
 			FinishRun();
 			return;
 		}
 
+		if (m_ActiveForwardRenderer)
+			m_ActiveForwardRenderer->SetIndirectSubmission(m_RunIndirectSubmission);
 		ApplyCurrentCamera();
 		m_RunState = RunState::WarmingUp;
 		m_FrameCounter = 0;
@@ -335,27 +387,45 @@ namespace cerberus
 	{
 		const std::string& cameraName = m_Cameras[m_CurrentCameraIndex].Name;
 
-		auto appendRow = [&](const std::string& passName, const char* typeName, std::vector<float> samples)
+		auto appendRow = [&](const std::string& passName, const char* typeName, std::vector<float> samples,
+			bool hasDrawCounts, double draws, double maskedDraws)
 		{
 			CSVRow row;
 			row.Camera = cameraName;
+			row.Mode = CurrentModeName();
 			row.Pass = passName;
 			row.Type = typeName;
 			row.Samples = static_cast<uint32_t>(samples.size());
+			row.SceneInstances = m_ActiveSceneRenderer->GetMeshInstanceCount();
+			row.SceneTriangles = m_ActiveSceneRenderer->GetTotalTriangleCount();
+			row.HasDrawCounts = hasDrawCounts;
+			if (hasDrawCounts && row.Samples > 0)
+			{
+				row.DrawCalls = draws / row.Samples;
+				row.MaskedDrawCalls = maskedDraws / row.Samples;
+				row.DefaultDrawCalls = row.DrawCalls - row.MaskedDrawCalls;
+			}
 			ComputeStats(std::move(samples), row.MeanMs, row.MedianMs, row.MinMs, row.MaxMs, row.P95Ms);
 			m_PendingRows.push_back(std::move(row));
 		};
 
 		for (auto& [passName, accumulator] : m_PassAccumulators)
-			appendRow(passName, PassTypeToString(accumulator.Type), accumulator.GpuTimesMs);
+			appendRow(passName, PassTypeToString(accumulator.Type), accumulator.GpuTimesMs,
+				true, accumulator.DrawCallSum, accumulator.MaskedDrawCallSum);
 
-		appendRow("FrameTotal", "Frame", m_FrameTotalMs);
-		appendRow("CPUFrameTime", "CPU", m_CpuFrameMs);
+		appendRow("FrameTotal", "Frame", m_FrameTotalMs, true, m_FrameDrawCallSum, m_FrameMaskedDrawCallSum);
+		appendRow("CPUFrameTime", "CPU", m_CpuFrameMs, false, 0.0, 0.0);
 	}
 
-	void BenchmarkPanel::FinishRun()
+	void BenchmarkPanel::RestoreRunSettings()
 	{
 		Profiler::SetEnabled(m_PreRunProfilerEnabled);
+		if (m_ActiveForwardRenderer)
+		{
+			m_ActiveForwardRenderer->SetIndirectSubmission(m_PreRunIndirectSubmission);
+			m_ActiveForwardRenderer->LockSubmissionForBenchmark(false);
+		}
+		m_ActiveForwardRenderer = nullptr;
 
 		if (m_RunRendererType == SceneRendererType::PathTracer)
 		{
@@ -367,10 +437,22 @@ namespace cerberus
 		if (const Ref<Swapchain> swapchain = Application::Get().GetWindow()->GetSwapchain())
 			swapchain->RecreateSwapchain();
 
-		WriteCSV();
-
 		m_RunState = RunState::Idle;
 		m_FrameCounter = 0;
+		m_FrameCountsForSampling = false;
+	}
+
+	void BenchmarkPanel::Shutdown()
+	{
+		if (IsRunning())
+			RestoreRunSettings();
+	}
+
+	void BenchmarkPanel::FinishRun()
+	{
+		// Metadata must describe the capture, before restoring presentation/mode.
+		WriteCSV();
+		RestoreRunSettings();
 	}
 
 	void BenchmarkPanel::WriteCSV()
@@ -403,6 +485,9 @@ namespace cerberus
 		VkPhysicalDeviceProperties deviceProperties{};
 		vkGetPhysicalDeviceProperties(RendererContext::GetCurrentDevice()->GetVulkanPhysicalDevice(), &deviceProperties);
 
+		// Read fresh rather than cached: this runs before RestoreRunSettings()
+		// reverts presentation, but a run-start snapshot could still go stale
+		// if the swapchain is recreated again mid-run (resize, monitor change).
 		const Ref<Swapchain> swapchain = Application::Get().GetWindow()->GetSwapchain();
 		const VkPresentModeKHR presentMode = swapchain ? swapchain->GetPresentMode() : VK_PRESENT_MODE_FIFO_KHR;
 
@@ -433,15 +518,26 @@ namespace cerberus
 		out << "# build_configuration: Release\n";
 #endif
 		out << "# git_commit: " << ReadGitCommitHash(repoRoot) << "\n";
-		out << "# warmup_frames: " << m_WarmupFrames << "\n";
+		out << "# warmup_frames: " << m_EffectiveWarmupFrames << "\n";
 		out << "# sample_frames: " << m_SampleFrames << "\n";
 
-		out << "camera,pass,type,mean_ms,median_ms,min_ms,max_ms,p95_ms,samples\n";
+		out << "# schema_version: 2\n";
+		out << "# draw_calls_semantics: mean CPU API submissions per sampled frame; indirect batches count once\n";
+		out << "# scene_counts_semantics: scene instances and triangles, not per-pass submitted totals\n";
+		out << "# cpu_frame_semantics: application frame delta, includes GPU waits and presentation\n";
+		out.imbue(std::locale::classic());
+		out << std::setprecision(9);
+		out << "camera,pass,type,mean_ms,median_ms,min_ms,max_ms,p95_ms,samples,mode,draw_calls,default_draw_calls,masked_draw_calls,scene_instances,scene_triangles\n";
 		for (const CSVRow& row : m_PendingRows)
 		{
-			out << row.Camera << "," << row.Pass << "," << row.Type << ","
+			out << CSVText(row.Camera) << "," << CSVText(row.Pass) << "," << row.Type << ","
 				<< row.MeanMs << "," << row.MedianMs << "," << row.MinMs << ","
-				<< row.MaxMs << "," << row.P95Ms << "," << row.Samples << "\n";
+				<< row.MaxMs << "," << row.P95Ms << "," << row.Samples << "," << row.Mode << ",";
+			if (row.HasDrawCounts)
+				out << row.DrawCalls << "," << row.DefaultDrawCalls << "," << row.MaskedDrawCalls;
+			else
+				out << ",,";
+			out << "," << row.SceneInstances << "," << row.SceneTriangles << "\n";
 		}
 
 		NV_CORE_INFO("[BenchmarkPanel] Wrote {0}", csvPath.string());
@@ -466,11 +562,14 @@ namespace cerberus
 		if (IsRunning())
 		{
 			const char* stateName = m_RunState == RunState::WarmingUp ? "Warming up" : "Sampling";
-			const uint32_t total = m_RunState == RunState::WarmingUp ? m_WarmupFrames : m_SampleFrames;
+			const uint32_t total = m_RunState == RunState::WarmingUp ? m_EffectiveWarmupFrames : m_SampleFrames;
 			ImGui::Text("Running: camera %u/%zu (%s %u/%u)",
 				m_CurrentCameraIndex + 1, m_Cameras.size(), stateName, m_FrameCounter, total);
+			ImGui::Text("Mode: %s", CurrentModeName());
 			ImGui::TextDisabled("Resolution forced to %ux%u; viewport resumes when the run ends.",
 				m_Resolution.x, m_Resolution.y);
+			if (ImGui::Button("Cancel benchmark"))
+				Shutdown();
 			ImGui::End();
 			return;
 		}
@@ -549,6 +648,9 @@ namespace cerberus
 		ImGui::Separator();
 		ImGui::InputScalar("Warm-up frames", ImGuiDataType_U32, &m_WarmupFrames);
 		ImGui::InputScalar("Sample frames", ImGuiDataType_U32, &m_SampleFrames);
+		m_SampleFrames = std::max(m_SampleFrames, 1u);
+		if (m_Scene->GetRendererType() == SceneRendererType::Forward)
+			ImGui::TextUnformatted("Each camera: Direct, then Indirect (separate warm-up for each).");
 
 		ImGui::Separator();
 		if (ImGui::Button("Run benchmark") && !m_Cameras.empty() && m_ActiveSceneRenderer)

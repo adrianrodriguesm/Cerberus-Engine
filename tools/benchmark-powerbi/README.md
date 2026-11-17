@@ -1,7 +1,16 @@
 # Cerberus benchmarks in Power BI Desktop
 
+Schema 2 adds `mode`, mean draw-call counts (total/default/masked), and scene
+instance/triangle counts. The query also accepts legacy captures. When creating
+tables from the DAX kit, include **Mode A** and **Mode B**, leave them disconnected,
+and add a single-select slicer for each. Select Direct for A and Indirect for B
+to compare modes within the same run. Run details should include `mode` as well.
+Legacy Forward files have Unknown mode and cannot produce comparison deltas.
+New exports quote text fields; the unquoted-field limitation below applies to old
+captures only. See [paired captures](../../docs/benchmarks/t5-benchmark-pairs.md).
+
 1. Open **Transform data**. Create a Text parameter named `BenchmarkFolder` with the absolute path to the repository's `Benchmarks` directory. Create a blank query named `Benchmarks`, paste [Benchmarks.pq](Benchmarks.pq) into **Advanced Editor**, then **Close & Apply**. Refresh after adding captures. The query reads CSVs recursively and uses each relative file path as its run ID. [Microsoft folder connector](https://learn.microsoft.com/en-us/power-query/connectors/folder)
-2. Use **New table** for the first four expressions in [Comparison.dax](Comparison.dax). Create a one-to-many, single-direction relationship from `Cameras[camera]` to `Benchmarks[camera]`. Leave Run A, Run B and Statistic disconnected. Use **New measure** on Benchmarks for each remaining expression. Format `Delta %` as Percentage. [Microsoft measure setup](https://learn.microsoft.com/en-us/power-bi/transform-model/desktop-tutorial-create-measures)
+2. Use **New table** for the first six expressions in [Comparison.dax](Comparison.dax). Create a one-to-many, single-direction relationship from `Cameras[camera]` to `Benchmarks[camera]`. Leave Run A, Run B, Mode A, Mode B and Statistic disconnected. Use **New measure** on Benchmarks for each remaining expression. Format `Delta %` as Percentage. [Microsoft measure setup](https://learn.microsoft.com/en-us/power-bi/transform-model/desktop-tutorial-create-measures)
 3. Build a **Compare runs** page with single-select slicers for `Benchmarks[renderer]`, `Benchmarks[scene]`, `Cameras[camera]`, both run tables' `Run` columns, and `Statistic[Statistic]`. Add a card for `Comparison status`. Add two tables using `Benchmarks[pass]` and `Benchmarks[type]` as rows and Run A ms, Run B ms, Delta ms and Delta % as values. Filter one to `Timing = GPU frame` and the other to `Timing = GPU pass`. Sort the pass table descending by Run B ms to surface the most expensive passes. Disable totals.
 4. Build a **Run details** page with renderer, scene, camera and `Benchmarks[Run]` slicers. Use a table with Run, camera, pass, type and the exported mean, median, P95 and sample count. Set those numeric fields to **Don't summarize**. Add GPU, resolution, renderer mode, build and Git commit as run details if needed. Save the report as a PBIX.
 

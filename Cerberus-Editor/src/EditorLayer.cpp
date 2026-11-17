@@ -153,6 +153,9 @@ namespace cerberus
 
 	void EditorLayer::OnDetach()
 	{
+		// Restore benchmark-owned settings while its renderer is still alive.
+		if (m_BenchmarkPanel)
+			m_BenchmarkPanel->Shutdown();
 		// Persist the viewport camera pose with the scene so reopening it lands
 		// back on the same vantage point.
 		if (m_Scene)

@@ -11,11 +11,12 @@ HEADER = "camera,pass,type,mean_ms,median_ms,min_ms,max_ms,p95_ms,samples"
 
 
 def read_capture(path):
-    lines = path.read_text(encoding="utf-8-sig").splitlines()
-    start = lines.index(HEADER)
-    metadata = dict(line[2:].split(": ", 1) for line in lines[:start] if line.startswith("# "))
+    with path.open(encoding="utf-8-sig", newline="") as capture:
+        lines = capture.read().splitlines(keepends=True)
+    start = next(i for i, line in enumerate(lines) if line.rstrip("\r\n") == HEADER or line.startswith(HEADER + ",mode,"))
+    metadata = dict(line[2:].rstrip("\r\n").split(": ", 1) for line in lines[:start] if line.startswith("# "))
     rows = list(csv.DictReader(lines[start:]))
-    assert rows and len({(r["camera"], r["pass"], r["type"]) for r in rows}) == len(rows)
+    assert rows and len({(r["camera"], r.get("mode"), r["pass"], r["type"]) for r in rows}) == len(rows)
     for row in rows:
         assert int(row["samples"]) > 0
         for field in ("mean_ms", "median_ms", "min_ms", "max_ms", "p95_ms"):

@@ -4,6 +4,10 @@ Run B = DISTINCT(Benchmarks[Run])
 
 Cameras = DISTINCT(Benchmarks[camera])
 
+Mode A = DISTINCT(Benchmarks[mode])
+
+Mode B = DISTINCT(Benchmarks[mode])
+
 Statistic = DATATABLE("Statistic", STRING, {{"Mean"}, {"Median"}, {"P95"}})
 
 Timing ms =
@@ -19,23 +23,27 @@ IF(
 
 Run A ms =
 VAR RunId = SELECTEDVALUE('Run A'[Run])
+VAR SubmissionMode = SELECTEDVALUE('Mode A'[mode])
 RETURN
     IF(
-        NOT ISBLANK(RunId) && HASONEVALUE(Cameras[camera]),
+        NOT ISBLANK(RunId) && NOT ISBLANK(SubmissionMode) && HASONEVALUE(Cameras[camera]),
         CALCULATE(
             [Timing ms],
-            KEEPFILTERS(Benchmarks[Run] = RunId)
+            KEEPFILTERS(Benchmarks[Run] = RunId),
+            KEEPFILTERS(Benchmarks[mode] = SubmissionMode)
         )
     )
 
 Run B ms =
 VAR RunId = SELECTEDVALUE('Run B'[Run])
+VAR SubmissionMode = SELECTEDVALUE('Mode B'[mode])
 RETURN
     IF(
-        NOT ISBLANK(RunId) && HASONEVALUE(Cameras[camera]),
+        NOT ISBLANK(RunId) && NOT ISBLANK(SubmissionMode) && HASONEVALUE(Cameras[camera]),
         CALCULATE(
             [Timing ms],
-            KEEPFILTERS(Benchmarks[Run] = RunId)
+            KEEPFILTERS(Benchmarks[Run] = RunId),
+            KEEPFILTERS(Benchmarks[mode] = SubmissionMode)
         )
     )
 
@@ -43,12 +51,15 @@ RETURN
 Comparison status =
 VAR A = SELECTEDVALUE('Run A'[Run])
 VAR B = SELECTEDVALUE('Run B'[Run])
+VAR ModeA = SELECTEDVALUE('Mode A'[mode])
+VAR ModeB = SELECTEDVALUE('Mode B'[mode])
 VAR CameraName = SELECTEDVALUE(Cameras[camera])
 VAR KeyA =
     CALCULATE(
         SELECTEDVALUE(Benchmarks[Compatibility]),
         REMOVEFILTERS(Benchmarks),
         Benchmarks[Run] = A,
+        Benchmarks[mode] = ModeA,
         Benchmarks[camera] = CameraName,
         Benchmarks[Timing] = "GPU frame"
     )
@@ -57,6 +68,7 @@ VAR KeyB =
         SELECTEDVALUE(Benchmarks[Compatibility]),
         REMOVEFILTERS(Benchmarks),
         Benchmarks[Run] = B,
+        Benchmarks[mode] = ModeB,
         Benchmarks[camera] = CameraName,
         Benchmarks[Timing] = "GPU frame"
     )
@@ -64,7 +76,9 @@ RETURN
     SWITCH(
         TRUE(),
         ISBLANK(A) || ISBLANK(B), "Select one run in each slicer",
-        A = B, "Select two different runs",
+        ISBLANK(ModeA) || ISBLANK(ModeB), "Select one mode for each run",
+        ModeA = "Unknown" || ModeB = "Unknown", "Submission mode was not recorded",
+        A = B && ModeA = ModeB, "Select different runs or modes",
         ISBLANK(CameraName), "Select one camera",
         ISBLANK(KeyA) || ISBLANK(KeyB), "Missing camera or compatibility metadata",
         KeyA <> KeyB, "Recorded capture settings differ",

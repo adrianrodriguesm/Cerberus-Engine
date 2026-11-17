@@ -68,9 +68,9 @@ Microsoft documents [Power Query and its Advanced Editor](https://learn.microsof
 
 Open `tools/benchmark-powerbi/Comparison.dax`. It contains several independent expressions; do not paste the whole file as one formula.
 
-1. Use **Modeling > New table** four times, once per expression: `Run A`, `Run B`, `Cameras`, `Statistic`.
+1. Use **Modeling > New table** six times, once per expression: `Run A`, `Run B`, `Cameras`, `Mode A`, `Mode B`, `Statistic`.
 2. In Model view create a **one-to-many**, **single-direction**, active relationship from `Cameras[camera]` to `Benchmarks[camera]`.
-3. Leave `Run A`, `Run B` and `Statistic` disconnected. Delete any automatically inferred relationships involving them. They are selectors whose values the measures read, not joined dimensions.
+3. Leave `Run A`, `Run B`, `Mode A`, `Mode B` and `Statistic` disconnected. Delete any automatically inferred relationships involving them. They are selectors whose values the measures read, not joined dimensions.
 4. Select `Benchmarks`, then **New measure** six times, once for each remaining expression: `Timing ms`, `Run A ms`, `Run B ms`, `Comparison status`, `Delta ms`, `Delta %`.
 5. Format `Delta %` as Percentage; use at least two decimal places for timings and more when investigating small differences.
 
@@ -78,12 +78,12 @@ Microsoft describes [creating measures in Desktop](https://learn.microsoft.com/e
 
 ## Build a Compare runs page
 
-1. Add single-select slicers for `Benchmarks[renderer]`, `Benchmarks[scene]`, `Cameras[camera]`, `Run A[Run]`, `Run B[Run]`, and `Statistic[Statistic]`.
+1. Add single-select slicers for `Benchmarks[renderer]`, `Benchmarks[scene]`, `Cameras[camera]`, `Run A[Run]`, `Run B[Run]`, `Mode A[mode]`, `Mode B[mode]`, and `Statistic[Statistic]`.
 2. Add a **Card** showing `Comparison status`.
 3. Add a **Table** with `Benchmarks[pass]`, `Benchmarks[type]`, `[Run A ms]`, `[Run B ms]`, `[Delta ms]`, `[Delta %]`. Filter this visual to `Benchmarks[Timing] = GPU frame`.
 4. Duplicate the table, change its visual filter to `GPU pass`, and sort `[Run B ms]` descending. Disable totals on both tables.
 5. Optionally add a third table filtered to `CPU`, keeping CPU and GPU results separate.
-6. Select one scene, renderer and camera; choose different runs in A and B and choose Mean, Median or P95.
+6. Select one scene, renderer and camera; choose different runs or modes in A and B and choose Mean, Median or P95. To compare Direct and Indirect in one schema-2 capture, select the same run on both sides and a different mode on each. For old PathTracer files, select PathTracer on both mode slicers. Old Forward files have Unknown mode and cannot produce comparison deltas.
 7. Save as a PBIX, for example `CerberusBenchmarks.pbix`. Only this step creates your actual Desktop report.
 
 Do not add an ordinary `Benchmarks[Run]` slicer to this comparison page: selecting one run there also filters the measure context and can blank the other run. Use the disconnected A/B slicers. A separate Run details page can use the ordinary Run slicer.

@@ -40,7 +40,7 @@ namespace cerberus
 	class BenchmarkPanel final : public EditorPanel
 	{
 	public:
-		void Shutdown() override {}
+		void Shutdown() override;
 		void OnImGuiRender(bool& isOpen) override;
 		void SetSceneContext(const Ref<Scene>& context) override;
 
@@ -85,15 +85,21 @@ namespace cerberus
 		{
 			RGPassType Type = RGPassType::Graphics;
 			std::vector<float> GpuTimesMs;
+			double DrawCallSum = 0.0;
+			double MaskedDrawCallSum = 0.0;
 		};
 
 		struct CSVRow
 		{
 			std::string Camera;
+			std::string Mode;
 			std::string Pass;
 			std::string Type;
 			float MeanMs = 0.0f, MedianMs = 0.0f, MinMs = 0.0f, MaxMs = 0.0f, P95Ms = 0.0f;
 			uint32_t Samples = 0;
+			bool HasDrawCounts = false;
+			double DrawCalls = 0.0, DefaultDrawCalls = 0.0, MaskedDrawCalls = 0.0;
+			uint32_t SceneInstances = 0, SceneTriangles = 0;
 		};
 
 		std::filesystem::path GetSidecarPath() const;
@@ -104,6 +110,8 @@ namespace cerberus
 		void ApplyCurrentCamera();
 		void FlushCurrentCameraStats();
 		void FinishRun();
+		void RestoreRunSettings();
+		const char* CurrentModeName() const;
 		void WriteCSV();
 
 	private:
@@ -118,13 +126,20 @@ namespace cerberus
 		uint32_t m_CurrentCameraIndex = 0;
 		uint32_t m_FrameCounter = 0; // frames elapsed since the current camera was applied
 		bool m_FrameCountsForSampling = false; // set by BeginFrame, read by EndFrame
-		uint32_t m_WarmupFrames = 60;
+		uint32_t m_WarmupFrames = 120; // user-editable UI value, never mutated by a run
+		uint32_t m_EffectiveWarmupFrames = 0; // m_WarmupFrames clamped for the current run only
 		uint32_t m_SampleFrames = 300;
-		glm::uvec2 m_Resolution = { 1920u, 1080u };
+		glm::uvec2 m_Resolution = { 2560u, 1440u };
 
 		FlyingCamera m_RunCamera; // built from the active BenchmarkCamera while running
 
 		bool m_PreRunProfilerEnabled = false;
+		bool m_PreRunIndirectSubmission = false;
+		bool m_RunIndirectSubmission = false;
+		// Non-owning; resolved once in StartRun() and reused for the run's
+		// duration instead of re-casting m_ActiveSceneRenderer at every site.
+		class ForwardSceneRenderer* m_ActiveForwardRenderer = nullptr;
+		double m_FrameDrawCallSum = 0.0, m_FrameMaskedDrawCallSum = 0.0;
 		SceneRendererType m_RunRendererType = SceneRendererType::Forward;
 		// Only meaningful when m_RunRendererType is PathTracer -- restored in
 		// FinishRun(). See StartRun()'s comment on forcing denoised mode.

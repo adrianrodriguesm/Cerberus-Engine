@@ -1,5 +1,8 @@
 let
-    Columns = {"camera","pass","type","mean_ms","median_ms","min_ms","max_ms","p95_ms","samples"},
+    LegacyColumns = {"camera","pass","type","mean_ms","median_ms","min_ms","max_ms","p95_ms","samples"},
+    ExtraColumns = {"mode","draw_calls","default_draw_calls","masked_draw_calls","scene_instances","scene_triangles"},
+    Columns = LegacyColumns & ExtraColumns,
+    LegacyHeader = Text.Combine(LegacyColumns, ","),
     Header = Text.Combine(Columns, ","),
     Required = {"scene","renderer","resolution","gpu","vulkan_api_version","gpu_driver_version_raw",
         "present_mode","build_configuration","warmup_frames","sample_frames","total_triangle_count","mesh_instance_count"},
@@ -7,7 +10,9 @@ let
     Parse = (content as binary, run as text) as table =>
         let
             Lines = Lines.FromBinary(content, QuoteStyle.None, false, 65001),
-            HeaderIndex = List.PositionOf(Lines, Header),
+            NewHeaderIndex = List.PositionOf(Lines, Header),
+            HeaderIndex = if NewHeaderIndex >= 0 then NewHeaderIndex else List.PositionOf(Lines, LegacyHeader),
+            CaptureColumns = if NewHeaderIndex >= 0 then Columns else LegacyColumns,
             Preamble = if HeaderIndex < 0 then error Error.Record("Benchmark CSV", "Missing T2 header", run)
                 else List.FirstN(Lines, HeaderIndex),
             Comments = List.Select(Preamble, each Text.StartsWith(_, "#") and Text.Contains(_, ":")),
@@ -22,9 +27,14 @@ let
                 or Fields[scene] = "UnknownScene" then null
                 else Binary.ToText(Json.FromValue(MatchValues), BinaryEncoding.Hex),
             Body = Text.Combine(List.Skip(Lines, HeaderIndex + 1), "#(lf)"),
-            Raw = Csv.Document(Body, [Delimiter=",", Columns=Columns, Encoding=65001, ExtraValues=ExtraValues.Error]),
-            Typed = Table.TransformColumnTypes(Raw, {
+            Raw = Csv.Document(Body, [Delimiter=",", Columns=CaptureColumns, Encoding=65001, ExtraValues=ExtraValues.Error]),
+            WithMode = if NewHeaderIndex >= 0 then Raw else Table.AddColumn(Raw, "mode",
+                each if Renderer = "PathTracer" then "PathTracer" else "Unknown", type text),
+            Complete = Table.SelectColumns(WithMode, Columns, MissingField.UseNull),
+            Typed = Table.TransformColumnTypes(Complete, {
                 {"camera", type text}, {"pass", type text}, {"type", type text},
+                {"mode", type text}, {"draw_calls", type number}, {"default_draw_calls", type number},
+                {"masked_draw_calls", type number}, {"scene_instances", Int64.Type}, {"scene_triangles", Int64.Type},
                 {"mean_ms", type number}, {"median_ms", type number}, {"min_ms", type number},
                 {"max_ms", type number}, {"p95_ms", type number}, {"samples", Int64.Type}}, "en-US"),
             WithRun = Table.AddColumn(Typed, "Run", each run, type text),
@@ -45,5 +55,7 @@ let
 in
     Table.TransformColumnTypes(Output, List.Transform(TextColumns, each {_, type text}) & {
         {"camera", type text}, {"pass", type text}, {"type", type text},
+        {"mode", type text}, {"draw_calls", type number}, {"default_draw_calls", type number},
+        {"masked_draw_calls", type number}, {"scene_instances", Int64.Type}, {"scene_triangles", Int64.Type},
         {"mean_ms", type number}, {"median_ms", type number}, {"min_ms", type number},
         {"max_ms", type number}, {"p95_ms", type number}, {"samples", Int64.Type}}, "en-US")
