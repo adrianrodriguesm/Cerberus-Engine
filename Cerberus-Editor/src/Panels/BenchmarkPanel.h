@@ -78,6 +78,13 @@ namespace cerberus
 		// the CSV).
 		void EndFrame(SceneRenderer& sceneRenderer, Timestep ts);
 
+		// Also called directly by EditorLayer for the --benchmark <scene>
+		// <out.csv> CLI path, which has no "Run benchmark" button click to
+		// fire it from; outputCSVOverride is empty for that button's own
+		// call, which gets the usual timestamped path under the repo's
+		// Benchmarks directory instead.
+		void StartRun(std::filesystem::path outputCSVOverride = {});
+
 	private:
 		enum class RunState { Idle, WarmingUp, Sampling };
 
@@ -106,7 +113,6 @@ namespace cerberus
 		void LoadCameras();
 		void SaveCameras() const;
 
-		void StartRun();
 		void ApplyCurrentCamera();
 		void FlushCurrentCameraStats();
 		void FinishRun();
@@ -151,5 +157,6 @@ namespace cerberus
 
 		std::vector<CSVRow> m_PendingRows; // across every camera this run, written out at the end
 		std::filesystem::path m_LastWrittenCSVPath;
+		std::filesystem::path m_OutputCSVOverride; // set for the run's duration by StartRun()'s argument
 	};
 }

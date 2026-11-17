@@ -17,7 +17,7 @@ namespace cerberus
 
 	};
 
-	Application* CreateApplication()
+	Application* CreateApplication(int, char**)
 	{
 		ApplicationSpecification specification;
 		specification.Fullscreen = false;

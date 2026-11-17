@@ -55,5 +55,5 @@ namespace cerberus
 		bool m_BlockEvents = false;
 	};
 
-	Application* CreateApplication();
+	Application* CreateApplication(int argc, char** argv);
 }

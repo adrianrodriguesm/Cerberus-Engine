@@ -76,8 +76,11 @@ namespace cerberus
 		}
 	}
 
-	EditorLayer::EditorLayer()
+	EditorLayer::EditorLayer(std::string benchmarkScenePath, std::string benchmarkOutputCSVPath)
 		: Layer("EditorLayer")
+		, m_BenchmarkScenePath(std::move(benchmarkScenePath))
+		, m_BenchmarkOutputCSVPath(std::move(benchmarkOutputCSVPath))
+		, m_BenchmarkRunRequested(!m_BenchmarkScenePath.empty())
 	{
 	}
 
@@ -85,7 +88,9 @@ namespace cerberus
 	{
 		AssetEditorManager::Init();
 		auto resolution = Application::Get().GetWindow()->GetSize();
-		m_Scene = AssetManager::GetAsset<Scene>("Resources/Scenes/First Scene.cscene");
+		m_Scene = AssetManager::GetAsset<Scene>(m_BenchmarkRunRequested
+			? m_BenchmarkScenePath
+			: "Resources/Scenes/First Scene.cscene");
 		m_RendererViewportSize = {
 			std::max(resolution.first, 1u),
 			std::max(resolution.second, 1u)
@@ -111,6 +116,25 @@ namespace cerberus
 		m_BenchmarkPanel->SetSceneContext(m_Scene);
 		m_BenchmarkPanel->SetActiveSceneRenderer(m_SceneRenderer.get());
 		m_BenchmarkPanel->SetLiveCamera(&m_Camera);
+
+		if (m_BenchmarkRunRequested)
+		{
+			if (!m_Scene)
+			{
+				NV_CORE_ERROR("[--benchmark] Failed to load scene '{0}'", m_BenchmarkScenePath);
+				Application::Get().Close();
+			}
+			else
+			{
+				m_BenchmarkPanel->StartRun(m_BenchmarkOutputCSVPath);
+				m_BenchmarkRunStarted = m_BenchmarkPanel->IsRunning();
+				if (!m_BenchmarkRunStarted)
+				{
+					NV_CORE_ERROR("[--benchmark] No saved benchmark cameras for '{0}' -- nothing to run", m_BenchmarkScenePath);
+					Application::Get().Close();
+				}
+			}
+		}
 
 		AssetEditorManager::SetAssetModifiedCallback([this](const Ref<Asset>& asset)
 		{
@@ -231,6 +255,15 @@ namespace cerberus
 		// into the BeginFrame() call above.
 		if (benchmarkCamera)
 			m_BenchmarkPanel->EndFrame(*m_SceneRenderer, ts);
+
+		// --benchmark <scene> <out.csv>: the CSV is written as part of
+		// finishing the run (see BenchmarkPanel::FinishRun), so once the run
+		// is no longer active there is nothing left for this process to do.
+		if (m_BenchmarkRunStarted && m_BenchmarkPanel && !m_BenchmarkPanel->IsRunning())
+		{
+			m_BenchmarkRunStarted = false;
+			Application::Get().Close();
+		}
 	}
 
 	void EditorLayer::OnFrameEnd()

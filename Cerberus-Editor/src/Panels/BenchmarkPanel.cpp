@@ -220,11 +220,12 @@ namespace cerberus
 		LoadCameras();
 	}
 
-	void BenchmarkPanel::StartRun()
+	void BenchmarkPanel::StartRun(std::filesystem::path outputCSVOverride)
 	{
 		if (!m_Scene || !m_ActiveSceneRenderer || m_Cameras.empty() || IsRunning())
 			return;
 
+		m_OutputCSVOverride = std::move(outputCSVOverride);
 		m_RunRendererType = m_Scene->GetRendererType();
 		// Timestamp results lag recording by a frame-in-flight slot. Drain old
 		// camera/mode results during every warm-up, even with a tiny UI value.
@@ -440,6 +441,7 @@ namespace cerberus
 		m_RunState = RunState::Idle;
 		m_FrameCounter = 0;
 		m_FrameCountsForSampling = false;
+		m_OutputCSVOverride.clear();
 	}
 
 	void BenchmarkPanel::Shutdown()
@@ -458,8 +460,6 @@ namespace cerberus
 	void BenchmarkPanel::WriteCSV()
 	{
 		const std::filesystem::path repoRoot = FindRepoRoot();
-		const std::filesystem::path benchmarksDir = repoRoot / "Benchmarks";
-		FileSystem::CreateDirectory(benchmarksDir);
 
 		const std::time_t now = std::time(nullptr);
 		std::tm localTime{};
@@ -472,8 +472,20 @@ namespace cerberus
 			: "UnknownScene";
 		const std::string rendererName = std::string(SceneRendererTypeToString(m_RunRendererType));
 
-		const std::filesystem::path csvPath = benchmarksDir /
-			(std::string(timestamp) + "_" + sceneName + "_" + rendererName + ".csv");
+		// --benchmark <scene> <out.csv> supplies an explicit destination; the
+		// in-editor "Run benchmark" button leaves it empty and gets the usual
+		// timestamped path under the repo's Benchmarks directory instead.
+		std::filesystem::path csvPath = m_OutputCSVOverride;
+		if (csvPath.empty())
+		{
+			const std::filesystem::path benchmarksDir = repoRoot / "Benchmarks";
+			FileSystem::CreateDirectory(benchmarksDir);
+			csvPath = benchmarksDir / (std::string(timestamp) + "_" + sceneName + "_" + rendererName + ".csv");
+		}
+		else if (csvPath.has_parent_path())
+		{
+			FileSystem::CreateDirectory(csvPath.parent_path());
+		}
 
 		std::ofstream out(csvPath, std::ios::out | std::ios::trunc);
 		if (!out)

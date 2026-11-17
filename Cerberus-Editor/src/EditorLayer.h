@@ -32,7 +32,11 @@ namespace cerberus
 		};
 
 	public:
-		EditorLayer();
+		// benchmarkScenePath/benchmarkOutputCSVPath come from the --benchmark
+		// <scene> <out.csv> CLI flag (see EditorApplication::CreateApplication);
+		// both empty means the normal interactive editor, which loads
+		// "First Scene.cscene" and never auto-starts a benchmark run.
+		EditorLayer(std::string benchmarkScenePath = {}, std::string benchmarkOutputCSVPath = {});
 		~EditorLayer() = default;
 		virtual void OnAttach() override;
 		virtual void OnDetach() override;
@@ -114,6 +118,13 @@ namespace cerberus
 		// m_EditorPanelManager too, for the usual open/close + SetSceneContext
 		// dispatch every other panel gets.
 		Ref<BenchmarkPanel> m_BenchmarkPanel;
+		// --benchmark <scene> <out.csv> CLI state: the scene/output path
+		// requested at startup, and whether OnAttach() has kicked off that
+		// run yet -- OnUpdate() closes the application once it finishes.
+		std::string m_BenchmarkScenePath;
+		std::string m_BenchmarkOutputCSVPath;
+		bool m_BenchmarkRunRequested = false;
+		bool m_BenchmarkRunStarted = false;
 		FlyingCamera m_Camera;
 		std::vector<Entity> m_Entities;
 		std::unordered_map<AssetHandle, MeshBounds> m_MeshBoundsCache;
